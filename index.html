@@ -17,6 +17,182 @@
     );
     alter table weeks enable row level security;
     create policy "eigene Wochen" on weeks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  FIRMEN, ADMINISTRATOREN UND GEMEINSAME BAUSTELLEN-LISTE (zweites SQL, einmalig; E-Mails und Firma vorher anpassen):
+
+    create table if not exists public.members (
+      email text primary key check (email = lower(email)),
+      firma text not null,
+      rolle text not null check (rolle in ('admin', 'mitarbeiter'))
+    );
+    alter table public.members enable row level security;
+    revoke all on public.members from anon, authenticated;
+
+    create table if not exists public.sites (
+      firma text not null,
+      nr text not null,
+      name text not null default '',
+      name2 text not null default '',
+      hin text not null default '',
+      zur text not null default '',
+      updated_at timestamptz not null default now(),
+      primary key (firma, nr)
+    );
+    alter table public.sites enable row level security;
+    revoke all on public.sites from anon, authenticated;
+    grant select on public.sites to authenticated;
+
+    create or replace function public.my_member()
+    returns table (firma text, rolle text)
+    language sql stable security definer
+    set search_path = public, auth
+    as $$
+      select m.firma, m.rolle
+      from public.members m
+      join auth.users u on lower(u.email) = m.email
+      where u.id = auth.uid() and u.email_confirmed_at is not null
+      limit 1
+    $$;
+
+    create or replace function public.my_firma()
+    returns text
+    language sql stable security definer
+    set search_path = public, auth
+    as $$
+      select firma from public.my_member()
+    $$;
+
+    drop policy if exists "eigene Firma lesen" on public.sites;
+    create policy "eigene Firma lesen" on public.sites
+      for select to authenticated using (firma = public.my_firma());
+
+    create or replace function public.sites_write(p_items jsonb, p_del text[])
+    returns void
+    language plpgsql security definer
+    set search_path = public, auth
+    as $$
+    declare
+      v_firma text;
+      v_rolle text;
+    begin
+      select m.firma, m.rolle into v_firma, v_rolle from public.my_member() m;
+      if v_firma is null or v_rolle <> 'admin' then
+        raise exception 'Keine Berechtigung';
+      end if;
+      insert into public.sites (firma, nr, name, name2, hin, zur, updated_at)
+      select distinct on (t.nr) v_firma, t.nr, t.n, t.n2, t.h, t.z, now()
+      from (
+        select trim(coalesce(x->>'nr', '')) as nr, coalesce(x->>'n', '') as n, coalesce(x->>'n2', '') as n2,
+               coalesce(x->>'h', '') as h, coalesce(x->>'z', '') as z
+        from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) x
+      ) t
+      where t.nr <> ''
+      order by t.nr
+      on conflict (firma, nr) do update
+        set name = excluded.name, name2 = excluded.name2, hin = excluded.hin, zur = excluded.zur, updated_at = now();
+      delete from public.sites where firma = v_firma and nr = any(coalesce(p_del, '{}'::text[]));
+    end;
+    $$;
+
+    revoke all on function public.my_member() from public, anon;
+    revoke all on function public.my_firma() from public, anon;
+    revoke all on function public.sites_write(jsonb, text[]) from public, anon;
+    grant execute on function public.my_member() to authenticated;
+    grant execute on function public.my_firma() to authenticated;
+    grant execute on function public.sites_write(jsonb, text[]) to authenticated;
+
+    create or replace function public.members_list()
+    returns table (email text, rolle text)
+    language plpgsql stable security definer
+    set search_path = public, auth
+    as $$
+    declare
+      v_firma text;
+      v_rolle text;
+    begin
+      select m.firma, m.rolle into v_firma, v_rolle from public.my_member() m;
+      if v_firma is null or v_rolle <> 'admin' then
+        raise exception 'Keine Berechtigung';
+      end if;
+      return query select x.email, x.rolle from public.members x where x.firma = v_firma order by x.rolle, x.email;
+    end;
+    $$;
+
+    create or replace function public.member_set(p_email text, p_rolle text)
+    returns void
+    language plpgsql security definer
+    set search_path = public, auth
+    as $$
+    declare
+      v_firma text;
+      v_rolle text;
+      v_email text := lower(trim(coalesce(p_email, '')));
+      v_old text;
+      v_admins int;
+    begin
+      select m.firma, m.rolle into v_firma, v_rolle from public.my_member() m;
+      if v_firma is null or v_rolle <> 'admin' then
+        raise exception 'Keine Berechtigung';
+      end if;
+      if v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+        raise exception 'Ungültige E-Mail-Adresse';
+      end if;
+      if p_rolle is null or p_rolle not in ('admin', 'mitarbeiter') then
+        raise exception 'Ungültige Rolle';
+      end if;
+      select x.firma into v_old from public.members x where x.email = v_email;
+      if v_old is not null and v_old <> v_firma then
+        raise exception 'Diese E-Mail gehört schon zu einer anderen Firma';
+      end if;
+      if p_rolle <> 'admin' and v_old = v_firma then
+        select count(*) into v_admins from public.members x where x.firma = v_firma and x.rolle = 'admin' and x.email <> v_email;
+        if v_admins = 0 then
+          raise exception 'Es muss mindestens ein Administrator bleiben';
+        end if;
+      end if;
+      insert into public.members (email, firma, rolle) values (v_email, v_firma, p_rolle)
+      on conflict (email) do update set rolle = excluded.rolle where public.members.firma = v_firma;
+    end;
+    $$;
+
+    create or replace function public.member_remove(p_email text)
+    returns void
+    language plpgsql security definer
+    set search_path = public, auth
+    as $$
+    declare
+      v_firma text;
+      v_rolle text;
+      v_email text := lower(trim(coalesce(p_email, '')));
+      v_admins int;
+    begin
+      select m.firma, m.rolle into v_firma, v_rolle from public.my_member() m;
+      if v_firma is null or v_rolle <> 'admin' then
+        raise exception 'Keine Berechtigung';
+      end if;
+      if exists (select 1 from public.members x where x.firma = v_firma and x.email = v_email and x.rolle = 'admin') then
+        select count(*) into v_admins from public.members x where x.firma = v_firma and x.rolle = 'admin' and x.email <> v_email;
+        if v_admins = 0 then
+          raise exception 'Es muss mindestens ein Administrator bleiben';
+        end if;
+      end if;
+      delete from public.members x where x.firma = v_firma and x.email = v_email;
+    end;
+    $$;
+
+    revoke all on function public.members_list() from public, anon;
+    revoke all on function public.member_set(text, text) from public, anon;
+    revoke all on function public.member_remove(text) from public, anon;
+    grant execute on function public.members_list() to authenticated;
+    grant execute on function public.member_set(text, text) to authenticated;
+    grant execute on function public.member_remove(text) to authenticated;
+
+    insert into public.members (email, firma, rolle) values
+      ('davidbader@gmx.ch', 'Theo Fischer', 'admin'),
+      ('21paar28@gmx.ch', 'Theo Fischer', 'mitarbeiter')
+    on conflict (email) do update set firma = excluded.firma, rolle = excluded.rolle;
+
+    notify pgrst, 'reload schema';
+
   Danach unten unter "SUPABASE_URL" und "SUPABASE_ANON_KEY" deine Werte eintragen
   (Supabase: Project Settings > API: Project URL und anon public key).
 -->
@@ -165,6 +341,33 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 .auth .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .auth p { margin: 0; color: var(--muted); font-size: .9rem; }
 .auth .status.bad { color: var(--bad); }
+
+.sitesbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sitesbar .status { margin: 0; }
+.gated > :not(.top):not(.auth) { display: none !important; }
+.gated .weeknav, .gated .name, .gated #acctBtn, .gated .sync { display: none !important; }
+.sug { position: absolute; z-index: 9; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); overflow-y: auto; max-height: 55vh; }
+.sug-i { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; cursor: pointer; color: var(--ink); font: inherit; line-height: 1.3; }
+.sug-i:last-child { border-bottom: 0; }
+.sug-i:hover, .sug-i:focus-visible { background: var(--surface-2); }
+.sug-i b { font-variant-numeric: tabular-nums; margin-right: 6px; }
+.sug-i small { display: block; color: var(--muted); font-size: .8rem; }
+.sform { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 8px; }
+.sform .full { grid-column: 1 / -1; }
+.slist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; max-height: 36vh; overflow-y: auto; }
+.srow { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.srow:last-child { border-bottom: 0; }
+.srow .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.srow .t b { font-variant-numeric: tabular-nums; margin-right: 6px; }
+.srow .t small { display: block; color: var(--muted); }
+.srow button { background: none; border: 0; padding: 4px 2px; color: var(--accent-text); cursor: pointer; text-decoration: underline; font: inherit; font-size: .85rem; }
+.srow button.x { color: var(--muted); }
+textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; font-family: inherit; margin-block: 8px; }
+.sheet details summary { cursor: pointer; font-weight: 500; }
+.sform .trv { display: flex; gap: 8px; }
+.lockbox, .editbox { display: flex; flex-direction: column; gap: 10px; }
+.editbox input[type=email] { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
+.lockbox .actions input { flex: 1 1 10rem; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
 </style>
 </head><body>
 
@@ -183,6 +386,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       <select id="picker" class="picker" aria-label="Gespeicherte Woche öffnen"></select>
     </div>
   </div>
+
+  <div class="sitesbar"><button class="btn" id="sitesBtn" type="button" aria-haspopup="dialog">Baustellen-Liste</button><button class="btn" id="sitesAdd" type="button" aria-haspopup="dialog" hidden>+ Baustelle hinzufügen</button><button class="btn" id="membersBtn" type="button" aria-haspopup="dialog" hidden>Mitarbeiter</button><span class="status" id="sitesInfo"></span></div>
 
   <section class="auth" id="auth" hidden aria-label="Konto">
     <form id="authForm" novalidate>
@@ -302,6 +507,87 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function localKeys() { var a = []; try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(WK) === 0) a.push(k.slice(WK.length)); } } catch (e) { } return a; }
   function nowHM() { var d = new Date(); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
 
+  /* ---------- Baustellen-Liste (lokal + Cloud, wird pro Nummer zusammengeführt) ---------- */
+  var SK = "wr2:sites", SITES_WEEK = "_sites";
+  function sitesGet() { try { var o = JSON.parse(lsGet(SK) || "null"); if (o && o.s && typeof o.s === "object") return o; } catch (e) { } return { s: {}, u: "" }; }
+  function sitesPut(o) { lsSet(SK, JSON.stringify(o)); }
+  function sitesMerge(a, b) {
+    var r = { s: {}, u: "" };
+    [a, b].forEach(function (o) { if (!o || !o.s) return; Object.keys(o.s).forEach(function (k) { var x = o.s[k]; if (!x || !x.nr) return; var c = r.s[k]; if (!c || String(x.u || "") > String(c.u || "")) r.s[k] = x; }); });
+    Object.keys(r.s).forEach(function (k) { if (String(r.s[k].u || "") > r.u) r.u = String(r.s[k].u); });
+    return r;
+  }
+  function sitesNewer(a, b) { /* a enthält etwas, das in b fehlt oder älter ist */
+    return Object.keys((a && a.s) || {}).some(function (k) { var x = a.s[k], y = b && b.s && b.s[k]; return !y || String(x.u || "") > String(y.u || ""); });
+  }
+  var SH = "wr2:shared", MB = "wr2:member", LI = "wr2:li", sharedErr = "", noFirma = false;
+  function sharedGet() { try { var o = JSON.parse(lsGet(SH) || "null"); if (o && Array.isArray(o.rows)) return o; } catch (e) { } return null; }
+  function memberGet() { try { var o = JSON.parse(lsGet(MB) || "null"); if (o && o.firma) return o; } catch (e) { } return null; }
+  function sharedOn() { return !!user && !!memberGet() && !!sharedGet(); } /* angemeldet, einer Firma zugeordnet, Firmenliste geladen */
+  function canEditSites() { var m = memberGet(); if (user && noFirma) return false; return (user && m) ? (m.rolle === "admin" && sharedOn()) : true; } /* ohne Firma gilt nur die eigene Liste auf diesem Gerät */
+  function isAdmin() { var m = memberGet(); return !!(user && m && m.rolle === "admin"); }
+  function roleText(m) { return m ? "Firma " + m.firma + " · " + (m.rolle === "admin" ? "Administrator" : "Mitarbeiter") : ""; }
+  function byNr(a) { return a.sort(function (p, q) { return String(q.nr).localeCompare(String(p.nr), "de", { numeric: true }); }); }
+  function localSites() { var o = sitesGet(); return Object.keys(o.s).map(function (k) { return o.s[k]; }).filter(function (x) { return !x.d; }); }
+  function sitesList() {
+    if (sharedOn()) return byNr(sharedGet().rows.map(function (r) { return { nr: String(r.nr), n: r.name || "", n2: r.name2 || "", h: r.hin || "", z: r.zur || "" }; }));
+    return byNr(localSites());
+  }
+  function siteByNr(nr) { var l = sitesList(); for (var i = 0; i < l.length; i++) { if (l[i].nr === nr) return l[i]; } return null; }
+  function sharedMsg(er) {
+    var m = String((er && er.message) || er || "");
+    if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
+    if (/members_list|member_set|member_remove/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
+    if (/my_member|sites_write|schema cache|does not exist|could not find/i.test(m)) return "Die Firmenliste ist in Supabase noch nicht eingerichtet (SQL fehlt).";
+    if (/fetch|network|load failed/i.test(m)) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
+    return m || "Das hat nicht geklappt.";
+  }
+  async function pullSites() { /* Firma und Rolle des Kontos holen, dann die Baustellen der Firma */
+    if (!sb || !user || !navigator.onLine) return;
+    try {
+      var m = await sb.rpc("my_member");
+      if (m.error) { sharedErr = sharedMsg(m.error); }
+      else {
+        var row = Array.isArray(m.data) ? m.data[0] : m.data;
+        if (!row || !row.firma) { noFirma = true; sharedErr = ""; try { localStorage.removeItem(MB); localStorage.removeItem(SH); } catch (e) { } }
+        else {
+          noFirma = false; lsSet(MB, JSON.stringify({ firma: row.firma, rolle: row.rolle }));
+          var r = await sb.from("sites").select("nr,name,name2,hin,zur");
+          if (r.error) { sharedErr = sharedMsg(r.error); }
+          else { sharedErr = ""; lsSet(SH, JSON.stringify({ rows: r.data || [], t: new Date().toISOString() })); }
+        }
+      }
+    } catch (e) { sharedErr = sharedMsg(e); }
+    renderSitesInfo(); renderAuth(); if (window.__sitesRedraw && $("sites")) window.__sitesRedraw();
+  }
+  async function sharedWrite(add, del) {
+    if (!sb || !user) return "Bitte zuerst anmelden.";
+    if (!navigator.onLine) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
+    try {
+      var items = add.map(function (x) { return { nr: x.nr, n: x.n, n2: x.n2 || "", h: x.h || "", z: x.z || "" }; });
+      var r = await sb.rpc("sites_write", { p_items: items, p_del: del });
+      if (r.error) return sharedMsg(r.error);
+      await pullSites(); return "";
+    } catch (e) { return sharedMsg(e); }
+  }
+  async function sitesSave(add, del) { /* gibt "" bei Erfolg zurück, sonst eine Fehlermeldung */
+    add = add || []; del = del || [];
+    if (sharedOn()) return sharedWrite(add, del);
+    var o = sitesGet(), t = new Date().toISOString();
+    add.forEach(function (x) { o.s[x.nr] = { nr: x.nr, n: x.n, n2: x.n2 || "", h: x.h || "", z: x.z || "", u: t }; });
+    del.forEach(function (nr) { if (o.s[nr]) o.s[nr] = { nr: nr, n: "", n2: "", u: t, d: 1 }; });
+    o.u = t; sitesPut(o); renderSitesInfo(); return "";
+  }
+  function renderSitesInfo() {
+    var n = sitesList().length, m = memberGet(), ed = canEditSites(), parts = [];
+    $("sitesBtn").textContent = "Baustellen-Liste" + (n ? " (" + n + ")" : "");
+    $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isAdmin();
+    if (user && m) parts.push(roleText(m));
+    if (user && noFirma) parts.push("Dein Konto ist noch keiner Firma zugeordnet. Bitte melde dich beim Administrator.");
+    else if (!n) parts.push(ed ? "Noch keine Baustellen. Tippe auf «+ Baustelle hinzufügen»." : "Noch keine Baustellen in der Liste.");
+    $("sitesInfo").textContent = parts.join(" · ");
+  }
+
   function setSync() {
     var el = $("sync"), n = qGet().length, t, c = "";
     if (cloudOff) { t = "Nur auf diesem Gerät"; }
@@ -339,6 +625,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       if (r.error) { syncErr = r.error.message || "Fehler"; syncBusy = false; setSync(); return; }
       var remote = {}, cur = false;
       (r.data || []).forEach(function (row) { remote[row.week] = row.data || {}; });
+      delete remote[SITES_WEEK]; /* alter Eintrag aus einer früheren Version */
       Object.keys(remote).forEach(function (wk) {
         var l = localWeek(wk), rd = remote[wk];
         if (!l || String(rd.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(rd)); index[wk] = totals(deserialize(rd.days)).net; if (wk === state.week) cur = true; }
@@ -347,6 +634,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       syncErr = ""; syncBusy = false; fillPicker();
       if (cur && !dirty) loadWeek(state.week);
     } catch (e) { syncBusy = false; syncErr = String((e && e.message) || e); }
+    pullSites();
     await flush();
   }
 
@@ -381,13 +669,16 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     var hint = $("authHint");
     $("authFields").hidden = !!user || !!cloudOff; $("authIn").hidden = !user;
     $("acctBtn").textContent = user ? (user.email || "Konto") : "Anmelden";
-    hint.textContent = cloudOff ? cloudOff : user ? "Angemeldet als " + (user.email || "") + ". Deine Wochen werden mit der Cloud abgeglichen." : "Melde dich an, damit deine Wochen auf allen Geräten gleich sind. Ohne Anmeldung bleiben sie auf diesem Gerät.";
+    var gate = gateOn();
+    hint.textContent = cloudOff ? cloudOff : user ? "Angemeldet als " + (user.email || "") + ". Deine Wochen werden mit der Cloud abgeglichen." + (memberGet() ? " " + roleText(memberGet()) + "." : "") : gate ? "Willkommen. Bitte melde dich mit deiner E-Mail-Adresse an. Wer noch kein Konto hat, tippt auf «Registrieren» und bestätigt danach die E-Mail." : "Melde dich an, damit deine Wochen auf allen Geräten gleich sind. Ohne Anmeldung bleiben sie auf diesem Gerät.";
+    document.querySelector(".wrap").classList.toggle("gated", gate); if (gate) $("auth").hidden = false;
     setSync();
   }
-  function wipeLocal() { localKeys().forEach(function (k) { try { localStorage.removeItem(WK + k); } catch (e) { } }); qSet([]); index = {}; loadWeek(state.week); fillPicker(); }
+  function gateOn() { return !cloudOff && !user && lsGet(LI) !== "1"; } /* beim ersten Start ist die Anmeldung Pflicht; danach bleibt die App auch ohne Netz benutzbar */
+  function wipeLocal() { localKeys().forEach(function (k) { try { localStorage.removeItem(WK + k); } catch (e) { } }); try { localStorage.removeItem(SK); localStorage.removeItem(SH); localStorage.removeItem(MB); } catch (e) { } renderSitesInfo(); qSet([]); index = {}; loadWeek(state.week); fillPicker(); }
   function onSession(u) {
     var nid = u ? u.id : null, oid = user ? user.id : null;
-    user = u || null;
+    user = u || null; if (user) lsSet(LI, "1");
     if (nid === oid) { renderAuth(); return; }
     if (user) { var owner = lsGet("wr2:owner"); if (owner && owner !== user.id) wipeLocal(); lsSet("wr2:owner", user.id); }
     renderAuth(); renderBackupInfo(); if (user) pullAll();
@@ -417,7 +708,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   $("authForm").addEventListener("submit", function (e) { e.preventDefault(); doAuth("in"); });
   $("doSignup").addEventListener("click", function () { doAuth("up"); });
   $("syncNow").addEventListener("click", function () { authMsg("Abgleich läuft …"); pullAll().then(function () { authMsg(syncErr ? "Sync-Fehler: " + syncErr : "Abgeglichen um " + nowHM(), syncErr ? "bad" : "ok"); }); });
-  $("doLogout").addEventListener("click", async function () { try { await sb.auth.signOut(); } catch (e) { } onSession(null); authMsg("Abgemeldet. Die Daten bleiben auf diesem Gerät."); });
+  $("doLogout").addEventListener("click", async function () { lsSet(LI, "0"); try { await sb.auth.signOut(); } catch (e) { } onSession(null); authMsg("Abgemeldet. Die Daten bleiben auf diesem Gerät."); });
 
   /* ---------- Darstellung ---------- */
   function esc(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
@@ -427,9 +718,9 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function rowHtml(di, ri, e) {
     var p = "d" + di + "r" + ri + "-";
     return '<div class="row" data-d="' + di + '" data-r="' + ri + '">' +
-      fieldInput(p + "nr", "f-nr", "Baustellen-Nr.", 'type="text" inputmode="numeric" data-k="nr" autocomplete="off" placeholder="2418"', e.nr) +
+      fieldInput(p + "nr", "f-nr", "Baustellen-Nr.", 'type="text" inputmode="numeric" data-k="nr" autocomplete="off" placeholder="Nr."', e.nr) +
       '<div class="f f-obj"><span>Baustelle / Objekt</span>' +
-        '<input type="text" id="' + p + 'obj" data-k="obj" autocomplete="off" placeholder="Baustelle" value="' + esc(e.obj) + '">' +
+        '<input type="text" id="' + p + 'obj" data-k="obj" autocomplete="off" placeholder="Baustelle suchen" value="' + esc(e.obj) + '">' +
         '<input type="text" id="' + p + 'obj2" data-k="obj2" autocomplete="off" aria-label="Baustelle, zweite Zeile" placeholder="2. Zeile (optional)" value="' + esc(e.obj2) + '"></div>' +
       '<div class="f f-time">' + fieldInput(p + "von", "", "Arbeitszeit von", 'type="text" inputmode="decimal" data-k="von" autocomplete="off" placeholder="6.25"', e.von) + fieldInput(p + "bis", "", "bis", 'type="text" inputmode="decimal" data-k="bis" autocomplete="off" placeholder="16.14"', e.bis) + '<div class="f f-hrs"><span>Stunden</span><div class="calc" data-c="gross"></div></div></div>' +
       fieldInput(p + "pause", "f-pause", "Pause in Min.", 'type="text" inputmode="numeric" data-k="pause" autocomplete="off" placeholder="60"', e.pause) +
@@ -597,10 +888,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     txt(0, y, "Total", 8.5, true);
     if (t.abs) txt(9, y, fmtAbs(t.abs), 8, true, "r");
     ktxt(y, hm(t.net), 8.5, true);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-    doc.text("Total/Tag = Total ohne Pausen minus Reisezeit (Abzug höchstens " + TARA + " Min. pro Tag).  Woche: von-bis " + hm(t.gross) + " minus Pause " + hm(t.pause) + " minus Reisezeit " + hm(t.tara) + " = " + hm(t.net), mx, y + th + 4.2);
     var vy = y + th + 12;
-    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text("Visum Mitarbeiter:", cx[3], vy); doc.line(cx[3] + 28, vy + 0.5, cx[6] - 4, vy + 0.5);
     doc.text("Visum Vorgesetzter", cx[6], vy); doc.line(cx[6] + 29, vy + 0.5, mx + W, vy + 0.5);
     return doc;
@@ -672,6 +961,261 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     }).then(function () { btn.disabled = false; });
   });
 
+  /* ---------- Baustellen: Vorschläge in den Feldern ---------- */
+  function fold(v) { v = String(v == null ? "" : v).toLowerCase(); try { v = v.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch (e) { } return v; }
+  function mins(v) { v = String(v == null ? "" : v).replace(/[^\d]/g, ""); return v ? String(Math.min(999, parseInt(v, 10))) : ""; }
+  function travelTxt(x) { return (x.h || x.z) ? "Fahrt hin " + (x.h || "0") + " · zurück " + (x.z || "0") + " Min." : ""; }
+  function sitesFind(q, limit) {
+    var all = sitesList(), t = fold(q).split(/\s+/).filter(Boolean);
+    if (!t.length) return all.slice(0, limit);
+    var out = all.filter(function (x) { var h = fold(x.nr + " " + x.n + " " + x.n2); return t.every(function (w) { return h.indexOf(w) >= 0; }); });
+    out.sort(function (a, b) { return (String(a.nr).indexOf(t[0]) === 0 ? 0 : 1) - (String(b.nr).indexOf(t[0]) === 0 ? 0 : 1); });
+    return out.slice(0, limit);
+  }
+  var sug = el("div", { "class": "sug", id: "sug", role: "listbox", hidden: "" }), sugRow = null, sugTimer = null;
+  document.body.appendChild(sug);
+  function hideSug() { sug.hidden = true; }
+  function showSug(inp) {
+    var q = inp.value;
+    if (inp.dataset.k === "obj" && !q.trim()) { hideSug(); return; }
+    var list = sitesFind(q, 8);
+    if (!list.length) { hideSug(); return; }
+    sug.textContent = "";
+    list.forEach(function (x) {
+      var b = el("button", { type: "button", "class": "sug-i", role: "option", "data-nr": x.nr });
+      b.appendChild(el("b", { text: x.nr })); b.appendChild(document.createTextNode(x.n));
+      if (x.n2) b.appendChild(el("small", { text: x.n2 }));
+      var tr = travelTxt(x); if (tr) b.appendChild(el("small", { text: tr }));
+      sug.appendChild(b);
+    });
+    var vw = document.documentElement.clientWidth, r = inp.getBoundingClientRect(), w = Math.min(Math.max(r.width, 280), vw - 16);
+    sug.style.width = w + "px";
+    sug.style.left = (Math.max(8, Math.min(r.left, vw - w - 8)) + window.pageXOffset) + "px";
+    sug.style.top = (r.bottom + window.pageYOffset + 3) + "px";
+    sugRow = inp.closest(".row"); sug.hidden = false;
+  }
+  function fillRow(row, x) {
+    var e = state.days[+row.dataset.d][+row.dataset.r];
+    e.nr = x.nr; e.obj = x.n; e.obj2 = x.n2 || "";
+    if ((x.h || x.z) && !e.hin && !e.zur) { e.hin = x.h || ""; e.zur = x.z || ""; } /* Vorschlag für die Reise, nur wenn noch nichts eingetragen ist */
+    ["nr", "obj", "obj2", "hin", "zur"].forEach(function (k) { var i = row.querySelector('[data-k="' + k + '"]'); if (i) i.value = e[k]; });
+    recalc(); persist();
+  }
+  sug.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+  sug.addEventListener("click", function (ev) {
+    var b = ev.target.closest ? ev.target.closest(".sug-i") : null; if (!b || !sugRow) return;
+    var o = siteByNr(b.getAttribute("data-nr")), row = sugRow;
+    hideSug(); if (!o) return;
+    fillRow(row, o);
+    var nx = row.querySelector('[data-k="von"]'); if (nx) nx.focus();
+  });
+  function isSiteInput(i) { return i && i.dataset && (i.dataset.k === "nr" || i.dataset.k === "obj"); }
+  $("days").addEventListener("focusin", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); else hideSug(); });
+  $("days").addEventListener("input", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); });
+  $("days").addEventListener("focusout", function (ev) {
+    var i = ev.target, row = i.closest ? i.closest(".row") : null; if (!row || !isSiteInput(i)) return;
+    clearTimeout(sugTimer); sugTimer = setTimeout(hideSug, 220);
+    if (i.dataset.k === "nr" && i.value.trim()) { /* genaue Nummer getippt: Name automatisch einsetzen */
+      var e = state.days[+row.dataset.d][+row.dataset.r], o = siteByNr(i.value.trim());
+      if (o && !e.obj && !e.obj2) fillRow(row, o);
+    }
+  });
+  document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); } });
+  window.addEventListener("resize", hideSug);
+
+  /* ---------- Baustellen verwalten ---------- */
+  var SEED = [
+    ["26001", "Werkstatt", ""],
+    ["26002", "Fuchs-Movessa?", "Lupfig · 1389/06"],
+    ["26003", "Heneggstr.? 144", "2.06 Caskluci? · 1743/1"],
+    ["26004", "Heinz Aeberhard, Moosmühle 1", "Abzugshaube, Alten? · 1024/4"],
+    ["26005", "Hörfli?, Neudörfli, Harfen?", "1702/1 · alt 25157"],
+    ["26006", "Lier, Wettswil", "Boden? Sanierung? 183? · 1689/1"],
+    ["26007", "Zürichstr. 151, Affoltern a.A.", "Burkard · Nasszellen · 1734/1"],
+    ["26008", "Brugg…weg? 53, Nigg", "1718/2"],
+    ["26009", "Fam. Hofner, Kreuzstrasse 24, 5630 Muri", "Zimmer · 0654.03"],
+    ["26010", "Freimannbau, Alpenstr. 1A, Rüschlikon", "1126/2 · alt 25121"],
+    ["26011", "Thalwil Whg (Griechischer Name), Feldstr. 24", "2,5 Zwhg · 1382/02"],
+    ["26012", "RS Sites, Königsfelden", "1472 · alt 25003 / 24326"],
+    ["26013", "Garantie Türrahmen Stehlin, Wilgibelweg 15", "1747/1"],
+    ["26014", "Alte Hedingerstrasse 59, 8910 Affoltern a.A.", "Leuthard · Fassade 1. Et. · 1749/1"],
+    ["26015", "Stefa, Laubstenstr. 11", "1639/1"],
+    ["26016", "Wiesengrundstr. 6, Schneebeli", "Ausbesserungen? · 1583/2"],
+    ["26017", "Garantie Marti, Bonstetten", "1747/2"]
+  ];
+  function closeSites() { var o = $("sites"); if (o) { o.remove(); } window.__sitesRedraw = null; renderSitesInfo(); }
+  function openSites(view) { /* "search": nur suchen (alle) · "add": Baustellen hinzufügen und ändern (nur Administratoren) */
+    closeSites(); hideSug();
+    var adminView = view === "add", editNr = null, busy = false;
+    var q = el("input", { type: "text", placeholder: "Suchen (Nummer oder Name)", autocomplete: "off", "aria-label": "Baustellen suchen" });
+    var info = el("div", { "class": "status" }), cnt = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" });
+    var msg = el("div", { "class": "status", role: "status" });
+    var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    var fh = el("div", { "class": "lbl", text: "Neue Baustelle" });
+    var fnr = el("input", { type: "text", inputmode: "numeric", placeholder: "Nr.", autocomplete: "off", "aria-label": "Baustellen-Nr." });
+    var fn1 = el("input", { type: "text", placeholder: "Name / Adresse", autocomplete: "off", "aria-label": "Name oder Adresse" });
+    var fn2 = el("input", { "class": "full", type: "text", placeholder: "2. Zeile (optional)", autocomplete: "off", "aria-label": "Zweite Zeile" });
+    var fth = el("input", { type: "text", inputmode: "numeric", placeholder: "Fahrt hin (Min.)", autocomplete: "off", "aria-label": "Fahrzeit hin in Minuten" });
+    var ftz = el("input", { type: "text", inputmode: "numeric", placeholder: "Fahrt zurück (Min.)", autocomplete: "off", "aria-label": "Fahrzeit zurück in Minuten" });
+    var save = el("button", { type: "button", "class": "btn primary", text: "Hinzufügen" }), cancel = el("button", { type: "button", "class": "btn", text: "Abbrechen", hidden: "" });
+    var form = el("div", { "class": "sform" }, [fnr, fn1, fn2, el("div", { "class": "trv full" }, [fth, ftz]), el("div", { "class": "status full", text: "Fahrzeit pro Weg in Minuten. Leer lassen bei «zurück», wenn der Rückweg gleich lang ist." }), el("div", { "class": "actions full" }, [save, cancel])]);
+    var seedBtn = el("button", { type: "button", "class": "btn", text: "Meine Baustellen aus dem Ordner laden (26001–26017)" });
+    var upBtn = el("button", { type: "button", "class": "btn", text: "" });
+    var ta = el("textarea", { "class": "bulk", placeholder: "26018 Garantie Müller, Dorfstrasse 4\n26019 Familie Huber, Seeweg 2; Küche", "aria-label": "Mehrere Baustellen einfügen" });
+    var imp = el("button", { type: "button", "class": "btn", text: "Übernehmen" });
+    var det = el("details", {}, [el("summary", { text: "Mehrere auf einmal einfügen" }), el("p", { text: "Eine Baustelle pro Zeile: zuerst die Nummer, dann der Name. Eine zweite Zeile trennst du mit Strichpunkt ab. Die Fahrzeit schreibst du so dazu: Fahrt 20 (hin und zurück je 20 Min.) oder Fahrt 20/25." }), ta, imp]);
+    var editBox = el("div", { "class": "editbox" }, [fh, form, seedBtn, upBtn, det]);
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var intro = el("p", { text: adminView ? "Hier legst du Baustellen mit Nummer und Fahrzeit an. Alle Mitarbeiter deiner Firma sehen sie danach in ihrer Liste." : "Suche nach Nummer oder Name. Im Wochenrapport werden Baustellen im Feld «Nr.» oder «Baustelle» automatisch vorgeschlagen." });
+    var kids = adminView ? [el("h2", { text: "Baustelle hinzufügen" }), intro, info, editBox, msg, q, cnt, list, el("div", { "class": "actions" }, [close])]
+                         : [el("h2", { text: "Baustellen" }), intro, info, q, cnt, list, el("div", { "class": "actions" }, [close])];
+    var ov = el("div", { "class": "overlay sites", id: "sites", role: "dialog", "aria-modal": "true", "aria-label": adminView ? "Baustelle hinzufügen" : "Baustellen" }, [el("div", { "class": "sheet" }, kids)]);
+
+    function reset() { editNr = null; fnr.value = ""; fn1.value = ""; fn2.value = ""; fth.value = ""; ftz.value = ""; fh.textContent = "Neue Baustelle"; save.textContent = "Hinzufügen"; cancel.hidden = true; }
+    async function run(fn, okText) {
+      if (busy) return false; busy = true; say("Einen Moment …");
+      try {
+        var er = await fn();
+        if (er) { say(er, "bad"); return false; }
+        if (okText) say(okText, "ok"); return true;
+      } finally { busy = false; draw(); }
+    }
+    function draw() {
+      var items = sitesFind(q.value, 300), total = sitesList().length, can = adminView && canEditSites(), sh = sharedOn(), m = memberGet();
+      info.textContent = sh ? "Gemeinsame Liste der Firma " + m.firma + "." + (m.rolle === "admin" ? "" : " Du kannst suchen. Hinzufügen dürfen nur Administratoren.")
+        : user ? (noFirma ? "Dein Konto ist noch keiner Firma zugeordnet. Es gilt nur die Liste auf diesem Gerät." : sharedErr ? "Die Firmenliste ist nicht verfügbar: " + sharedErr : "Die Firmenliste wird geladen …")
+        : "Nur auf diesem Gerät.";
+      list.textContent = ""; list.hidden = !items.length;
+      items.forEach(function (x) {
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n)); if (x.n2) t.appendChild(el("small", { text: x.n2 })); if (travelTxt(x)) t.appendChild(el("small", { text: travelTxt(x) }));
+        var row = [t];
+        if (can) {
+          var ed = el("button", { type: "button", text: "Ändern" }), de = el("button", { type: "button", "class": "x", text: "Löschen" });
+          ed.addEventListener("click", function () { editNr = x.nr; fnr.value = x.nr; fn1.value = x.n; fn2.value = x.n2 || ""; fth.value = x.h || ""; ftz.value = x.z || ""; fh.textContent = "Baustelle " + x.nr + " ändern"; save.textContent = "Änderung speichern"; cancel.hidden = false; say(""); fn1.focus(); });
+          de.addEventListener("click", async function () { if (confirm("Baustelle " + x.nr + " löschen?")) { var ok = await run(function () { return sitesSave([], [x.nr]); }, "Gelöscht: " + x.nr); if (ok && editNr === x.nr) reset(); } });
+          row.push(ed, de);
+        }
+        list.appendChild(el("div", { "class": "srow", role: "listitem" }, row));
+      });
+      cnt.textContent = total ? (q.value.trim() ? items.length + " von " + total + " Baustellen" : total + " Baustellen") : "Noch keine Baustellen angelegt.";
+      editBox.hidden = !can;
+      seedBtn.hidden = total > 0;
+      var loc = sh ? localSites().filter(function (l) { return !siteByNr(l.nr); }) : [];
+      upBtn.hidden = !loc.length; upBtn.textContent = loc.length + " Baustellen von diesem Gerät in die Firmenliste übernehmen";
+    }
+    window.__sitesRedraw = draw;
+    q.addEventListener("input", draw);
+    cancel.addEventListener("click", function () { reset(); say(""); });
+    save.addEventListener("click", async function () {
+      var nr = fnr.value.trim(), n = fn1.value.trim(), n2 = fn2.value.trim(), h = mins(fth.value), z = mins(ftz.value) || h;
+      if (!nr || !n) { say("Bitte Nummer und Name eingeben.", "bad"); return; }
+      var ex = siteByNr(nr);
+      if (ex && editNr !== nr && !confirm("Die Nummer " + nr + " gibt es schon (" + ex.n + "). Ersetzen?")) return;
+      var ok = await run(function () { return sitesSave([{ nr: nr, n: n, n2: n2, h: h, z: z }], editNr && editNr !== nr ? [editNr] : []); }, "Gespeichert: " + nr);
+      if (ok) { reset(); fnr.focus(); }
+    });
+    seedBtn.addEventListener("click", async function () {
+      var ok = await run(function () { return sitesSave(SEED.map(function (r) { return { nr: r[0], n: r[1], n2: r[2] }; })); });
+      if (ok) say(SEED.length + " Baustellen geladen. Bitte prüfen: Wo ein ? steht, konnte ich die Handschrift auf dem Foto nicht sicher lesen. Tippe auf «Ändern», um es zu korrigieren.", "ok");
+    });
+    upBtn.addEventListener("click", async function () {
+      var loc = localSites().filter(function (l) { return !siteByNr(l.nr); });
+      await run(function () { return sitesSave(loc.map(function (l) { return { nr: l.nr, n: l.n, n2: l.n2, h: l.h, z: l.z }; })); }, loc.length + " Baustellen in die Firmenliste übernommen.");
+    });
+    imp.addEventListener("click", async function () {
+      var add = [], skip = 0;
+      ta.value.split(/\r?\n/).forEach(function (ln) {
+        if (!ln.trim()) return;
+        var m = ln.match(/^\s*(\d{3,})\s*[-–:.,]?\s*(.*)$/);
+        if (!m) { skip++; return; }
+        var parts = m[2].split(/\s*[;\t|]\s*/).filter(Boolean), h = "", z = "";
+        parts = parts.filter(function (p) { var f = p.match(/^fahr(?:t|zeit)\s*(\d{1,3})(?:\s*[\/-]\s*(\d{1,3}))?(?:\s*min\.?)?$/i); if (!f) return true; h = f[1]; z = f[2] || f[1]; return false; });
+        add.push({ nr: m[1], n: parts[0] || "(ohne Namen)", n2: parts.slice(1).join(" · "), h: h, z: z });
+      });
+      if (!add.length) { say("Keine Zeile mit Nummer gefunden." + (skip ? " " + skip + " Zeile(n) übersprungen." : ""), "bad"); return; }
+      var ok = await run(function () { return sitesSave(add); });
+      if (ok) { ta.value = ""; say(add.length + " Baustelle(n) übernommen" + (skip ? ", " + skip + " Zeile(n) ohne Nummer übersprungen" : "") + ".", "ok"); }
+    });
+    close.addEventListener("click", closeSites);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeSites(); });
+    document.body.appendChild(ov); draw(); (adminView ? fnr : q).focus();
+    if (user) pullSites();
+  }
+  $("sitesBtn").addEventListener("click", function () { openSites("search"); });
+  $("sitesAdd").addEventListener("click", function () { openSites("add"); });
+  /* ---------- Mitarbeiter verwalten (nur Administratoren) ---------- */
+  function closeMembers() { var o = $("members"); if (o) o.remove(); }
+  function openMembers() {
+    closeMembers(); closeSites(); hideSug();
+    var busy = false, rows = [];
+    var info = el("div", { "class": "status" }), cnt = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" });
+    var msg = el("div", { "class": "status", role: "status" });
+    var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    var em = el("input", { type: "email", inputmode: "email", autocapitalize: "none", autocomplete: "off", placeholder: "E-Mail-Adresse des Mitarbeiters", "aria-label": "E-Mail-Adresse" });
+    var role = el("select", { "aria-label": "Rolle" }, [el("option", { value: "mitarbeiter", text: "Mitarbeiter (darf suchen)" }), el("option", { value: "admin", text: "Administrator (darf auch hinzufügen)" })]);
+    var add = el("button", { type: "button", "class": "btn primary", text: "Hinzufügen" });
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var form = el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), em, role, el("div", { "class": "actions" }, [add])]);
+    var sheet = el("div", { "class": "sheet" }, [
+      el("h2", { text: "Mitarbeiter" }),
+      el("p", { text: "Trage hier die E-Mail-Adresse ein. Die Person registriert sich danach in der App mit genau dieser Adresse, bestätigt die E-Mail und sieht dann die Baustellen deiner Firma." }),
+      info, form, msg, cnt, list, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "members", role: "dialog", "aria-modal": "true", "aria-label": "Mitarbeiter" }, [sheet]);
+    async function call(fn, args) {
+      if (!sb || !user) return "Bitte zuerst anmelden.";
+      if (!navigator.onLine) return "Keine Verbindung. Dafür brauchst du Internet.";
+      try { var r = await sb.rpc(fn, args || {}); return r.error ? sharedMsg(r.error) : ""; } catch (e) { return sharedMsg(e); }
+    }
+    async function load() {
+      if (!sb || !user || !navigator.onLine) { say("Keine Verbindung. Die Liste kann gerade nicht geladen werden.", "bad"); return; }
+      try {
+        var r = await sb.rpc("members_list");
+        if (r.error) { say(sharedMsg(r.error), "bad"); return; }
+        rows = r.data || []; draw();
+      } catch (e) { say(sharedMsg(e), "bad"); }
+    }
+    async function run(fn, okText) {
+      if (busy) return false; busy = true; say("Einen Moment …");
+      try {
+        var er = await fn();
+        if (er) { say(er, "bad"); return false; }
+        await load(); if (okText) say(okText, "ok"); return true;
+      } finally { busy = false; }
+    }
+    function draw() {
+      var me = String((user && user.email) || "").toLowerCase(), m = memberGet();
+      info.textContent = m ? "Firma " + m.firma + "." : "";
+      cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen");
+      list.textContent = ""; list.hidden = !rows.length;
+      rows.forEach(function (r) {
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.email }));
+        t.appendChild(el("small", { text: (r.rolle === "admin" ? "Administrator" : "Mitarbeiter") + (r.email === me ? " · du" : "") }));
+        var kids = [t];
+        if (r.email !== me) {
+          var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
+          tog.addEventListener("click", function () { run(function () { return call("member_set", { p_email: r.email, p_rolle: r.rolle === "admin" ? "mitarbeiter" : "admin" }); }, r.email + " ist jetzt " + (r.rolle === "admin" ? "Mitarbeiter" : "Administrator") + "."); });
+          del.addEventListener("click", function () { if (confirm(r.email + " entfernen? Die Person sieht danach keine Baustellen mehr.")) run(function () { return call("member_remove", { p_email: r.email }); }, "Entfernt: " + r.email); });
+          kids.push(tog, del);
+        }
+        list.appendChild(el("div", { "class": "srow", role: "listitem" }, kids));
+      });
+    }
+    add.addEventListener("click", async function () {
+      var v = em.value.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { say("Bitte eine gültige E-Mail-Adresse eingeben.", "bad"); return; }
+      var ok = await run(function () { return call("member_set", { p_email: v, p_rolle: role.value }); }, "Hinzugefügt: " + v + ". Die Person registriert sich jetzt mit dieser Adresse.");
+      if (ok) { em.value = ""; em.focus(); }
+    });
+    em.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); add.click(); } });
+    close.addEventListener("click", closeMembers);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMembers(); });
+    document.body.appendChild(ov); draw(); em.focus(); load();
+  }
+  $("membersBtn").addEventListener("click", openMembers);
+
+  renderSitesInfo();
+
   /* ---------- Sicherung als Datei ---------- */
   function renderBackupInfo() {
     var t = lsGet("wr2:backup"), d = t ? new Date(t) : null;
@@ -679,7 +1223,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   }
   function exportBackup() {
     persist(true);
-    var o = { app: "wochenrapport", version: 2, exported: new Date().toISOString(), name: state.name, weeks: {} };
+    var o = { app: "wochenrapport", version: 2, exported: new Date().toISOString(), name: state.name, weeks: {}, sites: sitesGet() };
     localKeys().forEach(function (wk) { o.weeks[wk] = localWeek(wk); });
     var text = JSON.stringify(o), blob = new Blob([text], { type: "application/json" }), fn = "Wochenrapport_Sicherung_" + key(new Date()) + ".json", file = null;
     try { file = new File([blob], fn, { type: "application/json" }); } catch (e) { }
@@ -709,6 +1253,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
           if (!l || String(inc.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(inc)); index[wk] = totals(deserialize(inc.days)).net; if (user) qAdd(wk); n++; }
         });
         if (o.name && !lsGet("wr2:name")) lsSet("wr2:name", o.name);
+        if (o.sites && o.sites.s) { var l0 = sitesGet(), mg = sitesMerge(l0, o.sites); if (sitesNewer(mg, l0)) sitesPut(mg); renderSitesInfo(); }
         fillPicker(); loadWeek(state.week); if (user) flush();
         setStatus(n + " Woche(n) aus der Sicherung übernommen.", "ok");
       } catch (e) { setStatus("Diese Datei ist keine gültige Sicherung.", "bad"); }
