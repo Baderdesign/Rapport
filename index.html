@@ -856,7 +856,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     var sum = rel.reduce(function (a, b) { return a + b; }, 0), cw = rel.map(function (r) { return r / sum * W; });
     var cx = [], acc = mx; cw.forEach(function (w) { cx.push(acc); acc += w; });
     var mon = fromKey(state.week), fri = addDays(mon, 4), iso = isoWeek(mon);
-    var kx = mx + W + 1, bottom = 200, tableTop = 33;
+    var kx = mx + W, bottom = 200, tableTop = 33;
 
     /* Zeilenbedarf: pro Tag eine Beschriftungszeile, dazu je Baustelle 1 Zeile (2 mit zweiter Textzeile), mindestens 5 Zeilen wie im Formular */
     function erows(e) { return e.obj2 ? 2 : 1; }
@@ -875,13 +875,15 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       else doc.text(str, cx[i] + 1, by);
     }
     function ktxt(y, s, size, bold) { doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size * fk); doc.text(String(s), kx + KW / 2, y + rh * 0.7, { align: "center" }); }
+    function kcell(y, h) { doc.setLineWidth(0.15); doc.rect(kx, y, KW, h); }
+    function khead(y, s) { doc.setFont("helvetica", "normal"); doc.setFontSize(7 * fk); doc.text(String(s), kx + KW / 2, y + rh * 0.7, { align: "center" }); }
     var head = [
       ["Datum", "Baustellen", "Baustelle/Objekt", "Arbeitszeit inkl. Pausen", "Pause und", "Total Std./Min", "Reisezeit", "Reisezeit", "Total", "Absenzen"],
       ["", "Nummer", "", "und inkl. Reisezeit", "Mittag", "ohne Pausen", "Hin", "Zurück", "Reisezeit", "in Std."],
       ["", "", "", "von ............ bis", "in Min.", "", "in Min.", "in Min.", "Tag in Min.", ""]];
     function drawHead(y0) {
       head.forEach(function (r, ri) { r.forEach(function (s, i) { cell(i, y0 + ri * rh, rh); if (s) txt(i, y0 + ri * rh, s, 7); }); });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5 * fk); doc.text("Total/Tag", kx + KW / 2, y0 + rh * 0.7, { align: "center" });
+      ["Total", "pro Tag", "Std./Min"].forEach(function (s, ri) { kcell(y0 + ri * rh, rh); khead(y0 + ri * rh, s); });
     }
 
     doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("Wochenrapport", mx, 14);
@@ -900,7 +902,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
         doc.text("Wochenrapport " + (state.name || "") + "   " + dmy(mon) + " - " + dmy(fri) + "   (Fortsetzung)", mx, 11);
         y = 15; drawHead(y); y += 3 * rh;
       }
-      for (var r = 0; r < n; r++) for (var i = 0; i < 10; i++) cell(i, y + r * rh, rh);
+      for (var r = 0; r < n; r++) { for (var i = 0; i < 10; i++) cell(i, y + r * rh, rh); kcell(y + r * rh, rh); }
       txt(0, y, DAYS[di], 8);
       var ds = dayStats(rows), ry = 1;
       rows.forEach(function (e, k) {
@@ -909,23 +911,24 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
         if (e.nr) txt(1, y1, e.nr, 7.5, false, "c");
         if (e.obj) txt(2, y1, e.obj, 7.5);
         if (e.obj2) txt(2, y2, e.obj2, 7.5);
-        if (c.hasTime) { txt(3, y1, fmtT(c.von) + " Uhr bis " + fmtT(c.bis) + " Uhr = " + hm(c.gross), 7.5, false, "c"); txt(5, y1, hm(c.work), 7.5, false, "r"); }
-        if (num(e.pause)) txt(4, y1, Math.round(num(e.pause)), 7.5, false, "r");
-        if (c.hin) txt(6, y1, Math.round(c.hin), 7.5, false, "r");
-        if (c.zur) txt(7, y1, Math.round(c.zur), 7.5, false, "r");
-        if (c.abs) txt(9, y1, fmtAbs(c.abs), 7.5, false, "r");
+        if (c.hasTime) { txt(3, y1, fmtT(c.von) + " Uhr bis " + fmtT(c.bis) + " Uhr = " + hm(c.gross), 7.5, false, "c"); txt(5, y1, hm(c.work), 7.5, false, "c"); }
+        if (num(e.pause)) txt(4, y1, Math.round(num(e.pause)), 7.5, false, "c");
+        if (c.hin) txt(6, y1, Math.round(c.hin), 7.5, false, "c");
+        if (c.zur) txt(7, y1, Math.round(c.zur), 7.5, false, "c");
+        if (c.abs) txt(9, y1, fmtAbs(c.abs), 7.5, false, "c");
         ry += erows(e);
       });
-      if (ds.reise) txt(8, y + (n - 1) * rh, Math.round(ds.reise), 7.5, true, "r"); /* Reisezeit des ganzen Tages, am Ende des Tagesblocks */
-      doc.setLineWidth(0.35); doc.line(cx[0], y, cx[0] + W, y);
+      if (ds.reise) txt(8, y + (n - 1) * rh, Math.round(ds.reise), 7.5, true, "c"); /* Reisezeit des ganzen Tages, am Ende des Tagesblocks */
+      doc.setLineWidth(0.35); doc.line(cx[0], y, kx + KW, y);
       y += h;
     });
     var t = totals(state.days), th = rh + 0.6;
     for (var k = 0; k < 10; k++) cell(k, y, th);
-    doc.setLineWidth(0.5); doc.rect(mx, y, W, th);
+    kcell(y, th);
+    doc.setLineWidth(0.5); doc.rect(mx, y, W + KW, th);
     rh = th;
     txt(0, y, "Total", 8.5, true);
-    if (t.abs) txt(9, y, fmtAbs(t.abs), 8, true, "r");
+    if (t.abs) txt(9, y, fmtAbs(t.abs), 8, true, "c");
     ktxt(y, hm(t.net), 8.5, true);
     var vy = y + th + 12;
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
