@@ -760,8 +760,6 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   function recalc() {
     var t = totals(state.days);
     $("summary").innerHTML =
-      '<div><span class="lbl">Zeit von – bis</span><b>' + hm(t.gross) + '<small>Std.Min</small></b></div>' +
-      '<div><span class="lbl">abzgl. Pausen</span><b>' + hm(t.pause) + '<small>Std.Min</small></b></div>' +
       '<div><span class="lbl">abzgl. Reisezeit (max. ' + TARA + ' Min./Tag)</span><b>' + Math.round(t.tara) + '<small>Min.</small></b></div>' +
       '<div class="total"><span class="lbl">Total Arbeitszeit</span><b>' + hm(t.net) + '<small>Std.Min</small></b></div>' +
       '<div><span class="lbl">Reisezeit gesamt</span><b>' + Math.round(t.reise) + '<small>Min.</small></b></div>' +
