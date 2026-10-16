@@ -257,7 +257,7 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .btn.icon { width: 42px; padding: 0; font-size: 1.2rem; }
 .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; padding-inline: 18px; }
 .btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
-.picker { width: auto; max-width: min(15rem, 100%); }
+.picker { width: 100%; max-width: none; flex: 1 1 100%; text-overflow: ellipsis; }
 
 .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .summary > div { background: var(--surface); padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
@@ -374,6 +374,15 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
 .bil .sub { margin: 4px 0 0; padding: 6px 8px; border-left: 3px solid var(--line); display: flex; flex-direction: column; gap: 3px; font-size: .88rem; }
 .bil .sub div { display: flex; justify-content: space-between; gap: 10px; }
 .bil .sub b { font-variant-numeric: tabular-nums; }
+.typs { display: flex; flex-wrap: wrap; gap: 6px; }
+.typb { height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: .95rem; cursor: pointer; }
+.typb.on { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+.absbox { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px; }
+.absbox > b { font-family: var(--font-display); font-size: 1.5rem; line-height: 42px; }
+.absbox .f { display: flex; flex-direction: column; gap: 4px; }
+.absbox .f span { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.absbox .f input { width: 6rem; }
+.absbox p { margin: 0; flex: 1 1 12rem; color: var(--muted); font-size: .85rem; align-self: center; }
 .lockbox, .editbox { display: flex; flex-direction: column; gap: 10px; }
 .editbox input[type=email] { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
 .lockbox .actions input { flex: 1 1 10rem; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
@@ -441,6 +450,14 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
 (function () {
   "use strict";
   var DAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
+  var ABS_T = { krank: "Krank", ferien: "Ferien", frei: "Frei / Üstd", ueber: "Überstunden" }, ABS_BTN = ["krank", "ferien", "frei"], ABS_STD = 8; /* Absenz-Tage: keine Zeiten nötig, Standard 8 Std. */
+  function absDay(rows) { return !!(rows && rows[0] && rows[0].typ && ABS_T[rows[0].typ]); }
+  function typButtons(di, rows) {
+    var cur = absDay(rows) ? rows[0].typ : "";
+    return '<div class="typs" role="group" aria-label="Absenz ' + DAYS[di] + '">' + ABS_BTN.map(function (k) {
+      return '<button type="button" class="typb' + (cur === k ? " on" : "") + '" data-typ="' + di + '" data-t="' + k + '" aria-pressed="' + (cur === k) + '">' + ABS_T[k] + "</button>";
+    }).join("") + "</div>";
+  }
   var MAXROWS = 5, TARA = 25; /* Reisezeit wird am Ende abgezogen, höchstens TARA Minuten pro Tag */
   var $ = function (id) { return document.getElementById(id); };
   var pad = function (n) { return (n < 10 ? "0" : "") + n; };
@@ -750,9 +767,11 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     $("name").value = state.name;
     var html = "";
     state.days.forEach(function (rows, di) {
-      html += '<section class="day" data-day="' + di + '"><div class="dayhead"><h2>' + DAYS[di] + '<span>' + dm(addDays(mon, di)) + '</span></h2><div class="daytotal" data-dt></div></div>' +
-        (di === 0 ? "" : "") + COLHEAD + '<div class="rows">' + rows.map(function (e, ri) { return rowHtml(di, ri, e); }).join("") + '</div>' +
-        '<button type="button" class="add" data-add="' + di + '"' + (rows.length >= MAXROWS ? " hidden" : "") + '>+ Weitere Baustelle an diesem Tag</button></section>';
+      html += '<section class="day" data-day="' + di + '"><div class="dayhead"><h2>' + DAYS[di] + '<span>' + dm(addDays(mon, di)) + '</span></h2>' + typButtons(di, rows) + '<div class="daytotal" data-dt></div></div>' +
+        (absDay(rows)
+          ? '<div class="absbox"><b>' + esc(ABS_T[rows[0].typ]) + '</b><div class="f"><span>Absenz in Std.</span><input type="text" inputmode="decimal" autocomplete="off" data-ah="' + di + '" aria-label="Absenz in Stunden" value="' + esc(rows[0].abs) + '"></div><p>Keine Uhrzeit und keine Reisezeit nötig. Zum Zurücksetzen nochmals auf «' + esc(ABS_T[rows[0].typ]) + '» tippen.</p></div></section>'
+          : COLHEAD + '<div class="rows">' + rows.map(function (e, ri) { return rowHtml(di, ri, e); }).join("") + '</div>' +
+            '<button type="button" class="add" data-add="' + di + '"' + (rows.length >= MAXROWS ? " hidden" : "") + '>+ Weitere Baustelle an diesem Tag</button></section>');
     });
     $("days").innerHTML = html;
     recalc(); fillPicker();
@@ -766,6 +785,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     var secs = document.querySelectorAll(".day");
     state.days.forEach(function (rows, di) {
       var ds = dayStats(rows);
+      if (absDay(rows)) { secs[di].querySelector("[data-dt]").innerHTML = ds.abs ? "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : ""; return; }
       rows.forEach(function (e, ri) {
         var c = calcRow(e), row = secs[di].querySelector('.row[data-r="' + ri + '"]');
         var w = row.querySelector('[data-c="work"]'); w.textContent = c.invalid ? "Zeit prüfen" : (c.hasTime ? hm(c.work) : "–"); w.className = "calc" + (c.invalid ? " warn" : "");
@@ -788,14 +808,17 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     keys.sort().reverse();
     sel.innerHTML = keys.map(function (k) {
       var m = fromKey(k), iso = isoWeek(m);
-      return '<option value="' + k + '">KW ' + iso.w + " · " + dm(m) + "–" + dmy(addDays(m, 4)) + (index[k] ? " · " + hm(index[k]) + " Std." : "") + "</option>";
+      var fr = addDays(m, 4), span = (m.getMonth() === fr.getMonth() ? pad(m.getDate()) + "." : dm(m)) + "–" + dmy(fr);
+      return '<option value="' + k + '">KW ' + iso.w + " · " + span + (index[k] ? " · " + hm(index[k]) + " Std." : "") + "</option>";
     }).join("");
     sel.value = state.week;
   }
 
   /* ---------- Eingaben ---------- */
   $("days").addEventListener("input", function (ev) {
-    var inp = ev.target, row = inp.closest(".row"); if (!row || !inp.dataset.k) return;
+    var inp = ev.target;
+    if (inp.dataset && inp.dataset.ah !== undefined) { state.days[+inp.dataset.ah][0].abs = inp.value; recalc(); persist(); return; }
+    var row = inp.closest(".row"); if (!row || !inp.dataset.k) return;
     state.days[+row.dataset.d][+row.dataset.r][inp.dataset.k] = inp.value;
     recalc(); persist();
   });
@@ -803,6 +826,16 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     var add = ev.target.closest("[data-add]"), del = ev.target.closest("[data-del]");
     if (add) { var di = +add.dataset.add; if (state.days[di].length < MAXROWS) { state.days[di].push(blank()); renderAll(); var r = document.querySelectorAll('.day')[di].querySelectorAll('.row'); var f = r[r.length - 1].querySelector('input'); if (f) f.focus(); persist(); } }
     if (del) { var row = del.closest(".row"), d = +row.dataset.d, r2 = +row.dataset.r; if (state.days[d].length > 1) { state.days[d].splice(r2, 1); renderAll(); persist(); } }
+  });
+  $("days").addEventListener("click", function (ev) {
+    var tb = ev.target.closest ? ev.target.closest("[data-t]") : null; if (!tb) return;
+    var di = +tb.dataset.typ, v = tb.dataset.t, rows = state.days[di];
+    if (absDay(rows) && rows[0].typ === v) { state.days[di] = [blank()]; renderAll(); persist(); return; } /* nochmals tippen = zurück zum normalen Tag */
+    var has = !absDay(rows) && rows.some(function (e) { return !isEmptyEntry(e); });
+    if (has && !confirm("Die Einträge von " + DAYS[di] + " werden durch «" + ABS_T[v] + "» ersetzt. Weiter?")) return;
+    var cur = absDay(rows) ? rows[0] : null;
+    state.days[di] = [Object.assign(blank(), { typ: v, obj: ABS_T[v], abs: cur && cur.abs ? cur.abs : String(ABS_STD) })];
+    renderAll(); persist();
   });
   $("days").addEventListener("focusout", function (ev) {
     var inp = ev.target, row = inp.closest ? inp.closest(".row") : null; if (!row || (inp.dataset.k !== "von" && inp.dataset.k !== "bis")) return;
@@ -1223,7 +1256,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   /* ---------- Auswertung pro Baustelle (nur Administratoren) ---------- */
   function bilanz(rows, von, bis) {
     /* rows: [{email, week, data}] aus firma_wochen. Reisezeit-Abzug (max. TARA/Tag) wird nach Arbeitszeit auf die Baustellen des Tages verteilt, damit die Summe stimmt. */
-    var sites = {}, people = {}, tot = { net: 0, work: 0, abs: 0, reise: 0 };
+    var sites = {}, people = {}, tot = { net: 0, work: 0, abs: 0, reise: 0, absBy: {} };
     rows.forEach(function (r) {
       var mon = fromKey(r.week), d = r.data || {}, days = deserialize(d.days), em = String(r.email || "").toLowerCase();
       var nm = String(d.name || "").trim(); if (nm) people[em] = nm; else if (!people[em]) people[em] = "";
@@ -1231,7 +1264,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
         var dk = key(addDays(mon, di)); if (dk < von || dk > bis) return;
         var ds = dayStats(list);
         list.forEach(function (e) {
-          var c = calcRow(e); tot.abs += c.abs;
+          var c = calcRow(e); tot.abs += c.abs; if (c.abs) { var tk = e.typ && ABS_T[e.typ] ? ABS_T[e.typ] : "Andere"; tot.absBy[tk] = (tot.absBy[tk] || 0) + c.abs; }
           if (c.work <= 0) return;
           var nr = String(e.nr == null ? "" : e.nr).trim(), k = nr || "";
           var st = sites[k] || (sites[k] = { nr: nr, name: "", net: 0, work: 0, reise: 0, days: {}, who: {} });
@@ -1279,7 +1312,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       var persons = {}; res.sites.forEach(function (s) { Object.keys(s.who).forEach(function (e) { persons[e] = 1; }); });
       var big = el("div", { "class": "big", text: hm(res.tot.net) }); big.appendChild(el("small", { text: "Std.Min Total Arbeitszeit" }));
       head.appendChild(big);
-      head.appendChild(el("div", { "class": "status", text: dmy(fromKey(a)) + " bis " + dmy(fromKey(b)) + " · " + res.sites.length + (res.sites.length === 1 ? " Baustelle" : " Baustellen") + " · " + Object.keys(persons).length + (Object.keys(persons).length === 1 ? " Mitarbeiter" : " Mitarbeiter") + (res.tot.abs ? " · Absenzen " + fmtAbs(res.tot.abs) + " Std." : "") + (res.tot.reise ? " · Reisezeit " + hm(res.tot.reise) : "") }));
+      head.appendChild(el("div", { "class": "status", text: dmy(fromKey(a)) + " bis " + dmy(fromKey(b)) + " · " + res.sites.length + (res.sites.length === 1 ? " Baustelle" : " Baustellen") + " · " + Object.keys(persons).length + (Object.keys(persons).length === 1 ? " Mitarbeiter" : " Mitarbeiter") + (res.tot.abs ? " · Absenzen " + fmtAbs(res.tot.abs) + " Std." + (Object.keys(res.tot.absBy).length > 1 || (Object.keys(res.tot.absBy)[0] && Object.keys(res.tot.absBy)[0] !== "Andere") ? " (" + Object.keys(res.tot.absBy).map(function (x) { return x + " " + fmtAbs(res.tot.absBy[x]); }).join(" · ") + ")" : "") : "") + (res.tot.reise ? " · Reisezeit " + hm(res.tot.reise) : "") }));
       if (!res.sites.length) head.appendChild(el("div", { "class": "status", text: "In diesem Zeitraum gibt es keine Einträge mit Zeiten." }));
       res.sites.forEach(function (s) {
         var info = siteByNr(s.nr), nm = (info && info.n) || s.name || (s.nr ? "" : "Einträge ohne Nummer");
