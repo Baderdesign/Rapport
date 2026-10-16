@@ -365,6 +365,14 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; font-family: inherit; margin-block: 8px; }
 .sheet details summary { cursor: pointer; font-weight: 500; }
 .sform .trv { display: flex; gap: 8px; }
+.bil .range { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bil input[type=date] { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
+.bil .big { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bil .big small { font-size: .8rem; font-weight: 400; color: var(--muted); margin-left: 4px; }
+.bil .srow .h { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bil .sub { margin: 4px 0 0; padding: 6px 8px; border-left: 3px solid var(--line); display: flex; flex-direction: column; gap: 3px; font-size: .88rem; }
+.bil .sub div { display: flex; justify-content: space-between; gap: 10px; }
+.bil .sub b { font-variant-numeric: tabular-nums; }
 .lockbox, .editbox { display: flex; flex-direction: column; gap: 10px; }
 .editbox input[type=email] { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
 .lockbox .actions input { flex: 1 1 10rem; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
@@ -387,7 +395,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     </div>
   </div>
 
-  <div class="sitesbar"><button class="btn" id="sitesBtn" type="button" aria-haspopup="dialog">Baustellen-Liste</button><button class="btn" id="sitesAdd" type="button" aria-haspopup="dialog" hidden>+ Baustelle hinzufügen</button><button class="btn" id="membersBtn" type="button" aria-haspopup="dialog" hidden>Mitarbeiter</button><span class="status" id="sitesInfo"></span></div>
+  <div class="sitesbar"><button class="btn" id="sitesBtn" type="button" aria-haspopup="dialog">Baustellen-Liste</button><button class="btn" id="sitesAdd" type="button" aria-haspopup="dialog" hidden>+ Baustelle hinzufügen</button><button class="btn" id="membersBtn" type="button" aria-haspopup="dialog" hidden>Mitarbeiter</button><button class="btn" id="bilanzBtn" type="button" aria-haspopup="dialog" hidden>Auswertung</button><span class="status" id="sitesInfo"></span></div>
 
   <section class="auth" id="auth" hidden aria-label="Konto">
     <form id="authForm" novalidate>
@@ -537,6 +545,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   function sharedMsg(er) {
     var m = String((er && er.message) || er || "");
     if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
+    if (/firma_wochen/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Auswertung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/members_list|member_set|member_remove/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/my_member|sites_write|schema cache|does not exist|could not find/i.test(m)) return "Die Firmenliste ist in Supabase noch nicht eingerichtet (SQL fehlt).";
     if (/fetch|network|load failed/i.test(m)) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
@@ -581,7 +590,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   function renderSitesInfo() {
     var n = sitesList().length, m = memberGet(), ed = canEditSites(), parts = [];
     $("sitesBtn").textContent = "Baustellen-Liste" + (n ? " (" + n + ")" : "");
-    $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isAdmin();
+    $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isAdmin(); $("bilanzBtn").hidden = !isAdmin();
     if (user && m) parts.push(roleText(m));
     if (user && noFirma) parts.push("Dein Konto ist noch keiner Firma zugeordnet. Bitte melde dich beim Administrator.");
     else if (!n) parts.push(ed ? "Noch keine Baustellen. Tippe auf «+ Baustelle hinzufügen»." : "Noch keine Baustellen in der Liste.");
@@ -1021,7 +1030,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -1213,6 +1222,103 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     document.body.appendChild(ov); draw(); em.focus(); load();
   }
   $("membersBtn").addEventListener("click", openMembers);
+
+  /* ---------- Auswertung pro Baustelle (nur Administratoren) ---------- */
+  function bilanz(rows, von, bis) {
+    /* rows: [{email, week, data}] aus firma_wochen. Reisezeit-Abzug (max. TARA/Tag) wird nach Arbeitszeit auf die Baustellen des Tages verteilt, damit die Summe stimmt. */
+    var sites = {}, people = {}, tot = { net: 0, work: 0, abs: 0, reise: 0 };
+    rows.forEach(function (r) {
+      var mon = fromKey(r.week), d = r.data || {}, days = deserialize(d.days), em = String(r.email || "").toLowerCase();
+      var nm = String(d.name || "").trim(); if (nm) people[em] = nm; else if (!people[em]) people[em] = "";
+      days.forEach(function (list, di) {
+        var dk = key(addDays(mon, di)); if (dk < von || dk > bis) return;
+        var ds = dayStats(list);
+        list.forEach(function (e) {
+          var c = calcRow(e); tot.abs += c.abs;
+          if (c.work <= 0) return;
+          var nr = String(e.nr == null ? "" : e.nr).trim(), k = nr || "";
+          var st = sites[k] || (sites[k] = { nr: nr, name: "", net: 0, work: 0, reise: 0, days: {}, who: {} });
+          if (!st.name && e.obj) st.name = String(e.obj).trim();
+          var share = ds.work > 0 ? ds.tara * c.work / ds.work : 0, net = c.work - share;
+          st.net += net; st.work += c.work; st.reise += c.reise; st.days[em + "|" + dk] = 1;
+          st.who[em] = (st.who[em] || 0) + net;
+          tot.net += net; tot.work += c.work; tot.reise += c.reise;
+        });
+      });
+    });
+    var out = Object.keys(sites).map(function (k) { var st = sites[k]; st.ndays = Object.keys(st.days).length; st.nwho = Object.keys(st.who).length; return st; });
+    out.sort(function (a, b) { return b.net - a.net; });
+    return { sites: out, people: people, tot: tot };
+  }
+  function closeBilanz() { var o = $("bilanz"); if (o) o.remove(); }
+  function openBilanz() {
+    closeBilanz(); closeSites(); closeMembers(); hideSug();
+    var busy = false;
+    var now = new Date(), y = now.getFullYear(), mo = now.getMonth();
+    var presets = {
+      monat: function () { return [key(new Date(y, mo, 1)), key(new Date(y, mo + 1, 0))]; },
+      vormonat: function () { return [key(new Date(y, mo - 1, 1)), key(new Date(y, mo, 0))]; },
+      woche4: function () { return [key(addDays(mondayOf(now), -21)), key(addDays(mondayOf(now), 6))]; },
+      jahr: function () { return [key(new Date(y, 0, 1)), key(new Date(y, 11, 31))]; }
+    };
+    var sel = el("select", { "aria-label": "Zeitraum" }, [
+      el("option", { value: "monat", text: "Dieser Monat" }), el("option", { value: "vormonat", text: "Letzter Monat" }),
+      el("option", { value: "woche4", text: "Letzte 4 Wochen" }), el("option", { value: "jahr", text: "Dieses Jahr" }), el("option", { value: "own", text: "Eigener Zeitraum" })]);
+    var von = el("input", { type: "date", "aria-label": "Von" }), bis = el("input", { type: "date", "aria-label": "Bis" });
+    var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" });
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var msg = el("div", { "class": "status", role: "status" }), head = el("div", { "class": "editbox" }), list = el("div", { "class": "slist", role: "list" });
+    list.style.maxHeight = "46vh";
+    var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    var sheet = el("div", { "class": "sheet bil" }, [
+      el("h2", { text: "Auswertung pro Baustelle" }),
+      el("p", { text: "Alle Stunden der Mitarbeiter deiner Firma, zusammengezählt pro Baustellen-Nummer. Es zählt die Arbeitszeit nach Abzug von Pausen und Reisezeit (Std.Min)." }),
+      sel, el("div", { "class": "range" }, [von, bis]), el("div", { "class": "actions" }, [go]), msg, head, list, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "bilanz", role: "dialog", "aria-modal": "true", "aria-label": "Auswertung" }, [sheet]);
+    function setPreset() { var f = presets[sel.value]; if (f) { var r = f(); von.value = r[0]; bis.value = r[1]; } }
+    function nameOf(people, em) { return people[em] || em; }
+    function draw(res, a, b) {
+      head.textContent = ""; list.textContent = ""; list.hidden = !res.sites.length;
+      var persons = {}; res.sites.forEach(function (s) { Object.keys(s.who).forEach(function (e) { persons[e] = 1; }); });
+      var big = el("div", { "class": "big", text: hm(res.tot.net) }); big.appendChild(el("small", { text: "Std.Min Total Arbeitszeit" }));
+      head.appendChild(big);
+      head.appendChild(el("div", { "class": "status", text: dmy(fromKey(a)) + " bis " + dmy(fromKey(b)) + " · " + res.sites.length + (res.sites.length === 1 ? " Baustelle" : " Baustellen") + " · " + Object.keys(persons).length + (Object.keys(persons).length === 1 ? " Mitarbeiter" : " Mitarbeiter") + (res.tot.abs ? " · Absenzen " + fmtAbs(res.tot.abs) + " Std." : "") + (res.tot.reise ? " · Reisezeit " + hm(res.tot.reise) : "") }));
+      if (!res.sites.length) head.appendChild(el("div", { "class": "status", text: "In diesem Zeitraum gibt es keine Einträge mit Zeiten." }));
+      res.sites.forEach(function (s) {
+        var info = siteByNr(s.nr), nm = (info && info.n) || s.name || (s.nr ? "" : "Einträge ohne Nummer");
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: s.nr || "–" })); t.appendChild(document.createTextNode(nm));
+        t.appendChild(el("small", { text: s.nwho + (s.nwho === 1 ? " Mitarbeiter" : " Mitarbeiter") + " · " + s.ndays + (s.ndays === 1 ? " Tag" : " Tage") + (s.reise ? " · Reise " + hm(s.reise) : "") }));
+        var sub = el("div", { "class": "sub", hidden: "" });
+        Object.keys(s.who).sort(function (p, q) { return s.who[q] - s.who[p]; }).forEach(function (e) { sub.appendChild(el("div", {}, [el("span", { text: nameOf(res.people, e) }), el("b", { text: hm(s.who[e]) })])); });
+        t.appendChild(sub);
+        var tog = el("button", { type: "button", text: "Details", "aria-expanded": "false" });
+        tog.addEventListener("click", function () { var o = sub.hidden; sub.hidden = !o; tog.setAttribute("aria-expanded", o ? "true" : "false"); });
+        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(s.net) }), tog]));
+      });
+    }
+    async function load() {
+      if (busy) return;
+      var a = von.value, b = bis.value;
+      if (!a || !b || a > b) { say("Bitte einen gültigen Zeitraum wählen (Von vor Bis).", "bad"); return; }
+      if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
+      if (!navigator.onLine) { say("Keine Verbindung. Für die Auswertung brauchst du Internet.", "bad"); return; }
+      busy = true; say("Einen Moment …");
+      try {
+        var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(fromKey(a))), p_bis: b });
+        if (r.error) { say(sharedMsg(r.error), "bad"); return; }
+        say(""); draw(bilanz(r.data || [], a, b), a, b);
+      } catch (e) { say(sharedMsg(e), "bad"); }
+      finally { busy = false; }
+    }
+    sel.addEventListener("change", function () { setPreset(); load(); });
+    von.addEventListener("change", function () { sel.value = "own"; });
+    bis.addEventListener("change", function () { sel.value = "own"; });
+    go.addEventListener("click", load);
+    close.addEventListener("click", closeBilanz);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeBilanz(); });
+    document.body.appendChild(ov); setPreset(); load();
+  }
+  $("bilanzBtn").addEventListener("click", openBilanz);
 
   renderSitesInfo();
 
