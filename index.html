@@ -451,9 +451,10 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   "use strict";
   var DAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
   var ABS_T = { krank: "Krank", ferien: "Ferien", frei: "Frei / Üstd", ueber: "Überstunden" }, ABS_BTN = ["krank", "ferien", "frei"], ABS_STD = 8; /* Absenz-Tage: keine Zeiten nötig, Standard 8 Std. */
-  function absDay(rows) { return !!(rows && rows[0] && rows[0].typ && ABS_T[rows[0].typ]); }
+  function absDay(rows) { return !!(rows && rows[0] && (rows[0].typ === "krank" || rows[0].typ === "ferien")); } /* Frei / Üstd lässt den Tag normal (z. B. früher gegangen) */
+  function typOf(rows) { return rows && rows[0] && rows[0].typ && ABS_T[rows[0].typ] ? rows[0].typ : ""; }
   function typButtons(di, rows) {
-    var cur = absDay(rows) ? rows[0].typ : "";
+    var cur = typOf(rows);
     return '<div class="typs" role="group" aria-label="Absenz ' + DAYS[di] + '">' + ABS_BTN.map(function (k) {
       return '<button type="button" class="typb' + (cur === k ? " on" : "") + '" data-typ="' + di + '" data-t="' + k + '" aria-pressed="' + (cur === k) + '">' + ABS_T[k] + "</button>";
     }).join("") + "</div>";
@@ -830,8 +831,17 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   $("days").addEventListener("click", function (ev) {
     var tb = ev.target.closest ? ev.target.closest("[data-t]") : null; if (!tb) return;
     var di = +tb.dataset.typ, v = tb.dataset.t, rows = state.days[di];
-    if (absDay(rows) && rows[0].typ === v) { state.days[di] = [blank()]; renderAll(); persist(); return; } /* nochmals tippen = zurück zum normalen Tag */
-    var has = !absDay(rows) && rows.some(function (e) { return !isEmptyEntry(e); });
+    if (typOf(rows) === v) { /* nochmals tippen = zurück zum normalen Tag */
+      if (absDay(rows)) state.days[di] = [blank()];
+      else { rows[0].typ = ""; rows[0].abs = ""; if (rows[0].obj === ABS_T[v]) rows[0].obj = ""; }
+      renderAll(); persist(); return;
+    }
+    if (v === "frei") { /* Tag bleibt normal, nur die Absenz-Stunden werden vorbelegt und sind frei änderbar */
+      if (absDay(rows)) { state.days[di] = rows = [blank()]; }
+      rows[0].typ = "frei"; if (!rows[0].abs) rows[0].abs = String(ABS_STD);
+      renderAll(); persist(); return;
+    }
+    var has = rows.some(function (e) { return !isEmptyEntry(e); }) && !absDay(rows);
     if (has && !confirm("Die Einträge von " + DAYS[di] + " werden durch «" + ABS_T[v] + "» ersetzt. Weiter?")) return;
     var cur = absDay(rows) ? rows[0] : null;
     state.days[di] = [Object.assign(blank(), { typ: v, obj: ABS_T[v], abs: cur && cur.abs ? cur.abs : String(ABS_STD) })];
@@ -904,6 +914,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       }
       for (var r = 0; r < n; r++) { for (var i = 0; i < 10; i++) cell(i, y + r * rh, rh); kcell(y + r * rh, rh); }
       txt(0, y, DAYS[di], 8);
+      if (!absDay(rows) && typOf(rows)) txt(2, y, ABS_T[typOf(rows)], 7.5);
       var ds = dayStats(rows), ry = 1;
       rows.forEach(function (e, k) {
         var c = calcRow(e), y1 = y + ry * rh, y2 = y1 + rh;
