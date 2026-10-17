@@ -615,7 +615,7 @@ h1 { color: #2c2166; }
     var m = String((er && er.message) || er || "");
     if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
     if (/firma_wochen/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Auswertung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
-    if (/members_list|member_set|member_remove/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
+    if (/members_list|member_set|member_remove|pending_delete/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/my_member|sites_write|schema cache|does not exist|could not find/i.test(m)) return "Die Firmenliste ist in Supabase noch nicht eingerichtet (SQL fehlt).";
     if (/fetch|network|load failed/i.test(m)) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
     return m || "Das hat nicht geklappt.";
@@ -1357,7 +1357,9 @@ h1 { color: #2c2166; }
           t.appendChild(el("small", { text: (d ? "registriert am " + dmy(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) : "") + (p.confirmed ? "" : " · E-Mail noch nicht bestätigt") }));
           var b = el("button", { type: "button", text: "Als Mitarbeiter aufnehmen" });
           b.addEventListener("click", function () { run(function () { return call("member_set", { p_email: p.email, p_rolle: "mitarbeiter" }); }, p.email + " ist jetzt Mitarbeiter."); });
-          pbox.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+          var x = el("button", { type: "button", "class": "x", text: "Löschen" });
+          x.addEventListener("click", function () { if (confirm(p.email + " löschen? Das Konto wird entfernt. Die Person kann sich später neu registrieren.")) run(function () { return call("pending_delete", { p_email: p.email }); }, "Gelöscht: " + p.email); });
+          pbox.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b, x]));
         });
       }
       cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen");
