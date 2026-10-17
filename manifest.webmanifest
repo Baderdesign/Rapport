@@ -1,0 +1,33 @@
+{
+ "id": "./",
+ "name": "Wochenrapport",
+ "short_name": "Rapport",
+ "description": "Wochenrapport mit Zeitberechnung, Baustellen und PDF-Export",
+ "lang": "de-CH",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "any",
+ "background_color": "#1a1244",
+ "theme_color": "#2c2166",
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
