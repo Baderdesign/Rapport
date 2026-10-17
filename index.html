@@ -342,7 +342,9 @@ html { -webkit-text-size-adjust: 100%; }
 [hidden] { display: none !important; }
 img { max-width: 100%; }
 body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px)); }
-.titlebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.titlebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; }
+.titlebar .brand { flex: 1 1 100%; justify-content: center; }
+.titlebar .acct { flex: 1 1 100%; justify-content: center; }
 .acct { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sync { font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .sync::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
