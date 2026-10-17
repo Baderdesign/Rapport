@@ -334,6 +334,15 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .overlay.menu { justify-content: flex-end; align-items: stretch; padding: 0; }
 .drawer { width: min(300px, 86vw); background: var(--surface); color: var(--ink); border-left: 2px solid var(--gold, #c9a24a); padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 .drawer .btn { text-align: left; min-height: 46px; }
+.rg { display: grid; grid-template-columns: minmax(0, 1.7fr) repeat(5, minmax(0, 1fr)); gap: 3px; }
+.rg input { height: 38px; width: 100%; min-width: 0; padding: 7px 3px; font-size: 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); box-sizing: border-box; }
+.rg input:not(:first-child) { text-align: center; }
+.rgh { text-align: center; font-weight: 600; font-size: .8rem; color: var(--muted); }
+.rgm { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 3px; }
+.rgm input, .regedit > div > input, .regedit > div > textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 8px; font-size: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.rgm input { font-size: 14px; padding: 7px 4px; height: 38px; }
+.regedit { display: flex; flex-direction: column; gap: 6px; }
+.regmain { display: flex; flex-direction: column; gap: 10px; }
 .sheet h2 { font-size: 1.5rem; }
 .sheet p { margin: 0; color: var(--muted); font-size: .95rem; }
 .sheet .actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1125,7 +1134,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -1455,7 +1464,9 @@ h1 { color: #2c2166; }
         t.appendChild(sub);
         var rb = el("button", { type: "button", text: "Rapport" });
         rb.addEventListener("click", function () { openRapport(s.nr, lastA, lastB, lastRows); });
-        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(s.net) }), s.nr ? rb : el("span")]));
+        var rg = el("button", { type: "button", text: "Regie" }); rg.addEventListener("click", function () { openRegie({ nr: s.nr }); });
+        var bx = el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:2px" }, s.nr ? [rb, rg] : []);
+        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(s.net) }), bx]));
       });
     }
     async function load() {
@@ -1764,11 +1775,217 @@ h1 { color: #2c2166; }
     document.body.appendChild(ov); card.hidden = true; q.focus(); if (user) pullSites().then(function () { if ($("colors")) draw(); });
   }
 
+  /* ---------- Regie-Rapport (Taglohn-Rapport nach Vorlage, pro Baustelle fortlaufend nummeriert) ---------- */
+  var RG_ROWS = ["Polier / Meister", "Vorarbeiter: ", "Kundenmaler", "Maler: ", "Verputzer / Grundeur", "Hilfsarbeiter", "Maler: ", "Maler: ", "Lehrling    Lehrjahr", "", ""];
+  var RG_MAT = 13, RG_DAYS = ["Mo", "Di", "Mi", "Do", "Fr"];
+  function rgBlank() {
+    return { datum: "", auftraggeber: "", baustelle: "", montag: "", arbeiten: "", transporte: "", total: "",
+      rows: RG_ROWS.map(function (l) { return { l: l, h: ["", "", "", "", ""] }; }), mat: [{ b: "Kleinmaterial", e: "", t: "" }] };
+  }
+  function rgNorm(d) {
+    var b = rgBlank(); d = d || {};
+    ["datum", "auftraggeber", "baustelle", "montag", "arbeiten", "transporte", "total"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k]; });
+    if (Array.isArray(d.rows)) b.rows = RG_ROWS.map(function (l, i) { var r = d.rows[i] || {}; var h = Array.isArray(r.h) ? r.h : []; return { l: typeof r.l === "string" ? r.l : l, h: [0, 1, 2, 3, 4].map(function (k) { return String(h[k] == null ? "" : h[k]); }) }; });
+    if (Array.isArray(d.mat)) b.mat = d.mat.slice(0, RG_MAT).map(function (m) { m = m || {}; return { b: String(m.b || ""), e: String(m.e || ""), t: String(m.t || "") }; });
+    return b;
+  }
+  function rgSum(h) { var s = 0; h.forEach(function (x) { s += num(x); }); return s; }
+  function rgFmt(v) { return v ? (Math.round(v * 100) / 100).toFixed(2) : ""; }
+  function rgDayHead(montag) { /* "5.10" ... aus dem Montag */
+    var m = montag ? fromKey(montag) : null;
+    return [0, 1, 2, 3, 4].map(function (i) { if (!m || isNaN(m)) return ""; var d = addDays(m, i); return d.getDate() + "." + (d.getMonth() + 1); });
+  }
+  function buildRegiePdf(nr, d) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" });
+    var mx = 15, f = 0.256, cw = [178, 48, 60, 60, 60, 60, 60, 58, 58, 60].map(function (v) { return v * f; });
+    var tw = cw.reduce(function (a, b) { return a + b; }, 0), rh = 4.9, y = 14, top = 14, bottom = 284, cx = [mx];
+    cw.forEach(function (w, i) { cx.push(cx[i] + w); });
+    function chk(h) { if (y + h > bottom) { doc.addPage(); y = top; } }
+    function cell(i, j, txt, o) { /* Zelle von Spalte i bis j */
+      o = o || {}; var w = cx[j + 1] - cx[i];
+      doc.setLineWidth(0.3); if (o.fill) { doc.setFillColor(222, 224, 232); doc.rect(cx[i], y, w, rh, "FD"); } else doc.rect(cx[i], y, w, rh);
+      if (txt) { doc.setFont("helvetica", o.bold ? "bold" : "normal"); doc.setFontSize(8.5); var t = String(txt);
+        if (o.right) doc.text(t, cx[j + 1] - 1.2, y + 3.6, { align: "right" }); else doc.text(t, cx[i] + 1.2, y + 3.6); }
+    }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(17); doc.text("Taglohn-Rapport", 105, y + 12, { align: "center" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Nr." + nr, 196, y + 7, { align: "right" });
+    doc.setFontSize(9); y += 20;
+    doc.text("Datum:", 78, y); doc.text(String(d.datum || ""), 100, y);
+    doc.text("Auftraggeber:", 78, y + 4.2); doc.text(String(d.auftraggeber || ""), 100, y + 4.2);
+    doc.text("Baustelle:", 78, y + 8.4); doc.text(String(d.baustelle || ""), 100, y + 8.4);
+    y += 20;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("Ausgeführte Arbeiten:", mx, y); doc.setLineWidth(0.6); doc.line(mx, y + 2, mx + tw, y + 2);
+    y += 6.5; doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    var room = bottom - (rh * 30 + 28) - y, fs = 9, lh = 4.1, lines;
+    for (var tries = 0; tries < 4; tries++) {
+      doc.setFontSize(fs); lines = []; String(d.arbeiten || "").split(/\n/).forEach(function (p) { doc.splitTextToSize(p || " ", tw).forEach(function (l) { lines.push(l); }); });
+      if (lines.length * lh <= room || fs <= 6.5) break; fs -= 0.8; lh = fs * 0.4 + 0.5;
+    }
+    lines.forEach(function (l) { if (y + 4 > bottom) { doc.addPage(); y = top + 4; } doc.text(l, mx, y); y += lh; });
+    y = Math.max(y + 3, 104); chk(rh * 30);
+    var dh = rgDayHead(d.montag);
+    cell(0, 0, ""); cell(1, 1, "");
+    RG_DAYS.forEach(function (n, i) { cell(2 + i, 2 + i, n); }); cell(7, 7, ""); cell(8, 8, ""); cell(9, 9, ""); y += rh;
+    cell(0, 0, "", { fill: 1 }); cell(1, 1, "Datum", { fill: 1, bold: 1 });
+    dh.forEach(function (n, i) { cell(2 + i, 2 + i, n, { fill: 1, bold: 1 }); });
+    cell(7, 7, "Total", { fill: 1, bold: 1 }); cell(8, 8, "Ansatz", { fill: 1, bold: 1 }); cell(9, 9, "Betrag", { fill: 1, bold: 1 }); y += rh;
+    d.rows.forEach(function (r) {
+      cell(0, 0, r.l); cell(1, 1, "Std.");
+      for (var i = 0; i < 5; i++) cell(2 + i, 2 + i, num(r.h[i]) ? rgFmt(num(r.h[i])) : "", { right: 1 });
+      var s = rgSum(r.h); cell(7, 7, s ? rgFmt(s) : "", { right: 1 }); cell(8, 8, ""); cell(9, 9, ""); y += rh;
+    });
+    cell(0, 0, "Transporte"); cell(1, 6, String(d.transporte || "")); cell(7, 7, ""); cell(8, 8, ""); cell(9, 9, ""); y += rh;
+    cell(0, 0, "Material", { fill: 1, bold: 1 }); cell(1, 1, "Einheit", { fill: 1, bold: 1 }); cell(2, 6, "", { fill: 1 });
+    cell(7, 7, "Total", { fill: 1, bold: 1 }); cell(8, 8, "Preis", { fill: 1, bold: 1 }); cell(9, 9, "Betrag", { fill: 1, bold: 1 }); y += rh;
+    for (var k = 0; k < RG_MAT; k++) {
+      var m = d.mat[k] || { b: "", e: "", t: "" };
+      cell(0, 0, m.b); cell(1, 1, m.e); cell(2, 6, ""); cell(7, 7, m.t ? (num(m.t) ? rgFmt(num(m.t)) : m.t) : "", { right: 1 }); cell(8, 8, ""); cell(9, 9, ""); y += rh;
+    }
+    chk(28); y += 9;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Für die Unternehmung:", mx, y); doc.text("Der Auftraggeber:", 105, y);
+    y += 10; doc.setFillColor(222, 224, 232); doc.rect(cx[7] - 1, y, cx[10] - cx[7] + 1, 5.2, "F");
+    doc.setFont("helvetica", "bold"); doc.text("Total", cx[7] + 0.5, y + 3.8); if (d.total) { doc.setFont("helvetica", "normal"); doc.text(String(d.total), cx[10] - 1.2, y + 3.8, { align: "right" }); }
+    return doc;
+  }
+  function closeRegie() { var o = $("regie"); if (o) o.remove(); }
+  function openRegie(pre) {
+    closeRegie(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeRapport(); closeReport(); closeColors(); hideSug();
+    pre = pre || {};
+    var site = "", rows = [], editing = null; /* editing: {nr|null, d} */
+    var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
+    var sug = el("div", { "class": "slist", role: "list" }); sug.hidden = true;
+    var nm = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" }), msg = el("div", { "class": "status", role: "status" });
+    var newBtn = el("button", { type: "button", "class": "btn primary", text: "+ Neuer Regie-Rapport" }); newBtn.hidden = true;
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var main = el("div", { "class": "regmain" }, [inp, sug, nm, msg, list, el("div", { "class": "actions" }, [newBtn])]);
+    var ed = el("div", { "class": "regedit" }); ed.hidden = true;
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Regie-Rapport" }), main, ed, el("div", { "class": "actions", id: "regclose" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "regie", role: "dialog", "aria-modal": "true", "aria-label": "Regie-Rapport" }, [sheet]);
+    var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    function curNr() { var m = /^(\S+)/.exec(inp.value.trim()); return m ? m[1] : ""; }
+    function suggest() {
+      var q = inp.value.trim(), items = sitesFind(q, 6); sug.textContent = "";
+      if (q && items.length === 1 && items[0].nr === curNr() && site === items[0].nr) { sug.hidden = true; return; }
+      sug.hidden = !items.length;
+      items.forEach(function (x) {
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
+        var b = el("button", { type: "button", text: "Wählen" }); b.addEventListener("click", function () { inp.value = x.nr; sug.hidden = true; pick(x.nr); });
+        sug.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+      });
+    }
+    async function pick(nr) {
+      site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : "";
+      list.textContent = ""; newBtn.hidden = !nr; if (!nr) return;
+      await loadList();
+    }
+    async function loadList() {
+      if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
+      if (!navigator.onLine) { say("Keine Verbindung. Regie-Rapporte brauchen Internet.", "bad"); return; }
+      say("Einen Moment …");
+      try {
+        var r = await sb.rpc("regie_list", { p_site: site });
+        if (r.error) { say(regieMsg(r.error), "bad"); return; }
+        rows = r.data || []; say(""); drawList();
+      } catch (e) { say(regieMsg(e), "bad"); }
+    }
+    function regieMsg(er) {
+      var m = String((er && er.message) || er || "");
+      if (/regie_/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Regie-Rapporte sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt). Technische Meldung: " + m.slice(0, 140);
+      return sharedMsg(er);
+    }
+    function drawList() {
+      list.textContent = ""; list.hidden = !rows.length;
+      rows.forEach(function (r) {
+        var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
+        t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isAdmin() && r.autor ? " · " + r.autor : "") }));
+        var b = el("button", { type: "button", text: "Öffnen" }); b.addEventListener("click", function () { edit(r.nr, d); });
+        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+      });
+      if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isAdmin() ? "" : " Du siehst nur deine eigenen."), "");
+    }
+    function field(label, node) { return el("div", {}, [el("div", { "class": "lbl", text: label }), node]); }
+    function edit(nr, d) {
+      d = rgNorm(d); editing = { nr: nr };
+      main.hidden = true; ed.hidden = false; $("regclose").hidden = true; ed.textContent = "";
+      var tx = function (v, ph, al) { return el("input", { type: "text", value: v, placeholder: ph || "", "aria-label": al || ph || "" }); };
+      var fd = tx(d.datum, "z. B. 5.10.2026", "Datum"), fa = tx(d.auftraggeber, "Auftraggeber", "Auftraggeber"), fb = tx(d.baustelle, "Baustelle (Text für das PDF)", "Baustelle");
+      var fm = el("input", { type: "date", "aria-label": "Montag der Woche" }); fm.value = d.montag || "";
+      var fw = el("textarea", { "class": "bulk", "aria-label": "Ausgeführte Arbeiten", maxlength: "5000" }); fw.value = d.arbeiten; fw.style.minHeight = "130px";
+      var grid = el("div", { "class": "rg" });
+      grid.appendChild(el("div", { "class": "rgh", text: "" })); RG_DAYS.forEach(function (n) { grid.appendChild(el("div", { "class": "rgh", text: n })); });
+      var rin = d.rows.map(function (r) {
+        var l = el("input", { type: "text", value: r.l, "aria-label": "Bezeichnung" }); grid.appendChild(l);
+        var hs = r.h.map(function (v, i) { var h = el("input", { type: "text", inputmode: "decimal", value: v, "aria-label": RG_DAYS[i] + " Stunden" }); grid.appendChild(h); return h; });
+        return { l: l, hs: hs };
+      });
+      var ftr = tx(d.transporte, "Transporte (Text)", "Transporte");
+      var matBox = el("div", { "class": "rgm" }), mrows = [];
+      function addMat(m) {
+        if (mrows.length >= RG_MAT) return; m = m || { b: "", e: "", t: "" };
+        var b = el("input", { type: "text", value: m.b, placeholder: "Material", "aria-label": "Material" }), e = el("input", { type: "text", value: m.e, placeholder: "Einheit", "aria-label": "Einheit" }), t = el("input", { type: "text", value: m.t, placeholder: "Total", "aria-label": "Total" });
+        matBox.appendChild(b); matBox.appendChild(e); matBox.appendChild(t); mrows.push({ b: b, e: e, t: t });
+      }
+      d.mat.forEach(addMat); if (!d.mat.length) addMat();
+      var addM = el("button", { type: "button", "class": "btn", text: "+ Material-Zeile" }); addM.addEventListener("click", function () { addMat(); });
+      var ft = tx(d.total, "Total (Text)", "Total");
+      var emsg = el("div", { "class": "status", role: "status" });
+      var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), pf = el("button", { type: "button", "class": "btn", text: "Als PDF" });
+      var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.hidden = !(isAdmin() && nr);
+      var back = el("button", { type: "button", "class": "btn", text: "Zurück" });
+      function collect() {
+        return { datum: fd.value.trim(), auftraggeber: fa.value.trim(), baustelle: fb.value.trim(), montag: fm.value, arbeiten: fw.value, transporte: ftr.value.trim(), total: ft.value.trim(),
+          rows: rin.map(function (r) { return { l: r.l.value, h: r.hs.map(function (h) { return h.value.trim(); }) }; }),
+          mat: mrows.map(function (m) { return { b: m.b.value.trim(), e: m.e.value.trim(), t: m.t.value.trim() }; }).filter(function (m) { return m.b || m.e || m.t; }) };
+      }
+      var title = el("h3", { text: "Regie-Rapport " + (editing.nr ? "Nr. " + editing.nr : "(neu)") + " · Baustelle " + site });
+      ed.appendChild(title);
+      ed.appendChild(field("Datum", fd)); ed.appendChild(field("Auftraggeber", fa)); ed.appendChild(field("Baustelle", fb));
+      ed.appendChild(field("Montag der Woche (füllt die Datumszeile)", fm));
+      ed.appendChild(field("Ausgeführte Arbeiten", fw)); ed.appendChild(field("Stunden", grid)); ed.appendChild(field("Transporte", ftr));
+      ed.appendChild(field("Material (Bezeichnung · Einheit · Total)", matBox)); ed.appendChild(addM); ed.appendChild(field("Total", ft));
+      ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
+      var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
+      sv.addEventListener("click", async function () {
+        if (!sb || !user || !navigator.onLine) { es("Keine Verbindung. Zum Speichern brauchst du Internet.", "bad"); return; }
+        es("Einen Moment …");
+        try {
+          var r = await sb.rpc("regie_save", { p_site: site, p_nr: editing.nr, p_data: collect() });
+          if (r.error) { es(regieMsg(r.error), "bad"); return; }
+          editing.nr = r.data; title.textContent = "Regie-Rapport Nr. " + r.data + " · Baustelle " + site; del.hidden = !isAdmin(); es("Gespeichert als Nr. " + r.data + ".", "ok");
+        } catch (e) { es(regieMsg(e), "bad"); }
+      });
+      pf.addEventListener("click", async function () {
+        var doc = null; try { doc = buildRegiePdf(editing.nr || "", collect()); } catch (e) { }
+        if (!doc) { es("Das PDF konnte nicht erstellt werden.", "bad"); return; }
+        var fn = "Regie-Rapport_" + site + "_Nr" + (editing.nr || "neu") + ".pdf", blob = doc.output("blob"), file = null;
+        try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
+        if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+          try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+        }
+        showFallback(blob, doc, fn, file, "Regie-Rapport");
+      });
+      del.addEventListener("click", async function () {
+        if (!editing.nr || !confirm("Regie-Rapport Nr. " + editing.nr + " löschen?")) return;
+        try { var r = await sb.rpc("regie_delete", { p_site: site, p_nr: editing.nr }); if (r.error) { es(regieMsg(r.error), "bad"); return; } back.click(); } catch (e) { es(regieMsg(e), "bad"); }
+      });
+      back.addEventListener("click", function () { ed.hidden = true; main.hidden = false; $("regclose").hidden = false; editing = null; loadList(); window.scrollTo(0, 0); });
+    }
+    newBtn.addEventListener("click", function () { if (site) edit(null, null); });
+    inp.addEventListener("input", function () { suggest(); var nr = curNr(); if (siteByNr(nr) && nr !== site) pick(nr); else if (!siteByNr(nr)) { site = ""; nm.textContent = ""; list.textContent = ""; newBtn.hidden = true; say(""); } });
+    inp.addEventListener("focus", suggest);
+    close.addEventListener("click", closeRegie);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeRegie(); });
+    document.body.appendChild(ov);
+    if (pre.nr) { inp.value = pre.nr; pick(pre.nr); } else suggest();
+  }
+
   /* ---------- Menü rechts ---------- */
   function closeMenu() { var o = $("menu"); if (o) o.remove(); var b = $("menuBtn"); if (b) b.setAttribute("aria-expanded", "false"); }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellenrapport schreiben", function () { openReport(); }], ["Farbtöne & Hersteller", openColors], ["Baustellen-Liste", function () { openSites("search"); }]];
+    var items = [["Baustellenrapport schreiben", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", openColors], ["Baustellen-Liste", function () { openSites("search"); }]];
     if (isAdmin()) { items.push(["Neue Registrierungen und Mitarbeiter", openMembers]); items.push(["Auswertung pro Baustelle", openBilanz]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
