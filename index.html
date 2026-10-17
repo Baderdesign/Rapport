@@ -134,6 +134,9 @@
       if v_firma is null or v_rolle <> 'admin' then
         raise exception 'Keine Berechtigung';
       end if;
+      if v_email = 'davidbader@gmx.ch' then
+        raise exception 'Diese Adresse ist als Hauptadministrator geschützt';
+      end if;
       if v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
         raise exception 'Ungültige E-Mail-Adresse';
       end if;
@@ -169,6 +172,9 @@
       select m.firma, m.rolle into v_firma, v_rolle from public.my_member() m;
       if v_firma is null or v_rolle <> 'admin' then
         raise exception 'Keine Berechtigung';
+      end if;
+      if v_email = 'davidbader@gmx.ch' then
+        raise exception 'Diese Adresse ist als Hauptadministrator geschützt';
       end if;
       if exists (select 1 from public.members x where x.firma = v_firma and x.email = v_email and x.rolle = 'admin') then
         select count(*) into v_admins from public.members x where x.firma = v_firma and x.rolle = 'admin' and x.email <> v_email;
@@ -1098,6 +1104,46 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     ["26017", "Garantie Marti, Bonstetten", "1747/2"]
   ];
   function closeSites() { var o = $("sites"); if (o) { o.remove(); } window.__sitesRedraw = null; renderSitesInfo(); }
+  function buildSitesPdf() {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" });
+    var items = sitesList().slice().sort(function (a, b) { return String(a.nr).localeCompare(String(b.nr), undefined, { numeric: true }); });
+    var m = memberGet(), firma = (m && m.firma) || "", mx = 15, cw = [22, 118, 20, 20], top = 14, bottom = 280, y = 0, page = 1;
+    var cx = [mx, mx + cw[0], mx + cw[0] + cw[1], mx + cw[0] + cw[1] + cw[2]], tw = cw[0] + cw[1] + cw[2] + cw[3];
+    function head(first) {
+      y = top;
+      if (first) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.text("Baustellenliste" + (firma ? " " + firma : ""), mx, y + 5);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.text(items.length + " Baustellen, Stand " + dmy(new Date()), mx, y + 10.5);
+        y += 15;
+      }
+      doc.setFillColor(230, 230, 230); doc.setLineWidth(0.15); doc.rect(mx, y, tw, 7, "F"); doc.rect(mx, y, tw, 7);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+      doc.text("Nr.", cx[0] + 2, y + 4.7); doc.text("Baustelle", cx[1] + 2, y + 4.7);
+      doc.text("Hin", cx[2] + cw[2] / 2, y + 4.7, { align: "center" }); doc.text("Zurück", cx[3] + cw[3] / 2, y + 4.7, { align: "center" });
+      for (var i = 1; i < 4; i++) doc.line(cx[i], y, cx[i], y + 7);
+      y += 7;
+    }
+    head(true);
+    items.forEach(function (x) {
+      var l1 = doc.splitTextToSize(String(x.n || ""), cw[1] - 4), l2 = x.n2 ? doc.splitTextToSize(String(x.n2), cw[1] - 4) : [];
+      var h = Math.max(7, 2.6 + l1.length * 4.1 + l2.length * 3.7 + 1.2);
+      if (y + h > bottom) { doc.addPage(); page++; head(false); }
+      doc.setLineWidth(0.15); doc.rect(mx, y, tw, h); for (var i = 1; i < 4; i++) doc.line(cx[i], y, cx[i], y + h);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.text(String(x.nr), cx[0] + 2, y + 4.8);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      l1.forEach(function (t, k) { doc.text(t, cx[1] + 2, y + 4.8 + k * 4.1); });
+      doc.setFontSize(8); l2.forEach(function (t, k) { doc.text(t, cx[1] + 2, y + 4.8 + l1.length * 4.1 + k * 3.7 - 0.2); });
+      doc.setFontSize(9.5);
+      if (x.h) doc.text(String(x.h), cx[2] + cw[2] / 2, y + 4.8, { align: "center" });
+      if (x.z) doc.text(String(x.z), cx[3] + cw[3] / 2, y + 4.8, { align: "center" });
+      y += h;
+    });
+    var n = doc.getNumberOfPages ? doc.getNumberOfPages() : page;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    for (var p = 1; p <= n; p++) { if (doc.setPage) doc.setPage(p); doc.text("Fahrzeit pro Weg in Minuten", mx, 289); doc.text("Seite " + p + " / " + n, mx + tw, 289, { align: "right" }); }
+    return doc;
+  }
   function openSites(view) { /* "search": nur suchen (alle) · "add": Baustellen hinzufügen und ändern (nur Administratoren) */
     closeSites(); hideSug();
     var adminView = view === "add", editNr = null, busy = false;
@@ -1120,8 +1166,9 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     var det = el("details", {}, [el("summary", { text: "Mehrere auf einmal einfügen" }), el("p", { text: "Eine Baustelle pro Zeile: zuerst die Nummer, dann der Name. Eine zweite Zeile trennst du mit Strichpunkt ab. Die Fahrzeit schreibst du so dazu: Fahrt 20 (hin und zurück je 20 Min.) oder Fahrt 20/25." }), ta, imp]);
     var editBox = el("div", { "class": "editbox" }, [fh, form, seedBtn, upBtn, det]);
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var prBtn = el("button", { type: "button", "class": "btn", text: "Liste drucken (A4-PDF)" });
     var intro = el("p", { text: adminView ? "Hier legst du Baustellen mit Nummer und Fahrzeit an. Alle Mitarbeiter deiner Firma sehen sie danach in ihrer Liste." : "Suche nach Nummer oder Name. Im Wochenrapport werden Baustellen im Feld «Nr.» oder «Baustelle» automatisch vorgeschlagen." });
-    var kids = adminView ? [el("h2", { text: "Baustelle hinzufügen" }), intro, info, editBox, msg, q, cnt, list, el("div", { "class": "actions" }, [close])]
+    var kids = adminView ? [el("h2", { text: "Baustelle hinzufügen" }), intro, info, editBox, msg, q, cnt, list, el("div", { "class": "actions" }, [prBtn, close])]
                          : [el("h2", { text: "Baustellen" }), intro, info, q, cnt, list, el("div", { "class": "actions" }, [close])];
     var ov = el("div", { "class": "overlay sites", id: "sites", role: "dialog", "aria-modal": "true", "aria-label": adminView ? "Baustelle hinzufügen" : "Baustellen" }, [el("div", { "class": "sheet" }, kids)]);
 
@@ -1153,6 +1200,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       });
       cnt.textContent = total ? (q.value.trim() ? items.length + " von " + total + " Baustellen" : total + " Baustellen") : "Noch keine Baustellen angelegt.";
       editBox.hidden = !can;
+      prBtn.hidden = !adminView || !total;
       seedBtn.hidden = total > 0;
       var loc = sh ? localSites().filter(function (l) { return !siteByNr(l.nr); }) : [];
       upBtn.hidden = !loc.length; upBtn.textContent = loc.length + " Baustellen von diesem Gerät in die Firmenliste übernehmen";
@@ -1189,6 +1237,17 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       if (!add.length) { say("Keine Zeile mit Nummer gefunden." + (skip ? " " + skip + " Zeile(n) übersprungen." : ""), "bad"); return; }
       var ok = await run(function () { return sitesSave(add); });
       if (ok) { ta.value = ""; say(add.length + " Baustelle(n) übernommen" + (skip ? ", " + skip + " Zeile(n) ohne Nummer übersprungen" : "") + ".", "ok"); }
+    });
+    prBtn.addEventListener("click", async function () {
+      var doc = null; try { doc = buildSitesPdf(); } catch (e) { }
+      if (!doc) { say("Das PDF konnte nicht erstellt werden. Seite neu laden und nochmals versuchen.", "bad"); return; }
+      var fn = "Baustellenliste_" + new Date().toISOString().slice(0, 10) + ".pdf", blob = doc.output("blob"), file = null;
+      try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
+      if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+        try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); say("Baustellenliste geteilt.", "ok"); return; }
+        catch (e) { if (e && e.name === "AbortError") { say("Teilen abgebrochen. Tippe nochmals auf den Knopf.", ""); return; } }
+      }
+      showFallback(blob, doc, fn, file, "Baustellenliste");
     });
     close.addEventListener("click", closeSites);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeSites(); });
@@ -1243,9 +1302,10 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       list.textContent = ""; list.hidden = !rows.length;
       rows.forEach(function (r) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.email }));
-        t.appendChild(el("small", { text: (r.rolle === "admin" ? "Administrator" : "Mitarbeiter") + (r.email === me ? " · du" : "") }));
+        var prot = r.email === "davidbader@gmx.ch";
+        t.appendChild(el("small", { text: (r.rolle === "admin" ? "Administrator" : "Mitarbeiter") + (r.email === me ? " · du" : "") + (prot ? " · geschützt" : "") }));
         var kids = [t];
-        if (r.email !== me) {
+        if (r.email !== me && !prot) {
           var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
           tog.addEventListener("click", function () { run(function () { return call("member_set", { p_email: r.email, p_rolle: r.rolle === "admin" ? "mitarbeiter" : "admin" }); }, r.email + " ist jetzt " + (r.rolle === "admin" ? "Mitarbeiter" : "Administrator") + "."); });
           del.addEventListener("click", function () { if (confirm(r.email + " entfernen? Die Person sieht danach keine Baustellen mehr.")) run(function () { return call("member_remove", { p_email: r.email }); }, "Entfernt: " + r.email); });
