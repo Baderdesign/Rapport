@@ -1516,9 +1516,19 @@ h1 { color: #2c2166; }
   function openReport(pre) {
     closeReport(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); hideSug();
     pre = pre || {};
-    var inp = el("input", { type: "text", list: "rpSites", placeholder: "Baustellen-Nr. oder Name", autocomplete: "off", "aria-label": "Baustelle" });
-    var dl = el("datalist", { id: "rpSites" });
-    sitesList().forEach(function (s) { dl.appendChild(el("option", { value: s.nr, text: s.nr + " " + (s.n || "") })); });
+    var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
+    var dl = el("div", { "class": "slist", role: "list" }); dl.hidden = true;
+    function suggest() {
+      var q = inp.value.trim(), items = sitesFind(q, 6); dl.textContent = "";
+      if (q && siteByNr(curNr()) && items.length === 1 && items[0].nr === curNr()) { dl.hidden = true; return; }
+      dl.hidden = !items.length;
+      items.forEach(function (x) {
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
+        var b = el("button", { type: "button", text: "Wählen" });
+        b.addEventListener("click", function () { inp.value = x.nr; dl.hidden = true; refresh(); });
+        dl.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+      });
+    }
     var nm = el("div", { "class": "status" });
     var dt = el("input", { type: "date", "aria-label": "Datum" }); dt.value = pre.day || key(new Date());
     var hrs = el("div", { "class": "editbox" });
@@ -1561,8 +1571,8 @@ h1 { color: #2c2166; }
       inp, dl, nm, dt, hrs, ta, el("div", { "class": "actions" }, [save]), msg,
       el("div", { "class": "lbl", text: "Meine letzten Rapporte" }), mine, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "report", role: "dialog", "aria-modal": "true", "aria-label": "Baustellenrapport" }, [sheet]);
-    inp.addEventListener("change", function () { var nr = curNr(); if (nr) inp.value = nr; refresh(); });
-    inp.addEventListener("input", function () { if (siteByNr(curNr())) refresh(); });
+    inp.addEventListener("input", function () { suggest(); if (siteByNr(curNr())) refresh(); else { nm.textContent = ""; hrs.textContent = ""; } });
+    inp.addEventListener("focus", suggest);
     dt.addEventListener("change", refresh);
     save.addEventListener("click", async function () {
       var nr = curNr(), day = dt.value, body = ta.value.trim();
