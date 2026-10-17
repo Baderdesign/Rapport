@@ -1471,7 +1471,7 @@ h1 { color: #2c2166; }
   function roGet() { try { var a = JSON.parse(lsGet(RO) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function rpMsg(er) {
     var m = String((er && er.message) || er || "");
-    if (/report_save|reports_mine|firma_reports/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Baustellenrapporte sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
+    if (/report_save|reports_mine|firma_reports/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Baustellenrapporte sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt). Technische Meldung: " + m.slice(0, 160);
     return sharedMsg(er);
   }
   function siteHours(rows, nr, von, bis) { /* Stunden pro Tag und Person für eine Baustelle, gleiche Rechnung wie die Auswertung */
