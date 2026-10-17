@@ -1316,28 +1316,20 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     var sheet = el("div", { "class": "sheet bil" }, [
       el("h2", { text: "Auswertung pro Baustelle" }),
-      el("p", { text: "Alle Stunden der Mitarbeiter deiner Firma, zusammengezählt pro Baustellen-Nummer. Es zählt die Arbeitszeit nach Abzug von Pausen und Reisezeit (Std.Min)." }),
       sel, el("div", { "class": "range" }, [von, bis]), el("div", { "class": "actions" }, [go]), msg, head, list, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "bilanz", role: "dialog", "aria-modal": "true", "aria-label": "Auswertung" }, [sheet]);
     function setPreset() { var f = presets[sel.value]; if (f) { var r = f(); von.value = r[0]; bis.value = r[1]; } }
     function nameOf(people, em) { return people[em] || em; }
-    function draw(res, a, b) {
+    function draw(res) {
       head.textContent = ""; list.textContent = ""; list.hidden = !res.sites.length;
-      var persons = {}; res.sites.forEach(function (s) { Object.keys(s.who).forEach(function (e) { persons[e] = 1; }); });
-      var big = el("div", { "class": "big", text: hm(res.tot.net) }); big.appendChild(el("small", { text: "Std.Min Total Arbeitszeit" }));
-      head.appendChild(big);
-      head.appendChild(el("div", { "class": "status", text: dmy(fromKey(a)) + " bis " + dmy(fromKey(b)) + " · " + res.sites.length + (res.sites.length === 1 ? " Baustelle" : " Baustellen") + " · " + Object.keys(persons).length + (Object.keys(persons).length === 1 ? " Mitarbeiter" : " Mitarbeiter") + (res.tot.abs ? " · Absenzen " + fmtAbs(res.tot.abs) + " Std." + (Object.keys(res.tot.absBy).length > 1 || (Object.keys(res.tot.absBy)[0] && Object.keys(res.tot.absBy)[0] !== "Andere") ? " (" + Object.keys(res.tot.absBy).map(function (x) { return x + " " + fmtAbs(res.tot.absBy[x]); }).join(" · ") + ")" : "") : "") + (res.tot.reise ? " · Reisezeit " + hm(res.tot.reise) : "") }));
       if (!res.sites.length) head.appendChild(el("div", { "class": "status", text: "In diesem Zeitraum gibt es keine Einträge mit Zeiten." }));
       res.sites.forEach(function (s) {
         var info = siteByNr(s.nr), nm = (info && info.n) || s.name || (s.nr ? "" : "Einträge ohne Nummer");
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: s.nr || "–" })); t.appendChild(document.createTextNode(nm));
-        t.appendChild(el("small", { text: s.nwho + (s.nwho === 1 ? " Mitarbeiter" : " Mitarbeiter") + " · " + s.ndays + (s.ndays === 1 ? " Tag" : " Tage") + (s.reise ? " · Reise " + hm(s.reise) : "") }));
-        var sub = el("div", { "class": "sub", hidden: "" });
+        var sub = el("div", { "class": "sub" });
         Object.keys(s.who).sort(function (p, q) { return s.who[q] - s.who[p]; }).forEach(function (e) { sub.appendChild(el("div", {}, [el("span", { text: nameOf(res.people, e) }), el("b", { text: hm(s.who[e]) })])); });
         t.appendChild(sub);
-        var tog = el("button", { type: "button", text: "Details", "aria-expanded": "false" });
-        tog.addEventListener("click", function () { var o = sub.hidden; sub.hidden = !o; tog.setAttribute("aria-expanded", o ? "true" : "false"); });
-        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(s.net) }), tog]));
+        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(s.net) })]));
       });
     }
     async function load() {
@@ -1350,7 +1342,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       try {
         var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(fromKey(a))), p_bis: b });
         if (r.error) { say(sharedMsg(r.error), "bad"); return; }
-        say(""); draw(bilanz(r.data || [], a, b), a, b);
+        say(""); draw(bilanz(r.data || [], a, b));
       } catch (e) { say(sharedMsg(e), "bad"); }
       finally { busy = false; }
     }
