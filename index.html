@@ -256,9 +256,9 @@ input[type=time] { padding-inline: 8px; }
 input[aria-invalid="true"] { border-color: var(--bad); }
 .weeknav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-#splash { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: linear-gradient(#23262d, #0c0d10); transition: opacity .45s ease; }
+#splash { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: linear-gradient(#23262d, #0c0d10); transition: opacity .65s ease; }
 #splash.off { opacity: 0; pointer-events: none; }
-#splash img { width: 150px; height: 150px; border-radius: 34px; box-shadow: 0 10px 40px rgba(0,0,0,.5); animation: spl 1.2s ease-out both; }
+#splash img { width: 150px; height: 150px; border-radius: 34px; box-shadow: 0 10px 40px rgba(0,0,0,.5); animation: spl 1.4s ease-out both; }
 @keyframes spl { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand .logo { width: 46px; height: 46px; border-radius: 11px; flex: 0 0 auto; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
@@ -403,10 +403,37 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
 .lockbox, .editbox { display: flex; flex-direction: column; gap: 10px; }
 .editbox input[type=email] { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
 .lockbox .actions input { flex: 1 1 10rem; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
+
+:root { --accent: #d4af5a; --accent-text: #6b4f12; }
+h1 { color: #2c2166; }
+.dayhead h2 { color: #2c2166; }
+.summary .total { background: linear-gradient(135deg,#2c2166,#1d1450); box-shadow: inset 0 -4px 0 #d4af5a; }
+.summary .total .lbl { color: #dccb92; }
+.summary .total b { color: #f6e0a0; }
+.summary .total b small { color: #cdbb80; }
+.weeknav .kw { color: #2c2166; }
+
+.btn { border-color: #d6cfb8; }
+.btn.primary { background: linear-gradient(180deg,#3a2c84,#2c2166 50%,#1a1244); color: #f3d98f; border: 0; box-shadow: inset 0 0 0 2px #d4af5a, 0 3px 6px rgba(26,18,68,.3); text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.btn.primary:hover { background: linear-gradient(180deg,#3a2c84,#2c2166 50%,#1a1244); filter: brightness(1.12); }
+.typb.on { background: linear-gradient(180deg,#3a2c84,#2c2166 50%,#1a1244); color: #f3d98f; border-color: #d4af5a; box-shadow: inset 0 0 0 1px #d4af5a; font-weight: 700; }
+.day { border: 1px solid #ddd6c0; border-top: 4px solid #d4af5a; }
+.add { border-color: #b59a52; }
+
+.btn, .typb, .add { border: 1.5px solid #d4af5a !important; box-shadow: 0 1px 3px rgba(26,18,68,.12); }
+.btn.primary { border: 0 !important; }
+.typb.on { border: 1.5px solid #d4af5a !important; }
+
+.typb.on { background: linear-gradient(135deg,#150e3a 0%,#33267a 50%,#150e3a 100%) !important; color: #f6e0a0; border: 1.5px solid #d4af5a !important; box-shadow: inset 0 0 8px rgba(0,0,0,.55), 0 0 10px rgba(212,175,90,.55); position: relative; overflow: hidden; }
+.typb.on::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 35%, rgba(246,224,160,.28) 50%, transparent 65%); transform: translateX(-100%); animation: shim 2.8s ease-in-out infinite; pointer-events: none; }
+@keyframes shim { 0%, 55% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1, :root:not([data-theme="light"]) .dayhead h2, :root:not([data-theme="light"]) .weeknav .kw { color: #e9cd82; } :root:not([data-theme="light"]) .day { border-color: #3a3d49; border-top-color: #d4af5a; } }
+:root[data-theme="dark"] h1, :root[data-theme="dark"] .dayhead h2, :root[data-theme="dark"] .weeknav .kw { color: #e9cd82; }
 </style>
 </head><body>
 <div id="splash" aria-hidden="true"><img id="splashImg" alt=""></div>
-<script>(function(){try{var l=document.querySelector('link[rel="apple-touch-icon"]');document.getElementById("splashImg").src=l.href;window.__ico=l.href}catch(e){}setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},5000)})();</script>
+<script>(function(){try{var l=document.querySelector('link[rel="apple-touch-icon"]');document.getElementById("splashImg").src=l.href;window.__ico=l.href}catch(e){}setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},6000)})();</script>
 
 <div class="wrap">
   <div class="top">
@@ -1532,7 +1559,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   document.addEventListener("visibilitychange", function () { if (!document.hidden) { checkNewWeek(); if (user) pullAll(); } });
   window.addEventListener("pageshow", checkNewWeek); window.addEventListener("focus", checkNewWeek);
   setInterval(checkNewWeek, 60000);
-  setTimeout(function () { var s = document.getElementById("splash"); if (!s) return; s.classList.add("off"); setTimeout(function () { s.remove(); }, 500); }, 900);
+  setTimeout(function () { var s = document.getElementById("splash"); if (!s) return; s.classList.add("off"); setTimeout(function () { s.remove(); }, 700); }, 2300);
   setInterval(function () { if (user && qGet().length) flush(); }, 30000);
 })();
 </script>
