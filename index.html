@@ -439,12 +439,13 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
 
   <div class="foot">
     <div>
-      <p><b>Sicherung:</b> Speichere alle Wochen zusätzlich als Datei. So bleiben sie erhalten, auch wenn die Webseite einmal nicht erreichbar ist oder sich die Adresse ändert.</p>
+      <p><b>Sicherung:</b> Speichere alle Wochen zusätzlich als Datei. So bleiben sie erhalten, auch wenn die Webseite einmal nicht erreichbar ist oder sich die Adresse ändert. «Sicherung laden» spielt sie wieder ein. Das PDF dient zum Ablegen und Drucken.</p>
       <div class="status" id="backupInfo"></div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
-      <button class="btn" id="bkExport" type="button">Alle Wochen sichern</button>
-      <button class="btn" id="bkImport" type="button">Sicherung laden</button>
+      <button class="btn primary" id="bkExport" type="button">Alle Wochen sichern</button>
+      <button class="btn primary" id="bkPdf" type="button">Alle Wochen als PDF</button>
+      <button class="btn primary" id="bkImport" type="button">Sicherung laden</button>
       <input type="file" id="bkFile" accept="application/json,.json" hidden>
     </div>
   </div>
@@ -865,19 +866,20 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   $("picker").addEventListener("change", function (e) { loadWeek(e.target.value); });
 
   /* ---------- PDF (Layout wie das Excel-Formular, A4 quer) ---------- */
-  function buildPdf() {
+  function buildPdf(st, prev) {
+    st = st || state;
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
-    var doc = new J({ orientation: "landscape", unit: "mm", format: "a4" });
+    var doc = prev || new J({ orientation: "landscape", unit: "mm", format: "a4" }); if (prev) doc.addPage();
     var mx = 10, W = 262, KW = 14, rel = [58, 62, 170, 135, 57, 57, 57, 57, 57, 43];
     var sum = rel.reduce(function (a, b) { return a + b; }, 0), cw = rel.map(function (r) { return r / sum * W; });
     var cx = [], acc = mx; cw.forEach(function (w) { cx.push(acc); acc += w; });
-    var mon = fromKey(state.week), fri = addDays(mon, 4), iso = isoWeek(mon);
+    var mon = fromKey(st.week), fri = addDays(mon, 4), iso = isoWeek(mon);
     var kx = mx + W, bottom = 200, tableTop = 33;
 
     /* Zeilenbedarf: pro Tag eine Beschriftungszeile, dazu je Baustelle 1 Zeile (2 mit zweiter Textzeile), mindestens 5 Zeilen wie im Formular */
     function erows(e) { return e.obj2 ? 2 : 1; }
     function need(rows) { var n = 1; rows.forEach(function (e) { n += erows(e); }); return Math.max(5, n); }
-    var totalRows = 3; state.days.forEach(function (r) { totalRows += need(r); });
+    var totalRows = 3; st.days.forEach(function (r) { totalRows += need(r); });
     var rh = Math.max(3.9, Math.min(4.9, (bottom - tableTop - 22) / totalRows));
     var fk = Math.max(0.8, Math.min(1, rh / 4.9));
 
@@ -905,17 +907,17 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text("Wochenrapport", mx, 14);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setLineWidth(0.2);
     doc.text("Name:", mx, 21); doc.line(cx[2], 22, cx[5], 22);
-    doc.text(state.name || "", cx[2] + 1, 20.8);
+    doc.text(st.name || "", cx[2] + 1, 20.8);
     doc.text("Datum:", mx, 28.5); doc.text("vom:", cx[1], 28.5); doc.line(cx[2], 29.5, cx[5], 29.5);
     doc.text(dmy(mon), cx[2] + 1, 28.3); doc.text("bis", cx[3], 28.5); doc.text(dmy(fri), cx[3] + 7, 28.3); doc.setFontSize(7); doc.text("KW " + iso.w, cx[5] - 14, 28.3);
 
     drawHead(tableTop);
     var y = tableTop + 3 * rh;
-    state.days.forEach(function (rows, di) {
+    st.days.forEach(function (rows, di) {
       var n = need(rows), h = n * rh, limit = bottom - (di === 4 ? 22 : 0);
       if (y + h > limit) {
         doc.addPage(); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-        doc.text("Wochenrapport " + (state.name || "") + "   " + dmy(mon) + " - " + dmy(fri) + "   (Fortsetzung)", mx, 11);
+        doc.text("Wochenrapport " + (st.name || "") + "   " + dmy(mon) + " - " + dmy(fri) + "   (Fortsetzung)", mx, 11);
         y = 15; drawHead(y); y += 3 * rh;
       }
       for (var r = 0; r < n; r++) { for (var i = 0; i < 10; i++) cell(i, y + r * rh, rh); kcell(y + r * rh, rh); }
@@ -939,7 +941,7 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
       doc.setLineWidth(0.35); doc.line(cx[0], y, kx + KW, y);
       y += h;
     });
-    var t = totals(state.days), th = rh + 0.6;
+    var t = totals(st.days), th = rh + 0.6;
     for (var k = 0; k < 10; k++) cell(k, y, th);
     kcell(y, th);
     doc.setLineWidth(0.5); doc.rect(mx, y, W + KW, th);
@@ -1440,7 +1442,33 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
     }
     showFallback(blob, fake, fn, file, "Sicherung"); done("Die Sicherung liegt bereit, bitte sichern.");
   }
+  function hasData(days) { return days.some(function (rows) { return rows.some(function (e) { return e.nr || e.obj || e.von || e.bis || e.abs || e.typ; }); }); }
+  function exportPdfAll() {
+    persist(true);
+    var J = window.jspdf && window.jspdf.jsPDF;
+    var keys = localKeys().slice().sort(), doc = null, n = 0;
+    try {
+      keys.forEach(function (wk) {
+        var o = localWeek(wk); if (!o) return;
+        var days = deserialize(o.days); if (!hasData(days)) return;
+        doc = buildPdf({ week: wk, name: o.name || state.name || "", days: days }, doc); n++;
+      });
+    } catch (e) { doc = null; }
+    if (!J || !doc) { setStatus(n || !J ? "Das PDF konnte nicht erstellt werden. Seite neu laden und nochmals versuchen." : "Es gibt noch keine Wochen mit Einträgen.", n || !J ? "bad" : ""); return; }
+    var blob = doc.output("blob"), fn = "Wochenrapport_Alle_Wochen_" + key(new Date()) + ".pdf", file = null;
+    try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
+    var done = function (msg) { lsSet("wr2:backup", new Date().toISOString()); renderBackupInfo(); setStatus(msg, "ok"); };
+    if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }).then(function () { done(n + " Wochen als PDF geteilt."); }, function (e) {
+        if (e && e.name === "AbortError") { setStatus("Sicherung abgebrochen.", ""); return; }
+        showFallback(blob, doc, fn, file, "Sicherung"); done("Die Sicherung (" + n + " Wochen) liegt bereit, bitte sichern.");
+      });
+      return;
+    }
+    showFallback(blob, doc, fn, file, "Sicherung"); done("Die Sicherung (" + n + " Wochen) liegt bereit, bitte sichern.");
+  }
   $("bkExport").addEventListener("click", exportBackup);
+  $("bkPdf").addEventListener("click", exportPdfAll);
   $("bkImport").addEventListener("click", function () { $("bkFile").click(); });
   $("bkFile").addEventListener("change", function () {
     var inp = this, f = inp.files && inp.files[0]; if (!f) return;
@@ -1479,7 +1507,17 @@ textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px s
   }
   window.addEventListener("online", function () { setSync(); pullAll(); });
   window.addEventListener("offline", setSync);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && user) pullAll(); });
+  var curMon = key(mondayOf(new Date()));
+  function checkNewWeek() { /* neue Kalenderwoche begonnen: wenn die bisherige aktuelle Woche offen ist, zur neuen wechseln */
+    var k = key(mondayOf(new Date())); if (k === curMon) return;
+    var wasCurrent = state.week === curMon; curMon = k;
+    if (!wasCurrent) return;
+    if (dirty) persist(true);
+    loadWeek(k); setStatus("Neue Woche: " + dmy(fromKey(k)) + ".", "ok");
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { checkNewWeek(); if (user) pullAll(); } });
+  window.addEventListener("pageshow", checkNewWeek); window.addEventListener("focus", checkNewWeek);
+  setInterval(checkNewWeek, 60000);
   setInterval(function () { if (user && qGet().length) flush(); }, 30000);
 })();
 </script>
