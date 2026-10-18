@@ -1466,7 +1466,8 @@ h1 { color: #2c2166; }
         var rb = el("button", { type: "button", text: "Rapport" });
         rb.addEventListener("click", function () { openRapport(s.nr, lastA, lastB, lastRows); });
         var rg = el("button", { type: "button", text: "Regie" }); rg.addEventListener("click", function () { openRegie({ nr: s.nr }); });
-        var bx = el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:2px" }, s.nr ? [rb, rg] : []);
+        var fb = el("button", { type: "button", text: "Farbtöne" }); fb.addEventListener("click", function () { openColors({ nr: s.nr }); });
+        var bx = el("div", { style: "display:flex;flex-direction:column;align-items:flex-end;gap:2px" }, s.nr ? [rb, rg, fb] : []);
         list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(s.net) }), bx]));
       });
     }
@@ -1747,8 +1748,9 @@ h1 { color: #2c2166; }
 
   /* ---------- Farbtöne und Hersteller (Mitarbeiter lesen, Administratoren schreiben bei der Baustelle) ---------- */
   function closeColors() { var o = $("colors"); if (o) o.remove(); }
-  function openColors() {
-    closeColors(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeReport(); hideSug();
+  function openColors(pre) {
+    pre = (pre && pre.nr) ? pre : {};
+    closeColors(); closeMenu(); closeSites(); closeMembers(); if (!pre.nr) closeBilanz(); closeReport(); hideSug();
     var q = el("input", { type: "text", placeholder: "Baustelle suchen (Nummer oder Name)", autocomplete: "off", "aria-label": "Baustelle suchen" });
     var list = el("div", { "class": "slist", role: "list" }), card = el("div", { "class": "editbox" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var sel = null;
@@ -1776,7 +1778,10 @@ h1 { color: #2c2166; }
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Farbtöne & Hersteller" }), el("p", { text: "Suche die Baustelle. Darunter steht, was der Administrator dazu hinterlegt hat." }), q, list, card, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "colors", role: "dialog", "aria-modal": "true", "aria-label": "Farbtöne und Hersteller" }, [sheet]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeColors(); });
-    document.body.appendChild(ov); card.hidden = true; q.focus(); if (user) pullSites().then(function () { if ($("colors")) draw(); });
+    document.body.appendChild(ov); card.hidden = true;
+    var pre0 = pre.nr ? siteByNr(pre.nr) : null;
+    if (pre0) { q.value = pre0.nr + " " + (pre0.n || ""); show(pre0); list.hidden = true; } else q.focus();
+    if (user) pullSites().then(function () { if ($("colors") && !sel) draw(); else if ($("colors") && sel && pre.nr) { var n0 = siteByNr(pre.nr); if (n0) show(n0); } });
   }
 
   /* ---------- Regie-Rapport (Taglohn-Rapport nach Vorlage, pro Baustelle fortlaufend nummeriert) ---------- */
@@ -1851,8 +1856,8 @@ h1 { color: #2c2166; }
   }
   function closeRegie() { var o = $("regie"); if (o) o.remove(); }
   function openRegie(pre) {
-    closeRegie(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeRapport(); closeReport(); closeColors(); hideSug();
     pre = pre || {};
+    closeRegie(); closeMenu(); closeSites(); closeMembers(); if (!pre.nr) closeBilanz(); closeRapport(); closeReport(); closeColors(); hideSug();
     var site = "", rows = [], editing = null; /* editing: {nr|null, d} */
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
     var sug = el("div", { "class": "slist", role: "list" }); sug.hidden = true;
@@ -1986,7 +1991,7 @@ h1 { color: #2c2166; }
   function closeMenu() { var o = $("menu"); if (o) o.remove(); var b = $("menuBtn"); if (b) b.setAttribute("aria-expanded", "false"); }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellenrapport schreiben", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", openColors], ["Baustellen-Liste", function () { openSites("search"); }]];
+    var items = [["Baustellenrapport schreiben", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Baustellen-Liste", function () { openSites("search"); }]];
     if (isAdmin()) { items.push(["Neue Registrierungen und Mitarbeiter", openMembers]); items.push(["Auswertung pro Baustelle", openBilanz]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
