@@ -1212,7 +1212,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeGleit(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeGleit(); closeDateien(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -2383,6 +2383,65 @@ function openReport(pre) {
     go.addEventListener("click", load); mi.addEventListener("change", load); cl.addEventListener("click", closeGleit); ov.addEventListener("click", function (e) { if (e.target === ov) closeGleit(); });
     document.body.appendChild(ov); load();
   }
+
+  /* ---------- Dateien ablegen (Rapporte als PDF/Foto, unverändert) ---------- */
+  function closeDateien() { var o = $("dateien"); if (o) o.remove(); }
+  function openDateien() {
+    closeDateien(); var busy = false;
+    var sl = sitesList(), ss = el("select", { "aria-label": "Baustelle" }, sl.map(function (x) { return el("option", { value: x.nr, text: x.nr + " " + (x.n || "") }); }));
+    var os = el("select", { "aria-label": "Ordner" }, [el("option", { value: "rapport", text: "Baustellenrapport" }), el("option", { value: "regie", text: "Regie" })]);
+    var fi = el("input", { type: "file", accept: "application/pdf,image/*", multiple: "multiple", "aria-label": "Datei wählen" });
+    var go = el("button", { type: "button", "class": "btn primary", text: "Ablegen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" }); list.style.maxHeight = "40vh";
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Dateien ablegen" }), el("p", { text: "Rapporte als PDF oder Foto zur Baustelle legen. Sie werden nicht verändert." }), ss, os, fi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
+    var ov = el("div", { "class": "overlay sites", id: "dateien", role: "dialog", "aria-modal": "true", "aria-label": "Dateien ablegen" }, [sheet]);
+    var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    function b64(f) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(",")[1] || ""); }; r.onerror = rej; r.readAsDataURL(f); }); }
+    async function show() {
+      list.textContent = ""; if (!ss.value) { say("Keine Baustelle vorhanden.", "bad"); return; }
+      try {
+        var r = await sb.rpc("dateien_list", { p_site: ss.value });
+        if (r.error) { say(/dateien_list/i.test(String(r.error.message)) ? "Dateien sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(r.error), "bad"); return; }
+        (r.data || []).forEach(function (d) {
+          var nm = el("span", { text: (d.ordner === "regie" ? "Regie · " : "Rapport · ") + d.name + " · " + dmy(new Date(d.created)) }); nm.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
+          var del = el("button", { type: "button", "class": "btn", text: "Löschen" });
+          var row = el("div", { "class": "srow tap", role: "listitem" }, [nm, del]);
+          tapRow(row, async function () {
+            say("Wird geladen …");
+            var g = await sb.rpc("datei_get", { p_id: d.id }); if (g.error || !g.data || !g.data[0]) { say("Datei nicht gefunden.", "bad"); return; }
+            var x = g.data[0], bin = atob(x.data), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            var url = URL.createObjectURL(new Blob([u8], { type: x.mime })); say("");
+            var a = el("a", { href: url, target: "_blank", rel: "noopener" }); document.body.appendChild(a); a.click(); a.remove();
+          });
+          del.addEventListener("click", async function (e) {
+            e.stopPropagation(); if (!confirm("«" + d.name + "» wirklich löschen?")) return;
+            var q = await sb.rpc("datei_delete", { p_id: d.id }); if (q.error) { say(sharedMsg(q.error), "bad"); return; } show();
+          });
+          list.appendChild(row);
+        });
+        if (!(r.data || []).length) list.appendChild(el("div", { "class": "status", text: "Noch keine Dateien bei dieser Baustelle." }));
+        say("");
+      } catch (e) { say(sharedMsg(e), "bad"); }
+    }
+    go.addEventListener("click", async function () {
+      if (busy) return; var fs = Array.prototype.slice.call(fi.files || []); if (!fs.length) { say("Bitte zuerst eine Datei wählen.", "bad"); return; }
+      if (!navigator.onLine) { say("Keine Verbindung.", "bad"); return; }
+      busy = true; var ok = 0;
+      try {
+        for (var i = 0; i < fs.length; i++) {
+          if (fs[i].size > 4000000) { say("«" + fs[i].name + "» ist zu gross (max. 4 MB).", "bad"); continue; }
+          say("Wird abgelegt … " + (i + 1) + "/" + fs.length);
+          var r = await sb.rpc("datei_save", { p_site: ss.value, p_ordner: os.value, p_name: fs[i].name, p_mime: fs[i].type || "application/octet-stream", p_data: await b64(fs[i]) });
+          if (r.error) { say(/datei_save/i.test(String(r.error.message)) ? "Dateien sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(r.error), "bad"); busy = false; return; }
+          ok++;
+        }
+        fi.value = ""; if (ok) say(ok + " Datei(en) abgelegt.", "ok"); await show(); if (ok) say(ok + " Datei(en) abgelegt.", "ok");
+      } catch (e) { say(sharedMsg(e), "bad"); }
+      busy = false;
+    });
+    ss.addEventListener("change", show); cl.addEventListener("click", closeDateien); ov.addEventListener("click", function (e) { if (e.target === ov) closeDateien(); });
+    document.body.appendChild(ov); show();
+  }
   function openJahr() {
     closeJahr(); var yr = new Date().getFullYear(), R = null, saved = {};
     var msg = el("div", { "class": "status", role: "status" }), yl = el("b", { text: String(yr), style: "min-width:3.5em;text-align:center" });
@@ -2523,7 +2582,7 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
-    if (isAdmin()) { items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
+    if (isAdmin()) { items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Gleitzeit pro Mitarbeiter", openGleit]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
