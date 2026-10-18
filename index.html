@@ -1444,6 +1444,21 @@ h1 { color: #2c2166; }
         var nc = el("button", { type: "button", text: "Neuen Code erzeugen" });
         nc.addEventListener("click", function () { if (confirm("Neuen Code erzeugen? Der alte Code gilt dann nicht mehr. Wer sich schon mit dem alten Code registriert hat, erscheint nicht mehr in der Liste.")) run(function () { return call("firma_code_neu"); }, "Neuer Code erzeugt."); });
         cbox.appendChild(el("div", { "class": "actions" }, [nc]));
+        cbox.appendChild(el("div", { "class": "lbl", text: "Mitarbeiter per E-Mail einladen" }));
+        var ie = el("input", { type: "text", inputmode: "email", placeholder: "E-Mail-Adresse(n), mit Komma getrennt", autocomplete: "off", "aria-label": "E-Mail-Adressen" });
+        var ib = el("button", { type: "button", "class": "btn primary", text: "Einladung senden" });
+        ib.addEventListener("click", function () {
+          var to = ie.value.split(/[,;\s]+/).filter(function (x) { return /^\S+@\S+\.\S+$/.test(x); });
+          if (!to.length) { ie.focus(); toast("Bitte mindestens eine gültige E-Mail-Adresse eingeben."); return; }
+          var link = location.origin + location.pathname.replace(/[^\/]*$/, ""), fn = (m && m.firma) || "";
+          var body = "Hallo\n\nbitte benutze für die Stunden- und Baustellenrapporte unsere App «Wochenrapport»" + (fn ? " (" + fn + ")" : "") + ".\n\n" +
+            "App öffnen: " + link + "\n\n" +
+            "So meldest du dich an:\n1. Link öffnen und «Registrieren» wählen.\n2. «Ich gehöre zu einer Firma» wählen.\n3. Firmen-Code eingeben: " + code + "\n4. E-Mail und Passwort wählen, danach die Bestätigungs-E-Mail öffnen.\n5. Ich nehme dich dann in der App an.\n\n" +
+            "Tipp iPhone: Link in Safari öffnen, unten auf Teilen tippen und «Zum Home-Bildschirm» wählen.\n\nGruss";
+          location.href = "mailto:" + to.map(encodeURIComponent).join(",") + "?subject=" + encodeURIComponent("Einladung zur App Wochenrapport") + "&body=" + encodeURIComponent(body);
+        });
+        cbox.appendChild(ie); cbox.appendChild(el("div", { "class": "actions" }, [ib]));
+        cbox.appendChild(el("div", { "class": "status", text: "Öffnet dein E-Mail-Programm mit fertigem Text, Link und Firmen-Code. Du sendest die Mail selbst ab." }));
       }
       pbox.textContent = ""; pbox.hidden = !pend.length;
       if (pend.length) {
