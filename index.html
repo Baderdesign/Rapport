@@ -475,9 +475,18 @@ h1 { color: #2c2166; }
       <div id="authFields" style="display:flex;flex-direction:column;gap:10px">
         <label for="email"><span class="lbl">E-Mail</span><input type="email" id="email" autocomplete="username" inputmode="email" autocapitalize="none" placeholder="name@beispiel.ch"></label>
         <label for="pw"><span class="lbl">Passwort</span><input type="password" id="pw" autocomplete="current-password" minlength="6" placeholder="mindestens 6 Zeichen"></label>
-        <div class="actions"><button type="submit" class="btn primary" id="doLogin">Anmelden</button><button type="button" class="btn" id="doSignup">Registrieren</button></div>
+        <div id="regBox" style="display:flex;flex-direction:column;gap:10px" hidden>
+          <div class="actions" role="group" aria-label="Art der Registrierung"><button type="button" class="btn primary" id="regNeu">Meine Firma ist neu</button><button type="button" class="btn" id="regCode">Ich gehöre zu einer Firma</button></div>
+          <label for="regFeld"><span class="lbl" id="regLbl">Firmenname</span><input type="text" id="regFeld" autocomplete="off" autocapitalize="characters" placeholder="z. B. Maler Muster AG"></label>
+          <div class="status" id="regHint"></div>
+        </div>
+        <div class="actions"><button type="submit" class="btn primary" id="doLogin">Anmelden</button><button type="button" class="btn" id="doSignup">Registrieren</button><button type="button" class="btn" id="regBack" hidden>Zurück zur Anmeldung</button></div>
       </div>
-      <div id="authIn" class="actions" hidden><button type="button" class="btn" id="syncNow">Jetzt synchronisieren</button><button type="button" class="btn" id="doLogout">Abmelden</button></div>
+      <div id="authIn" class="actions" hidden><button type="button" class="btn" id="syncNow">Jetzt synchronisieren</button><button type="button" class="btn" id="pwBtn">Passwort ändern</button><button type="button" class="btn" id="doLogout">Abmelden</button></div>
+      <div id="pwBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden>
+        <label for="pwNeu"><span class="lbl">Neues Passwort</span><input type="password" id="pwNeu" autocomplete="new-password" minlength="6" placeholder="mindestens 6 Zeichen"></label>
+        <div class="actions"><button type="button" class="btn primary" id="pwSave">Passwort speichern</button><button type="button" class="btn" id="pwCancel">Abbrechen</button></div>
+      </div>
       <div class="status" id="authMsg" role="status"></div>
     </form>
   </section>
@@ -628,6 +637,7 @@ h1 { color: #2c2166; }
     var m = String((er && er.message) || er || "");
     if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
     if (/firma_wochen/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Auswertung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
+    if (/firma_code|member_passwort|firma_anlegen|code_gueltig|firma_frei/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Firmen-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/members_list|member_set|member_remove|pending_delete/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/my_member|sites_write|schema cache|does not exist|could not find/i.test(m)) return "Die Firmenliste ist in Supabase noch nicht eingerichtet (SQL fehlt).";
     if (/fetch|network|load failed/i.test(m)) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
@@ -636,11 +646,17 @@ h1 { color: #2c2166; }
   async function pullSites() { /* Firma und Rolle des Kontos holen, dann die Baustellen der Firma */
     if (!sb || !user || !navigator.onLine) return;
     try {
-      var m = await sb.rpc("my_member");
+      var m = await sb.rpc("my_member"), faErr = "";
       if (m.error) { sharedErr = sharedMsg(m.error); }
       else {
         var row = Array.isArray(m.data) ? m.data[0] : m.data;
-        if (!row || !row.firma) { noFirma = true; sharedErr = ""; try { localStorage.removeItem(MB); localStorage.removeItem(SH); } catch (e) { } }
+        if ((!row || !row.firma) && user && user.user_metadata && user.user_metadata.neue_firma && !pullSites.tried) {
+          pullSites.tried = true;
+          var fa = await sb.rpc("firma_anlegen");
+          if (!fa.error) { pullSites.tried = false; return pullSites(); }
+          faErr = /schon/i.test(String(fa.error.message || "")) ? "Diese Firma gibt es schon. Bitte mit dem Firmen-Code registrieren." : sharedMsg(fa.error);
+        }
+        if (!row || !row.firma) { noFirma = true; sharedErr = faErr; try { localStorage.removeItem(MB); localStorage.removeItem(SH); } catch (e) { } }
         else {
           noFirma = false; lsSet(MB, JSON.stringify({ firma: row.firma, rolle: row.rolle }));
           var r = await sb.from("sites").select("nr,name,name2,hin,zur,farben"); if (r.error) r = await sb.from("sites").select("nr,name,name2,hin,zur");
@@ -674,7 +690,7 @@ h1 { color: #2c2166; }
     $("sitesBtn").textContent = "Baustellen-Liste" + (n ? " (" + n + ")" : "");
     $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isAdmin(); $("bilanzBtn").hidden = !isAdmin();
     if (user && m) parts.push(roleText(m));
-    if (user && noFirma) parts.push("Dein Konto ist noch keiner Firma zugeordnet. Bitte melde dich beim Administrator.");
+    if (user && noFirma) parts.push(sharedErr ? sharedErr : (user.user_metadata && user.user_metadata.beitritt_code) ? "Du bist registriert. Der Chef muss dich noch aufnehmen, danach siehst du die Baustellen." : "Dein Konto ist noch keiner Firma zugeordnet. Bitte melde dich beim Administrator.");
     else if (!n) parts.push(ed ? "Noch keine Baustellen. Tippe auf «+ Baustelle hinzufügen»." : "Noch keine Baustellen in der Liste.");
     $("sitesInfo").textContent = parts.join(" · ");
   }
@@ -758,7 +774,7 @@ h1 { color: #2c2166; }
   function authMsg(t, c) { var m = $("authMsg"); m.textContent = t || ""; m.className = "status" + (c ? " " + c : ""); }
   function renderAuth() {
     var hint = $("authHint");
-    $("authFields").hidden = !!user || !!cloudOff; $("authIn").hidden = !user;
+    $("authFields").hidden = !!user || !!cloudOff; $("authIn").hidden = !user; if (!user) $("pwBox").hidden = true;
     $("acctBtn").textContent = user ? (user.email || "Konto") : "Anmelden";
     var gate = gateOn();
     hint.textContent = cloudOff ? cloudOff : user ? "Angemeldet als " + (user.email || "") + ". Deine Wochen werden mit der Cloud abgeglichen." + (memberGet() ? " " + roleText(memberGet()) + "." : "") : gate ? "Willkommen. Bitte melde dich mit deiner E-Mail-Adresse an. Wer noch kein Konto hat, tippt auf «Registrieren» und bestätigt danach die E-Mail." : "Melde dich an, damit deine Wochen auf allen Geräten gleich sind. Ohne Anmeldung bleiben sie auf diesem Gerät.";
@@ -785,10 +801,32 @@ h1 { color: #2c2166; }
   async function doAuth(mode) {
     if (!sb) { authMsg(cloudOff || "Cloud nicht verfügbar.", "bad"); return; }
     var em = $("email").value.trim(), pw = $("pw").value;
+    if (mode === "up" && $("regBox").hidden) { regShow(true); return; }
+    var meta = null;
+    if (mode === "up") {
+      var fv = $("regFeld").value.trim();
+      if (regMode === "neu" && fv.length < 2) { authMsg("Bitte den Firmennamen eingeben.", "bad"); return; }
+      if (regMode === "code" && fv.replace(/[^A-Za-z0-9]/g, "").length !== 6) { authMsg("Bitte den Firmen-Code eingeben (6 Zeichen, z. B. K7M-2Q9).", "bad"); return; }
+    }
     if (!em || pw.length < 6) { authMsg("Bitte E-Mail und ein Passwort mit mindestens 6 Zeichen eingeben.", "bad"); return; }
     authMsg("Einen Moment …");
     try {
-      var r = mode === "up" ? await sb.auth.signUp({ email: em, password: pw }) : await sb.auth.signInWithPassword({ email: em, password: pw });
+      if (mode === "up") {
+        var fv2 = $("regFeld").value.trim();
+        if (regMode === "neu") {
+          var q1 = await sb.rpc("firma_frei", { p_name: fv2 });
+          if (q1.error) { authMsg(regSqlMsg(q1.error), "bad"); return; }
+          if (!q1.data) { authMsg("Diese Firma gibt es schon. Bitte «Ich gehöre zu einer Firma» wählen und den Firmen-Code vom Chef eingeben.", "bad"); return; }
+          meta = { neue_firma: fv2 };
+        } else {
+          var cd = fv2.replace(/[^A-Za-z0-9]/g, "").toUpperCase(); cd = cd.slice(0, 3) + "-" + cd.slice(3);
+          var q2 = await sb.rpc("code_gueltig", { p_code: cd });
+          if (q2.error) { authMsg(regSqlMsg(q2.error), "bad"); return; }
+          if (!q2.data) { authMsg("Dieser Firmen-Code stimmt nicht. Bitte beim Chef nachfragen.", "bad"); return; }
+          meta = { beitritt_code: cd };
+        }
+      }
+      var r = mode === "up" ? await sb.auth.signUp({ email: em, password: pw, options: { data: meta } }) : await sb.auth.signInWithPassword({ email: em, password: pw });
       if (r.error) { authMsg(authError(r.error.message), "bad"); return; }
       if (mode === "up" && !(r.data && r.data.session)) { authMsg("Registriert. Bitte bestätige die E-Mail von Supabase und melde dich danach an.", "ok"); return; }
       $("pw").value = ""; authMsg("Angemeldet.", "ok");
@@ -797,7 +835,38 @@ h1 { color: #2c2166; }
   }
   $("acctBtn").addEventListener("click", function () { var a = $("auth"); a.hidden = !a.hidden; this.setAttribute("aria-expanded", String(!a.hidden)); if (!a.hidden) { var f = a.querySelector("input:not([hidden])"); if (f && !user && !cloudOff) f.focus(); } });
   $("authForm").addEventListener("submit", function (e) { e.preventDefault(); doAuth("in"); });
+  var regMode = "neu";
+  function regSqlMsg(er) { var m = String((er && er.message) || er || ""); return /schema cache|does not exist|could not find/i.test(m) ? "Die Firmen-Anmeldung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt). Technische Meldung: " + m.slice(0, 120) : authError(m); }
+  function regSet(m) {
+    regMode = m; $("regNeu").classList.toggle("primary", m === "neu"); $("regCode").classList.toggle("primary", m === "code");
+    $("regLbl").textContent = m === "neu" ? "Firmenname" : "Firmen-Code";
+    $("regFeld").placeholder = m === "neu" ? "z. B. Maler Muster AG" : "z. B. K7M-2Q9";
+    $("regFeld").value = "";
+    $("regHint").textContent = m === "neu" ? "Du wirst Administrator dieser Firma und siehst danach den Firmen-Code für deine Mitarbeiter." : "Den Code bekommst du vom Chef. Er nimmt dich danach in der App auf.";
+  }
+  function regShow(on) {
+    $("regBox").hidden = !on; $("doLogin").hidden = on; $("regBack").hidden = !on; authMsg("");
+    if (on) { regSet(regMode); $("regFeld").focus(); }
+  }
+  $("regNeu").addEventListener("click", function () { regSet("neu"); });
+  $("regCode").addEventListener("click", function () { regSet("code"); });
+  $("regBack").addEventListener("click", function () { regShow(false); });
+  $("regFeld").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); doAuth("up"); } });
   $("doSignup").addEventListener("click", function () { doAuth("up"); });
+  function pwShow(on) { $("pwBox").hidden = !on; if (on) { $("pwNeu").value = ""; $("pwNeu").focus(); } authMsg(""); }
+  $("pwBtn").addEventListener("click", function () { pwShow($("pwBox").hidden); });
+  $("pwCancel").addEventListener("click", function () { pwShow(false); });
+  $("pwSave").addEventListener("click", async function () {
+    var v = $("pwNeu").value;
+    if (v.length < 6) { authMsg("Das Passwort braucht mindestens 6 Zeichen.", "bad"); return; }
+    if (!sb || !user) { authMsg("Bitte zuerst anmelden.", "bad"); return; }
+    authMsg("Einen Moment …");
+    try {
+      var r = await sb.auth.updateUser({ password: v });
+      if (r.error) { authMsg(/same|different/i.test(r.error.message) ? "Bitte ein anderes Passwort als das bisherige wählen." : authError(r.error.message), "bad"); return; }
+      $("pwNeu").value = ""; $("pwBox").hidden = true; authMsg("Passwort geändert ✓", "ok"); toast("Passwort geändert ✓");
+    } catch (e) { authMsg(authError(e && e.message), "bad"); }
+  });
   $("syncNow").addEventListener("click", function () { authMsg("Abgleich läuft …"); pullAll().then(function () { authMsg(syncErr ? "Sync-Fehler: " + syncErr : "Abgeglichen um " + nowHM(), syncErr ? "bad" : "ok"); }); });
   $("doLogout").addEventListener("click", async function () { lsSet(LI, "0"); try { await sb.auth.signOut(); } catch (e) { } onSession(null); authMsg("Abgemeldet. Die Daten bleiben auf diesem Gerät."); });
 
@@ -1138,7 +1207,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -1321,6 +1390,7 @@ h1 { color: #2c2166; }
     closeMembers(); closeSites(); hideSug();
     var busy = false, rows = [], pend = [];
     var pbox = el("div", { "class": "editbox" }); pbox.hidden = true;
+    var cbox = el("div", { "class": "editbox" }); cbox.hidden = true; var code = "";
     var info = el("div", { "class": "status" }), cnt = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" });
     var msg = el("div", { "class": "status", role: "status" });
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
@@ -1331,8 +1401,8 @@ h1 { color: #2c2166; }
     var form = el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), em, role, el("div", { "class": "actions" }, [add])]);
     var sheet = el("div", { "class": "sheet" }, [
       el("h2", { text: "Mitarbeiter" }),
-      el("p", { text: "Trage hier die E-Mail-Adresse ein. Die Person registriert sich danach in der App mit genau dieser Adresse, bestätigt die E-Mail und sieht dann die Baustellen deiner Firma." }),
-      info, pbox, form, msg, cnt, list, el("div", { "class": "actions" }, [close])]);
+      el("p", { text: "Neue Leute registrieren sich mit dem Firmen-Code (siehe unten) und du nimmst sie auf. Du kannst auch direkt eine E-Mail-Adresse eintragen." }),
+      info, cbox, pbox, form, msg, cnt, list, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "members", role: "dialog", "aria-modal": "true", "aria-label": "Mitarbeiter" }, [sheet]);
     async function call(fn, args) {
       if (!sb || !user) return "Bitte zuerst anmelden.";
@@ -1346,6 +1416,7 @@ h1 { color: #2c2166; }
         if (r.error) { say(sharedMsg(r.error), "bad"); return; }
         rows = r.data || [];
         try { var pr = await sb.rpc("pending_users"); pend = (pr && !pr.error && pr.data) ? pr.data : []; } catch (e2) { pend = []; }
+        try { var cr = await sb.rpc("firma_code"); code = (cr && !cr.error && typeof cr.data === "string") ? cr.data : ""; } catch (e3) { code = ""; }
         draw();
       } catch (e) { say(sharedMsg(e), "bad"); }
     }
@@ -1360,10 +1431,19 @@ h1 { color: #2c2166; }
     function draw() {
       var me = String((user && user.email) || "").toLowerCase(), m = memberGet();
       info.textContent = m ? "Firma " + m.firma + "." : "";
+      cbox.textContent = ""; cbox.hidden = !code;
+      if (code) {
+        cbox.appendChild(el("div", { "class": "lbl", text: "Firmen-Code für neue Mitarbeiter" }));
+        cbox.appendChild(el("div", { "class": "big", style: "letter-spacing:.12em", text: code }));
+        cbox.appendChild(el("div", { "class": "status", text: "Gib diesen Code deinen Leuten. Sie wählen bei «Registrieren» «Ich gehöre zu einer Firma» und tippen ihn ein. Danach erscheinen sie unten bei «Neue Registrierungen», und du nimmst sie auf." }));
+        var nc = el("button", { type: "button", text: "Neuen Code erzeugen" });
+        nc.addEventListener("click", function () { if (confirm("Neuen Code erzeugen? Der alte Code gilt dann nicht mehr. Wer sich schon mit dem alten Code registriert hat, erscheint nicht mehr in der Liste.")) run(function () { return call("firma_code_neu"); }, "Neuer Code erzeugt."); });
+        cbox.appendChild(el("div", { "class": "actions" }, [nc]));
+      }
       pbox.textContent = ""; pbox.hidden = !pend.length;
       if (pend.length) {
         pbox.appendChild(el("div", { "class": "lbl", text: "Neue Registrierungen (" + pend.length + ")" }));
-        pbox.appendChild(el("div", { "class": "status", text: "Diese Personen haben sich registriert, gehören aber noch zu keiner Firma. Nimm sie auf, wenn du sie kennst." }));
+        pbox.appendChild(el("div", { "class": "status", text: "Diese Personen haben sich mit dem Firmen-Code deiner Firma registriert. Nimm sie auf, wenn du sie kennst." }));
         pend.forEach(function (p) {
           var d = p.created ? new Date(p.created) : null;
           var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: p.email }));
@@ -1386,7 +1466,14 @@ h1 { color: #2c2166; }
           var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
           tog.addEventListener("click", function () { run(function () { return call("member_set", { p_email: r.email, p_rolle: r.rolle === "admin" ? "mitarbeiter" : "admin" }); }, r.email + " ist jetzt " + (r.rolle === "admin" ? "Mitarbeiter" : "Administrator") + "."); });
           del.addEventListener("click", function () { if (confirm(r.email + " entfernen? Die Person sieht danach keine Baustellen mehr.")) run(function () { return call("member_remove", { p_email: r.email }); }, "Entfernt: " + r.email); });
-          kids.push(tog, del);
+          var pwb = el("button", { type: "button", text: "Neues Passwort" });
+          pwb.addEventListener("click", function () {
+            var v = window.prompt("Neues Passwort für " + r.email + " (mindestens 6 Zeichen):", "");
+            if (v === null) return;
+            if (v.length < 6) { say("Das Passwort braucht mindestens 6 Zeichen.", "bad"); return; }
+            run(function () { return call("member_passwort", { p_email: r.email, p_pw: v }); }, "Neues Passwort für " + r.email + " gesetzt. Gib es der Person weiter. Sie kann es danach selbst ändern (Konto → Passwort ändern).");
+          });
+          kids.push(tog, pwb, del);
         }
         list.appendChild(el("div", { "class": "srow", role: "listitem" }, kids));
       });
@@ -1991,10 +2078,40 @@ function openReport(pre) {
 
   /* ---------- Menü rechts ---------- */
   function closeMenu() { var o = $("menu"); if (o) o.remove(); var b = $("menuBtn"); if (b) b.setAttribute("aria-expanded", "false"); }
+  function isOwner() { return !!(user && String(user.email || "").toLowerCase() === "davidbader@gmx.ch"); }
+  function openOwner() {
+    var ex = $("owner"); if (ex) ex.remove();
+    var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" });
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Inhaber: Firma wechseln" }), el("p", { text: "Du bleibst überall Administrator. Tippe auf eine Firma, um deren Baustellen, Mitarbeiter und Auswertung zu sehen." }), msg, list, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "owner", role: "dialog", "aria-modal": "true", "aria-label": "Firma wechseln" }, [sheet]);
+    function shut() { ov.remove(); }
+    close.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+    document.body.appendChild(ov);
+    async function load() {
+      msg.textContent = "Einen Moment …";
+      try {
+        var r = await sb.rpc("inhaber_firmen");
+        if (r.error) { msg.textContent = /schema cache|does not exist|could not find/i.test(String(r.error.message)) ? "Die Inhaber-Funktion ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(r.error); msg.className = "status bad"; return; }
+        msg.textContent = ""; list.textContent = "";
+        (r.data || []).forEach(function (f) {
+          var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: f.name })); if (f.aktiv) t.appendChild(el("small", { text: "Du siehst gerade diese Firma" }));
+          list.appendChild(tapRow(t, async function () {
+            if (f.aktiv) { shut(); return; }
+            var e = await sb.rpc("inhaber_firma_setzen", { p_firma: f.name });
+            if (e.error) { msg.textContent = sharedMsg(e.error); msg.className = "status bad"; return; }
+            await pullSites(); shut(); toast("Du siehst jetzt: " + f.name);
+          }));
+        });
+      } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+    }
+    load();
+  }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellenrapport schreiben", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Baustellen-Liste", function () { openSites("search"); }]];
     if (isAdmin()) { items.push(["Neue Registrierungen und Mitarbeiter", openMembers]); items.push(["Auswertung pro Baustelle", openBilanz]); }
+    if (isOwner()) items.push(["Inhaber: Firma wechseln", openOwner]);
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var x = el("button", { type: "button", "class": "btn", text: "Schliessen" }); x.addEventListener("click", closeMenu); box.appendChild(x);
