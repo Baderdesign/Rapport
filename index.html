@@ -526,8 +526,8 @@ h1 { color: #2c2166; }
 (function () {
   "use strict";
   var DAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
-  var ABS_T = { krank: "Krank", ferien: "Ferien", frei: "Frei / Üstd", ueber: "Überstunden" }, ABS_BTN = ["krank", "ferien", "frei"], ABS_STD = 8; /* Absenz-Tage: keine Zeiten nötig, Standard 8 Std. */
-  function absDay(rows) { return !!(rows && rows[0] && (rows[0].typ === "krank" || rows[0].typ === "ferien")); } /* Frei / Üstd lässt den Tag normal (z. B. früher gegangen) */
+  var ABS_T = { krank: "Krank", unfall: "Unfall", ferien: "Ferien", frei: "Frei / Üstd", ueber: "Überstunden" }, ABS_BTN = ["krank", "unfall", "ferien", "frei"], ABS_STD = 8; /* Absenz-Tage: keine Zeiten nötig, Standard 8 Std. */
+  function absDay(rows) { return !!(rows && rows[0] && (rows[0].typ === "krank" || rows[0].typ === "unfall" || rows[0].typ === "ferien")); } /* Frei / Üstd lässt den Tag normal (z. B. früher gegangen) */
   function typOf(rows) { return rows && rows[0] && rows[0].typ && ABS_T[rows[0].typ] ? rows[0].typ : ""; }
   function typButtons(di, rows) {
     var cur = typOf(rows);
@@ -1212,7 +1212,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeGleit(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -2085,6 +2085,32 @@ function openReport(pre) {
   /* ---------- Jahres- und Monatsübersicht (Test, nur Inhaber, nur eigene Stunden) ---------- */
   var JY = "wr2:jahr:", ZS = "wr2:zs", JMON = ["Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
   var MNAME = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"], WDS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  /* Gesetzliche Feiertage Kanton Zürich (bezahlt, Tagessoll = 0). Feste Liste für 2026/2027, für andere Jahre aus dem Ostersonntag berechnet. Nicht enthalten: Halbe Feiertage (ab 12 Uhr): Sechseläuten, Knabenschiessen. */
+  var FEIER = {
+    2026: [["01-01", "Neujahr"], ["01-02", "Berchtoldstag"], ["04-03", "Karfreitag"], ["04-06", "Ostermontag"], ["05-01", "Tag der Arbeit"], ["05-14", "Auffahrt"], ["05-25", "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]],
+    2027: [["01-01", "Neujahr"], ["01-02", "Berchtoldstag"], ["03-26", "Karfreitag"], ["03-29", "Ostermontag"], ["05-01", "Tag der Arbeit"], ["05-06", "Auffahrt"], ["05-17", "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]]
+  };
+  function easterSunday(y) { /* Gauss/Meeus */
+    var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), dy = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(y, mo - 1, dy);
+  }
+  function feierList(y) {
+    if (FEIER[y]) return FEIER[y];
+    var e = easterSunday(y), md = function (dt) { return pad(dt.getMonth() + 1) + "-" + pad(dt.getDate()); };
+    return [["01-01", "Neujahr"], ["01-02", "Berchtoldstag"], [md(addDays(e, -2)), "Karfreitag"], [md(addDays(e, 1)), "Ostermontag"], ["05-01", "Tag der Arbeit"], [md(addDays(e, 39)), "Auffahrt"], [md(addDays(e, 50)), "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]];
+  }
+  var TAGSOLL = 480; /* wie im Original-Formular: 8.00 Std. pro Arbeitstag */
+  function halbtag(dt) { /* Sechseläuten: 3. Montag im April; Knabenschiessen: Montag nach dem 2. Sonntag im September */
+    if (dt.getDay() !== 1) return "";
+    var m = dt.getMonth(), d = dt.getDate();
+    if (m === 3 && d >= 15 && d <= 21) return "Sechseläuten";
+    if (m === 8 && d >= 9 && d <= 15) return "Knabenschiessen";
+    return "";
+  }
+  function sollDay(dt, pct) { var w = dt.getDay(); if (w < 1 || w > 5) return 0; return Math.round(TAGSOLL * pct / 100); }
+  function absSoll(dt, pct) { return sollDay(dt, pct) - feierDay(dt, pct); } /* Absenz-Anrechnung: Feiertag nicht doppelt */
+  function feierDay(dt, pct) { var w = dt.getDay(); if (w < 1 || w > 5) return 0; return feiertag(dt) ? Math.round(TAGSOLL * pct / 100) : halbtag(dt) ? Math.round(TAGSOLL * pct / 200) : 0; }
+  function feiertag(dt) { var k = pad(dt.getMonth() + 1) + "-" + pad(dt.getDate()), l = feierList(dt.getFullYear()); for (var i = 0; i < l.length; i++) if (l[i][0] === k) return l[i][1]; return ""; }
   function jahrLoad(y) { try { return JSON.parse(lsGet(JY + y) || "null") || {}; } catch (e) { return {}; } }
   function monLoad(y, m) { try { return JSON.parse(lsGet("wr2:mon:" + y + "-" + pad(m + 1)) || "null") || {}; } catch (e) { return {}; } }
   function monSave(y, m, o) { lsSet("wr2:mon:" + y + "-" + pad(m + 1), JSON.stringify(o)); }
@@ -2097,8 +2123,9 @@ function openReport(pre) {
   function hmB(min) { return min ? hmS(min) : ""; }
   function ovl(a, b, c, d) { return Math.max(0, Math.min(b, d) - Math.max(a, c)); }
   function blankDay() { return { tag: 0, night: 0, reise: 0, tara: 0, net: 0, ferien: 0, krank: 0, frei: 0, ft: 0, ab: 0, z1: 0, z2: 0, z3: 0, any: false }; }
-  function dayCalc(list) {
+  function dayCalc(list, sollMin) {
     var o = blankDay(), ds = dayStats(list), typ = typOf(list), am = Math.round(ds.abs * 60);
+    if (absDay(list) && typeof sollMin === "number") am = sollMin; /* GAV: Krank / Unfall / Ferien = Tagessoll, keine Minusstunden */
     if (absDay(list)) { if (am) { if (typ === "ferien") o.ferien = am; else o.krank = am; o.any = true; } return o; }
     if (am) { o.frei = am; o.any = true; }
     list.forEach(function (e) {
@@ -2118,7 +2145,7 @@ function openReport(pre) {
       var o = localWeek(wk); if (!o) return;
       var mon = fromKey(wk), days = deserialize(o.days), wt = 0;
       if (days.some(function (l) { return dayCalc(l).any; }) && (!fd || mon < fd)) fd = mon;
-      days.forEach(function (list, di) { var c = dayCalc(list); wt += c.net; var dt = addDays(mon, di); if (dt.getFullYear() === y) { var t = gd(dt.getMonth(), dt.getDate()); Object.keys(c).forEach(function (k) { t[k] = c[k]; }); } });
+      days.forEach(function (list, di) { var dt = addDays(mon, di), c = dayCalc(list, absSoll(dt, pct)); wt += c.net; if (dt.getFullYear() === y) { var t = gd(dt.getMonth(), dt.getDate()); Object.keys(c).forEach(function (k) { t[k] = c[k]; }); } });
       var over = wt - pmin(zs.h), fri = addDays(mon, 4);
       if (over > 0 && fri.getFullYear() === y) gd(fri.getMonth(), fri.getDate()).z1 = Math.round(over * rate(zs.r1) / 100);
       var seen = {}; for (var k = 0; k < 7; k++) { var dt2 = addDays(mon, k); if (dt2.getFullYear() !== y) continue; var mi = dt2.getMonth(); if (seen[mi]) continue; seen[mi] = 1;
@@ -2126,16 +2153,17 @@ function openReport(pre) {
     });
     var M = [], kor = [];
     for (i = 0; i < 12; i++) {
-      var mm = monLoad(y, i), soll = 0, dd = new Date(y, i, 1), last = new Date(y, i + 1, 0).getDate();
-      while (dd.getMonth() === i) { var wd = dd.getDay(); if (wd >= 1 && wd <= 5 && fd && dd >= fd) soll += 480 * pct / 100; dd.setDate(dd.getDate() + 1); }
+      var mm = monLoad(y, i), soll = 0, fth = 0, dd = new Date(y, i, 1), last = new Date(y, i + 1, 0).getDate();
+      while (dd.getMonth() === i) { var wd = dd.getDay(); if (wd >= 1 && wd <= 5 && fd && dd >= fd) { fth += feierDay(dd, pct); soll += sollDay(dd, pct); } dd.setDate(dd.getDate() + 1); }
+      fth = Math.round(fth);
       soll = Math.round(soll);
       for (d = 1; d <= last; d++) {
         var c = D[i][d], f = pmin((mm.ft || {})[d]), a2 = pmin((mm.ab || {})[d]), z3 = pmin((mm.z3 || {})[d]);
         if (f || a2 || z3) { c = gd(i, d); c.ft = f; c.ab = a2; c.z3 = z3; c.any = true; }
         if (c) c.z2 = Math.round(c.night * rate(zs.r2) / 100);
       }
-      var m = { soll: soll, tag: 0, night: 0, reise: 0, tara: 0, net: 0, ferien: 0, krank: 0, frei: 0, ft: 0, ab: 0, z1: 0, z2: 0, z3: 0, data: false };
-      Object.keys(D[i]).forEach(function (k) { var c2 = D[i][k]; Object.keys(m).forEach(function (f2) { if (typeof c2[f2] === "number" && f2 !== "soll") m[f2] += c2[f2]; }); if (c2.any || c2.z1) m.data = true; });
+      var m = { soll: soll, fth: fth, tag: 0, night: 0, reise: 0, tara: 0, net: 0, ferien: 0, krank: 0, frei: 0, ft: 0, ab: 0, z1: 0, z2: 0, z3: 0, data: false };
+      Object.keys(D[i]).forEach(function (k) { var c2 = D[i][k]; Object.keys(m).forEach(function (f2) { if (typeof c2[f2] === "number" && f2 !== "soll" && f2 !== "fth") m[f2] += c2[f2]; }); if (c2.any || c2.z1) m.data = true; });
       m.k1 = pmin(mm.k1); m.k2 = pmin(mm.k2); m.k3 = pmin(mm.k3);
       M.push(m);
     }
@@ -2144,7 +2172,7 @@ function openReport(pre) {
     if (fd) first = fd.getFullYear() === y ? fd.getMonth() : (fd.getFullYear() < y ? 0 : -1);
     var svj = pmin(sv.sv), fv = pmin(sv.fv), fg = pmin(sv.fg);
     M.forEach(function (m, k) {
-      m.tot = m.net + m.ferien + m.krank + m.frei + m.ft + m.ab + m.z1 + m.z2 + m.z3;
+      m.tot = m.net + m.ferien + m.krank + m.frei + m.ft + m.fth + m.ab + m.z1 + m.z2 + m.z3;
       m.show = k >= first && k <= lastM;
       if (m.show) { m.diff = m.tot - m.soll; kum += m.diff; m.kum = kum; }
       m.saldo = m.show ? kum + svj - M.slice(0, k + 1).reduce(function (s, q) { return s + q.k1 + q.k2; }, 0) : 0;
@@ -2165,7 +2193,8 @@ function openReport(pre) {
       { l: "Total produktiv", v: R.M.map(function (m) { return m.net ? hmB(m.net) : ""; }), j: hmB(R.yr.net), b: 1 },
       { l: "Zuschlag Höchstarbeitszeit", v: mv("z1"), j: hmB(R.yr.z1) },
       { l: "Zuschlag Nacht/Sonn-/Feiertag", v: R.M.map(function (m) { return hmB(m.z2 + m.z3); }), j: hmB(R.yr.z2 + R.yr.z3) },
-      { l: "Feiertage", v: mv("ft"), j: hmB(R.yr.ft) },
+      { l: "Feiertage Art. 12.2 GAV (ft)", v: R.M.map(function (m) { return m.soll || m.fth ? hmB(m.fth) : ""; }), j: R.yr.soll ? hmB(R.M.reduce(function (s2, q) { return s2 + (q.soll || q.fth ? q.fth : 0); }, 0)) : "" },
+      { l: "Gutschrift von Hand", v: mv("ft"), j: hmB(R.yr.ft) },
       { l: "Ferien", v: mv("ferien"), j: hmB(R.yr.ferien) },
       { l: "Krankheit", v: mv("krank"), j: hmB(R.yr.krank) },
       { l: "Frei / Überstunden", v: mv("frei"), j: hmB(R.yr.frei) },
@@ -2212,8 +2241,9 @@ function openReport(pre) {
     return {
       last: last, days: days,
       rows: [
-        { l: "Sollstunden", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), w = dt.getDay(); return w >= 1 && w <= 5 && R.fd && dt >= R.fd ? hm(Math.round(480 * R.pct / 100)) : ""; }) },
-        { l: "Feiertage (Std.)", key: "ft", man: 1 },
+        { l: "Sollstunden", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), w = dt.getDay(); return w >= 1 && w <= 5 && R.fd && dt >= R.fd && sollDay(dt, R.pct) ? hm(sollDay(dt, R.pct)) : ""; }) },
+        { l: "Feiertage ft (bezahlt, Sechseläuten/Knabenschiessen halb)", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), f = feierDay(dt, R.pct); return R.fd && dt >= R.fd && f ? hm(f) : ""; }), title: days.map(function (dd) { var q = new Date(R.y, m, dd); return feiertag(q) || halbtag(q); }) },
+        { l: "Gutschrift von Hand (Std.)", key: "ft", man: 1 },
         { l: "Tagarbeit 06.00–20.00", v: dv("tag") },
         { l: "Nachtarbeit 20.00–06.00", v: dv("night") },
         { l: "Reisezeit (gesamt)", v: dv("reise") },
@@ -2290,6 +2320,68 @@ function openReport(pre) {
     mb.addEventListener("click", function () { shut(); openMonat(); }); jb.addEventListener("click", function () { shut(); openJahr(); });
     cb.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
     document.body.appendChild(ov);
+  }
+
+  /* ---------- Gleitzeit-Auswertung pro Mitarbeiter (nur Administratoren) ---------- */
+  function gleitCalc(rows, y, mo) {
+    var zs = zsGet(), end = new Date(y, mo + 1, 0), P = {};
+    rows.forEach(function (r) {
+      var em = String(r.email || "").toLowerCase(), d = r.data || {}, p = P[em] || (P[em] = { em: em, name: "", D: {}, fd: null });
+      if (String(d.name || "").trim()) p.name = String(d.name).trim();
+      var mon = fromKey(r.week), days = deserialize(d.days), wt = 0;
+      days.forEach(function (list, di) {
+        var dt = addDays(mon, di), c = dayCalc(list, absSoll(dt, 100)); wt += c.net;
+        if (c.any && (!p.fd || dt < p.fd)) p.fd = dt;
+        if (dt.getFullYear() === y && dt <= end) { c.z2 = Math.round(c.night * rate(zs.r2) / 100); p.D[key(dt)] = c; }
+      });
+      var over = wt - pmin(zs.h), fri = addDays(mon, 4);
+      if (over > 0 && fri.getFullYear() === y && fri <= end) { var k = key(fri); (p.D[k] || (p.D[k] = blankDay())).z1 = Math.round(over * rate(zs.r1) / 100); }
+    });
+    return Object.keys(P).map(function (em) {
+      var p = P[em], o = { em: em, name: p.name, work: 0, abs: 0, zus: 0, soll: 0, kum: 0, fth: 0, has: !!p.fd };
+      if (!p.fd) return o;
+      var dd = new Date(Math.max(p.fd.getTime(), new Date(y, 0, 1).getTime())), ksoll = 0, kist = 0;
+      while (dd <= end) {
+        var c = p.D[key(dd)], so = sollDay(dd, 100), ist = 0;
+        if (c) ist = c.net + c.ferien + c.krank + c.frei + c.z1 + c.z2;
+        ksoll += so; kist += ist + feierDay(dd, 100);
+        if (dd.getMonth() === mo) { o.soll += so; o.fth += feierDay(dd, 100); if (c) { o.work += c.net; o.abs += c.ferien + c.krank + c.frei; o.zus += c.z1 + c.z2; } }
+        dd.setDate(dd.getDate() + 1);
+      }
+      o.ist = o.work + o.abs + o.zus + o.fth; o.saldo = o.ist - o.soll; o.kum = kist - ksoll;
+      return o;
+    }).sort(function (a, b) { return (a.name || a.em).localeCompare(b.name || b.em); });
+  }
+  function closeGleit() { var o = $("gleit"); if (o) o.remove(); }
+  function openGleit() {
+    closeGleit(); var now = new Date(), busy = false;
+    var mi = el("input", { type: "month", "aria-label": "Monat" }); mi.value = now.getFullYear() + "-" + pad(now.getMonth() + 1);
+    var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" }); list.style.maxHeight = "58vh";
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Gleitzeit pro Mitarbeiter" }), el("p", { text: "Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten." }), mi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
+    var ov = el("div", { "class": "overlay sites", id: "gleit", role: "dialog", "aria-modal": "true", "aria-label": "Gleitzeit pro Mitarbeiter" }, [sheet]);
+    function line(l, v, b) { return el("div", { style: "display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums" + (b ? ";font-weight:700" : "") }, [el("span", { text: l }), el("span", { text: v })]); }
+    async function load() {
+      if (busy) return; var p = (mi.value || "").split("-"); if (p.length < 2) return; var y = +p[0], mo = +p[1] - 1;
+      if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; return; }
+      if (!navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
+      busy = true; msg.textContent = "Einen Moment …";
+      try {
+        var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(new Date(y, 0, 1))), p_bis: key(new Date(y, mo + 1, 0)) });
+        if (r.error) { msg.textContent = sharedMsg(r.error); return; }
+        msg.textContent = ""; list.textContent = "";
+        var res = gleitCalc(r.data || [], y, mo);
+        if (!res.length) list.appendChild(el("div", { "class": "status", text: "Keine Daten." }));
+        res.forEach(function (o) {
+          var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
+          if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." }));
+          else [["Gearbeitet", hm(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hm(o.abs)], ["Zuschläge", hm(o.zus)], ["Feiertage bezahlt", hm(o.fth)], ["Ist-Konto", hm(o.ist), 1], ["Soll-Konto", hm(o.soll), 1], ["Saldo Monat +/−", hmS(o.saldo), 1], ["Saldo Jahr kumuliert", hmS(o.kum), 1]].forEach(function (x) { c.appendChild(line(x[0], x[1], x[2])); });
+          list.appendChild(c);
+        });
+      } catch (e) { msg.textContent = sharedMsg(e); } finally { busy = false; }
+    }
+    go.addEventListener("click", load); mi.addEventListener("change", load); cl.addEventListener("click", closeGleit); ov.addEventListener("click", function (e) { if (e.target === ov) closeGleit(); });
+    document.body.appendChild(ov); load();
   }
   function openJahr() {
     closeJahr(); var yr = new Date().getFullYear(), R = null, saved = {};
@@ -2432,7 +2524,7 @@ function openReport(pre) {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
     if (isAdmin()) { items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
-    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Firma wechseln", openOwner]); }
+    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Gleitzeit pro Mitarbeiter", openGleit]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
