@@ -1212,7 +1212,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var ow = $("owner"); if (ow) ow.remove(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -2280,6 +2280,17 @@ function openReport(pre) {
     showFallback(blob, doc, fn, file, label);
   }
   function tdStyle(b) { return "padding:3px 4px;border:1px solid var(--line);text-align:right;white-space:nowrap;font-weight:" + (b ? 700 : 400); }
+  function openUebersicht() {
+    closeJahr(); var ex = $("uebers"); if (ex) ex.remove();
+    var mb = el("button", { type: "button", "class": "btn primary", text: "Monat (Arbeitszeitkontrolle)" }), jb = el("button", { type: "button", "class": "btn primary", text: "Jahr (Jahresübersicht)" });
+    var cb = el("button", { type: "button", "class": "btn", text: "Abbrechen" });
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Übersicht wählen" }), el("p", { text: "Welche Übersicht möchtest du sehen?" }), el("div", { "class": "actions", style: "flex-direction:column;align-items:stretch" }, [mb, jb, cb])]);
+    var ov = el("div", { "class": "overlay sites", id: "uebers", role: "dialog", "aria-modal": "true", "aria-label": "Übersicht wählen" }, [sheet]);
+    function shut() { ov.remove(); }
+    mb.addEventListener("click", function () { shut(); openMonat(); }); jb.addEventListener("click", function () { shut(); openJahr(); });
+    cb.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+    document.body.appendChild(ov);
+  }
   function openJahr() {
     closeJahr(); var yr = new Date().getFullYear(), R = null, saved = {};
     var msg = el("div", { "class": "status", role: "status" }), yl = el("b", { text: String(yr), style: "min-width:3.5em;text-align:center" });
@@ -2421,7 +2432,7 @@ function openReport(pre) {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
     if (isAdmin()) { items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
-    if (isOwner()) { items.push(["Monatsübersicht", openMonat]); items.push(["Jahresübersicht", openJahr]); items.push(["Inhaber: Firma wechseln", openOwner]); }
+    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
