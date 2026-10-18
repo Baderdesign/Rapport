@@ -1666,7 +1666,7 @@ function openReport(pre) {
     var save = el("button", { type: "button", "class": "btn primary", text: "Rapport speichern" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var msg = el("div", { "class": "status", role: "status" });
-    var mine = el("div", { "class": "slist", role: "list" });
+    var mine = el("div", { "class": "slist", role: "list" }), dbox = el("div", {});
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     function curNr() { var v = inp.value.trim(); var m = /^(\S+)/.exec(v); return m ? m[1] : ""; }
     function refresh() {
@@ -1682,6 +1682,7 @@ function openReport(pre) {
         if (!v) hrs.appendChild(el("div", { "class": "status", text: "Für diese Baustelle und diesen Tag stehen noch keine Zeiten im Wochenrapport." }));
       }
       var cur = rpGet().s[nr + "|" + dt.value]; ta.value = cur || "";
+      dateienLoad(nr, "rapport", dbox);
     }
     function drawMine() {
       mine.textContent = ""; var s = rpGet().s, ks = Object.keys(s).sort(function (a, b) { return a.split("|")[1] < b.split("|")[1] ? 1 : -1; }).slice(0, 15);
@@ -1696,7 +1697,7 @@ function openReport(pre) {
     var sheet = el("div", { "class": "sheet bil" }, [
       el("h2", { text: "Baustellenrapport" }),
       el("p", { text: "Wähle die Baustelle und den Tag. Deine Stunden kommen automatisch aus deinem Wochenrapport. Du schreibst nur, was gearbeitet wurde. Es reicht, wenn einer von euch schreibt." }),
-      inp, dl, nm, dt, hrs, ta, el("div", { "class": "actions" }, [save]), msg,
+      inp, dl, nm, dt, hrs, ta, el("div", { "class": "actions" }, [save]), msg, dbox,
       el("div", { "class": "lbl", text: "Meine letzten Rapporte" }), mine, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "report", role: "dialog", "aria-modal": "true", "aria-label": "Baustellenrapport" }, [sheet]);
     inp.addEventListener("input", function () { suggest(); if (siteByNr(curNr())) refresh(); else { nm.textContent = ""; hrs.textContent = ""; } });
@@ -1959,7 +1960,8 @@ function openReport(pre) {
     var nm = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" }), msg = el("div", { "class": "status", role: "status" });
     var newBtn = el("button", { type: "button", "class": "btn primary", text: "+ Neuer Regie-Rapport" }); newBtn.hidden = true;
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
-    var main = el("div", { "class": "regmain" }, [inp, sug, nm, msg, list, el("div", { "class": "actions" }, [newBtn])]);
+    var dbox = el("div", {});
+    var main = el("div", { "class": "regmain" }, [inp, sug, nm, msg, list, el("div", { "class": "actions" }, [newBtn]), dbox]);
     var ed = el("div", { "class": "regedit" }); ed.hidden = true;
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Regie-Rapport" }), main, ed, el("div", { "class": "actions", id: "regclose" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "regie", role: "dialog", "aria-modal": "true", "aria-label": "Regie-Rapport" }, [sheet]);
@@ -1976,7 +1978,8 @@ function openReport(pre) {
     }
     async function pick(nr) {
       site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : "";
-      list.textContent = ""; newBtn.hidden = !nr; if (!nr) return;
+      list.textContent = ""; newBtn.hidden = !nr; dbox.textContent = ""; if (!nr) return;
+      dateienLoad(nr, "regie", dbox);
       await loadList();
     }
     async function loadList() {
@@ -2385,6 +2388,42 @@ function openReport(pre) {
   }
 
   /* ---------- Dateien ablegen (Rapporte als PDF/Foto, unverändert) ---------- */
+  function dateiOpen(d) {
+    var old = $("dviewer"); if (old) old.remove();
+    var body = el("div", { "class": "status", text: "Wird geladen …" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: d.name }), body, el("div", { "class": "actions" }, [cl])]);
+    var ov = el("div", { "class": "overlay sites", id: "dviewer", role: "dialog", "aria-modal": "true", "aria-label": d.name }, [sheet]); ov.style.zIndex = "60";
+    var url = "";
+    function shut() { ov.remove(); if (url) try { URL.revokeObjectURL(url); } catch (e) { } }
+    cl.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+    document.body.appendChild(ov);
+    sb.rpc("datei_get", { p_id: d.id }).then(function (g) {
+      if (g.error || !g.data || !g.data[0]) { body.textContent = "Datei nicht gefunden."; body.className = "status bad"; return; }
+      var x = g.data[0], bin = atob(x.data), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      url = URL.createObjectURL(new Blob([u8], { type: x.mime })); body.textContent = ""; body.className = "";
+      var isImg = /^image\//.test(x.mime), view;
+      if (isImg) { view = el("img", { src: url, alt: x.name }); view.style.cssText = "width:100%;height:auto;display:block;border-radius:8px"; }
+      else { view = el("iframe", { src: url, title: x.name }); view.style.cssText = "width:100%;height:60vh;border:1px solid var(--line,#ccc);border-radius:8px;background:#fff"; }
+      body.appendChild(view);
+      var op = el("a", { "class": "btn primary", href: url, target: "_blank", rel: "noopener", text: "Gross öffnen / Teilen" }); op.style.cssText = "display:block;text-align:center;margin-top:10px;text-decoration:none";
+      body.appendChild(op);
+    }).catch(function (e) { body.textContent = String((e && e.message) || e); body.className = "status bad"; });
+  }
+  /* Liste der abgelegten Dateien einer Baustelle (nur Administratoren) in einen Container zeichnen */
+  async function dateienLoad(nr, ordner, box) {
+    box.textContent = ""; if (!nr || !isAdmin() || !sb || !user || !navigator.onLine) return;
+    try {
+      var r = await sb.rpc("dateien_list", { p_site: nr }); if (r.error || !r.data) return;
+      var l = r.data.filter(function (d) { return d.ordner === ordner; }); if (!l.length) return;
+      box.appendChild(el("div", { "class": "lbl", text: "Abgelegte Dateien" }));
+      var ls = el("div", { "class": "slist", role: "list" });
+      l.forEach(function (d) {
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: d.name })); t.appendChild(el("small", { text: dmy(new Date(d.created)) }));
+        ls.appendChild(tapRow(t, function () { dateiOpen(d); }));
+      });
+      box.appendChild(ls);
+    } catch (e) { }
+  }
   function closeDateien() { var o = $("dateien"); if (o) o.remove(); }
   function openDateien() {
     closeDateien(); var busy = false;
@@ -2406,13 +2445,7 @@ function openReport(pre) {
           var nm = el("span", { text: (d.ordner === "regie" ? "Regie · " : "Rapport · ") + d.name + " · " + dmy(new Date(d.created)) }); nm.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
           var del = el("button", { type: "button", "class": "btn", text: "Löschen" });
           var row = el("div", { "class": "srow tap", role: "listitem" }, [nm, del]);
-          tapRow(row, async function () {
-            say("Wird geladen …");
-            var g = await sb.rpc("datei_get", { p_id: d.id }); if (g.error || !g.data || !g.data[0]) { say("Datei nicht gefunden.", "bad"); return; }
-            var x = g.data[0], bin = atob(x.data), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-            var url = URL.createObjectURL(new Blob([u8], { type: x.mime })); say("");
-            var a = el("a", { href: url, target: "_blank", rel: "noopener" }); document.body.appendChild(a); a.click(); a.remove();
-          });
+          tapRow(row, function () { dateiOpen(d); });
           del.addEventListener("click", async function (e) {
             e.stopPropagation(); if (!confirm("«" + d.name + "» wirklich löschen?")) return;
             var q = await sb.rpc("datei_delete", { p_id: d.id }); if (q.error) { say(sharedMsg(q.error), "bad"); return; } show();
