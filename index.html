@@ -781,6 +781,7 @@ h1 { color: #2c2166; }
     var gate = gateOn();
     hint.textContent = cloudOff ? cloudOff : user ? "Angemeldet als " + (user.email || "") + ". Deine Wochen werden mit der Cloud abgeglichen." + (memberGet() ? " " + roleText(memberGet()) + "." : "") : gate ? "Willkommen. Bitte melde dich mit deiner E-Mail-Adresse an. Wer noch kein Konto hat, tippt auf «Registrieren» und bestätigt danach die E-Mail." : "Melde dich an, damit deine Wochen auf allen Geräten gleich sind. Ohne Anmeldung bleiben sie auf diesem Gerät.";
     document.querySelector(".wrap").classList.toggle("gated", gate); if (gate) $("auth").hidden = false;
+    $("menuBtn").style.display = gate ? "none" : ""; if (gate && $("menu")) closeMenu();
     setSync();
   }
   function gateOn() { return !cloudOff && !user && lsGet(LI) !== "1"; } /* beim ersten Start ist die Anmeldung Pflicht; danach bleibt die App auch ohne Netz benutzbar */
