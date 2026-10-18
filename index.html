@@ -1212,7 +1212,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); var ow = $("owner"); if (ow) ow.remove(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -2082,6 +2082,312 @@ function openReport(pre) {
 
   /* ---------- Menü rechts ---------- */
   function closeMenu() { var o = $("menu"); if (o) o.remove(); var b = $("menuBtn"); if (b) b.setAttribute("aria-expanded", "false"); }
+  /* ---------- Jahres- und Monatsübersicht (Test, nur Inhaber, nur eigene Stunden) ---------- */
+  var JY = "wr2:jahr:", ZS = "wr2:zs", JMON = ["Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  var MNAME = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"], WDS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  function jahrLoad(y) { try { return JSON.parse(lsGet(JY + y) || "null") || {}; } catch (e) { return {}; } }
+  function monLoad(y, m) { try { return JSON.parse(lsGet("wr2:mon:" + y + "-" + pad(m + 1)) || "null") || {}; } catch (e) { return {}; } }
+  function monSave(y, m, o) { lsSet("wr2:mon:" + y + "-" + pad(m + 1), JSON.stringify(o)); }
+  function zsGet() { var o = null; try { o = JSON.parse(lsGet(ZS) || "null"); } catch (e) { } o = o || {}; return { h: o.h || "45.00", r1: o.r1 || "25", r2: o.r2 || "100", r3: o.r3 || "100" }; }
+  function pmin(s) { /* Std.Min wie 72.00 oder -5.30 (auch über 24 Std.) */
+    s = String(s == null ? "" : s).trim().replace(/,/g, "."); var neg = /^-/.test(s), x = /^[-+]?\s*(\d{1,4})(?:[.:](\d{1,2}))?$/.exec(s); if (!x) return 0;
+    var mm = x[2] ? (x[2].length === 1 ? +x[2] * 10 : +x[2]) : 0; if (mm > 59) return 0; var v = +x[1] * 60 + mm; return neg ? -v : v; }
+  function rate(s) { var v = parseFloat(String(s == null ? "" : s).replace(",", ".")); return isFinite(v) && v >= 0 ? v : 0; }
+  function hmS(min) { min = Math.round(min); return (min < 0 ? "-" : "") + hm(Math.abs(min)); }
+  function hmB(min) { return min ? hmS(min) : ""; }
+  function ovl(a, b, c, d) { return Math.max(0, Math.min(b, d) - Math.max(a, c)); }
+  function blankDay() { return { tag: 0, night: 0, reise: 0, tara: 0, net: 0, ferien: 0, krank: 0, frei: 0, ft: 0, ab: 0, z1: 0, z2: 0, z3: 0, any: false }; }
+  function dayCalc(list) {
+    var o = blankDay(), ds = dayStats(list), typ = typOf(list), am = Math.round(ds.abs * 60);
+    if (absDay(list)) { if (am) { if (typ === "ferien") o.ferien = am; else o.krank = am; o.any = true; } return o; }
+    if (am) { o.frei = am; o.any = true; }
+    list.forEach(function (e) {
+      var a = tmin(e.von), b = tmin(e.bis); if (a === null || b === null || b <= a) return;
+      var N = ovl(a, b, 0, 360) + ovl(a, b, 1200, 1440), D = (b - a) - N, p = num(e.pause), pD = Math.min(p, D), pN = Math.min(Math.max(0, p - pD), N);
+      o.tag += D - pD; o.night += N - pN;
+    });
+    if (ds.work > 0) { o.any = true; o.reise = ds.reise; o.tara = ds.tara; o.net = ds.net; o.tag = Math.max(0, o.tag - ds.reise); }
+    return o;
+  }
+  function jahrCalc(y) {
+    var sv = jahrLoad(y), zs = zsGet(), D = [], W = [], i, d, pct = rate(sv.pct); if (pct <= 0 || pct > 100) pct = 100;
+    for (i = 0; i < 12; i++) { D.push({}); W.push({}); }
+    function gd(m, dd) { return D[m][dd] || (D[m][dd] = blankDay()); }
+    var fd = null; /* erster Tag mit Daten in der App: davor wird nichts gerechnet */
+    localKeys().forEach(function (wk) {
+      var o = localWeek(wk); if (!o) return;
+      var mon = fromKey(wk), days = deserialize(o.days), wt = 0;
+      if (days.some(function (l) { return dayCalc(l).any; }) && (!fd || mon < fd)) fd = mon;
+      days.forEach(function (list, di) { var c = dayCalc(list); wt += c.net; var dt = addDays(mon, di); if (dt.getFullYear() === y) { var t = gd(dt.getMonth(), dt.getDate()); Object.keys(c).forEach(function (k) { t[k] = c[k]; }); } });
+      var over = wt - pmin(zs.h), fri = addDays(mon, 4);
+      if (over > 0 && fri.getFullYear() === y) gd(fri.getMonth(), fri.getDate()).z1 = Math.round(over * rate(zs.r1) / 100);
+      var seen = {}; for (var k = 0; k < 7; k++) { var dt2 = addDays(mon, k); if (dt2.getFullYear() !== y) continue; var mi = dt2.getMonth(); if (seen[mi]) continue; seen[mi] = 1;
+        var sun = addDays(mon, 6), anchor = (sun.getMonth() === mi && sun.getFullYear() === y) ? sun.getDate() : new Date(y, mi + 1, 0).getDate(); if (wt > 0) W[mi][anchor] = wt; }
+    });
+    var M = [], kor = [];
+    for (i = 0; i < 12; i++) {
+      var mm = monLoad(y, i), soll = 0, dd = new Date(y, i, 1), last = new Date(y, i + 1, 0).getDate();
+      while (dd.getMonth() === i) { var wd = dd.getDay(); if (wd >= 1 && wd <= 5 && fd && dd >= fd) soll += 480 * pct / 100; dd.setDate(dd.getDate() + 1); }
+      soll = Math.round(soll);
+      for (d = 1; d <= last; d++) {
+        var c = D[i][d], f = pmin((mm.ft || {})[d]), a2 = pmin((mm.ab || {})[d]), z3 = pmin((mm.z3 || {})[d]);
+        if (f || a2 || z3) { c = gd(i, d); c.ft = f; c.ab = a2; c.z3 = z3; c.any = true; }
+        if (c) c.z2 = Math.round(c.night * rate(zs.r2) / 100);
+      }
+      var m = { soll: soll, tag: 0, night: 0, reise: 0, tara: 0, net: 0, ferien: 0, krank: 0, frei: 0, ft: 0, ab: 0, z1: 0, z2: 0, z3: 0, data: false };
+      Object.keys(D[i]).forEach(function (k) { var c2 = D[i][k]; Object.keys(m).forEach(function (f2) { if (typeof c2[f2] === "number" && f2 !== "soll") m[f2] += c2[f2]; }); if (c2.any || c2.z1) m.data = true; });
+      m.k1 = pmin(mm.k1); m.k2 = pmin(mm.k2); m.k3 = pmin(mm.k3);
+      M.push(m);
+    }
+    var first = -1, lastM = -1, kum = 0, yr = { soll: 0, tag: 0, night: 0, reise: 0, tara: 0, net: 0, ferien: 0, krank: 0, frei: 0, ft: 0, ab: 0, z1: 0, z2: 0, z3: 0, tot: 0, k1: 0, k2: 0, k3: 0 };
+    M.forEach(function (m, k) { if (m.data) lastM = k; });
+    if (fd) first = fd.getFullYear() === y ? fd.getMonth() : (fd.getFullYear() < y ? 0 : -1);
+    var svj = pmin(sv.sv), fv = pmin(sv.fv), fg = pmin(sv.fg);
+    M.forEach(function (m, k) {
+      m.tot = m.net + m.ferien + m.krank + m.frei + m.ft + m.ab + m.z1 + m.z2 + m.z3;
+      m.show = k >= first && k <= lastM;
+      if (m.show) { m.diff = m.tot - m.soll; kum += m.diff; m.kum = kum; }
+      m.saldo = m.show ? kum + svj - M.slice(0, k + 1).reduce(function (s, q) { return s + q.k1 + q.k2; }, 0) : 0;
+      Object.keys(yr).forEach(function (f) { yr[f] += m[f] || 0; });
+    });
+    return { y: y, pct: pct, fd: fd, M: M, D: D, W: W, yr: yr, first: first, last: lastM, kum: kum, sv: svj, saldo: kum + svj - yr.k1 - yr.k2, fv: fv, fg: fg, fuebertrag: fv + fg - yr.ferien + yr.k3, zs: zs, saved: sv };
+  }
+  function pctTxt(p) { return String(Math.round(p * 100) / 100).replace(".", ",") + "%"; }
+  function jahrRows(R) {
+    function mv(f) { return R.M.map(function (m) { return hmB(m[f]); }); }
+    return [
+      { l: "Anstellung %", v: R.M.map(function () { return pctTxt(R.pct); }), j: pctTxt(R.pct) },
+      { l: "Sollstunden gemäss GAV", v: R.M.map(function (m) { return m.soll ? hm(m.soll) : ""; }), j: R.yr.soll ? hm(R.yr.soll) : "" },
+      { l: "Tagarbeit 06.00–20.00", v: mv("tag"), j: hmB(R.yr.tag) },
+      { l: "Nachtarbeit 20.00–06.00", v: mv("night"), j: hmB(R.yr.night) },
+      { l: "Reisezeit (gesamt)", v: mv("reise"), j: hmB(R.yr.reise) },
+      { l: "Reisezeitabzug", v: mv("tara"), j: hmB(R.yr.tara) },
+      { l: "Total produktiv", v: R.M.map(function (m) { return m.net ? hmB(m.net) : ""; }), j: hmB(R.yr.net), b: 1 },
+      { l: "Zuschlag Höchstarbeitszeit", v: mv("z1"), j: hmB(R.yr.z1) },
+      { l: "Zuschlag Nacht/Sonn-/Feiertag", v: R.M.map(function (m) { return hmB(m.z2 + m.z3); }), j: hmB(R.yr.z2 + R.yr.z3) },
+      { l: "Feiertage", v: mv("ft"), j: hmB(R.yr.ft) },
+      { l: "Ferien", v: mv("ferien"), j: hmB(R.yr.ferien) },
+      { l: "Krankheit", v: mv("krank"), j: hmB(R.yr.krank) },
+      { l: "Frei / Überstunden", v: mv("frei"), j: hmB(R.yr.frei) },
+      { l: "Weitere Absenzen", v: mv("ab"), j: hmB(R.yr.ab) },
+      { l: "Total inkl. Zuschläge", v: R.M.map(function (m) { return m.show ? hmS(m.tot) : ""; }), j: R.last >= 0 ? hmS(R.yr.tot) : "", b: 1 },
+      { l: "Stunden zu Soll", v: R.M.map(function (m) { return m.show ? hmS(m.diff) : ""; }), j: R.last >= 0 ? hmS(R.kum) : "", b: 1 },
+      { l: "Stunden zu Soll kumuliert", v: R.M.map(function (m) { return m.show ? hmS(m.kum) : ""; }), j: "", b: 1 }
+    ];
+  }
+  function pdfGrid(doc, x, y, w, h, cols) { doc.rect(x, y, w, h); cols.forEach(function (cx) { doc.line(cx, y, cx, y + h); }); }
+  function buildJahrPdf(R, name, firma) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var doc = new J({ orientation: "landscape", unit: "mm", format: "a4" });
+    var mx = 10, tw = 277, cl = 56, cj = 18, cm = (tw - cl - cj) / 12, rh = 6.6, y = 11, rows = jahrRows(R), k, cols = [mx + cl];
+    for (k = 1; k <= 12; k++) cols.push(mx + cl + k * cm);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Arbeitszeitkontrolle für", mx, y + 3);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text(name || "", mx, y + 9.5);
+    doc.setFontSize(16); doc.text("Jahresübersicht " + R.y, mx + 110, y + 8);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text(firma || "", mx + tw, y + 8, { align: "right" });
+    y += 14; doc.setLineWidth(0.2); doc.setFillColor(207, 224, 243); doc.rect(mx, y, tw, rh, "F"); pdfGrid(doc, mx, y, tw, rh, cols);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    for (k = 0; k < 12; k++) doc.text(JMON[k], mx + cl + k * cm + cm / 2, y + 4.6, { align: "center" });
+    doc.text("Jahr", mx + cl + 12 * cm + cj / 2, y + 4.6, { align: "center" }); y += rh;
+    rows.forEach(function (r) {
+      doc.setLineWidth(0.15); pdfGrid(doc, mx, y, tw, rh, cols);
+      doc.setFont("helvetica", r.b ? "bold" : "normal"); doc.setFontSize(r.b ? 8.5 : 8); doc.text(r.l, mx + 2, y + 4.6);
+      r.v.forEach(function (t, kk) { if (t) doc.text(t, mx + cl + (kk + 1) * cm - 1.5, y + 4.6, { align: "right" }); });
+      if (r.j) { doc.setFont("helvetica", "bold"); doc.text(r.j, mx + tw - 1.5, y + 4.6, { align: "right" }); }
+      y += rh;
+    });
+    y += 6;
+    function box(label, val, x, w) { doc.setLineWidth(0.3); doc.rect(x, y, w, 9); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text(label, x + 2, y + 6); doc.text(val, x + w - 2, y + 6, { align: "right" }); }
+    box("Saldo Vorjahr", hmS(R.sv), mx, 70); box("Stundensaldo Übertrag " + (R.y + 1), hmS(R.saldo), mx + 80, 92); box("Ferien Übertrag", hmS(R.fuebertrag), mx + 182, 95);
+    y += 17; doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text("Ich habe die Jahresabrechnung kontrolliert und auf ihre Richtigkeit geprüft", mx, y);
+    y += 12; doc.setFontSize(9);
+    doc.text("Visum Mitarbeiter:in", mx, y); doc.line(mx + 34, y, mx + 100, y); doc.text("Visum vorgesetzte Stelle", mx + 112, y); doc.line(mx + 148, y, mx + 214, y); doc.text("Datum", mx + 224, y); doc.line(mx + 236, y, mx + tw, y);
+    doc.setFontSize(7); doc.text("Std.Min. Reisezeitabzug höchstens " + TARA + " Min./Tag. Zuschläge: " + R.zs.r1 + " % über " + R.zs.h + " Std./Woche, " + R.zs.r2 + " % Nachtarbeit (20–06 Uhr), " + R.zs.r3 + " % Sonn-/Feiertagsarbeit.", mx, 205);
+    return doc;
+  }
+  function monRows(R, m) {
+    var last = new Date(R.y, m + 1, 0).getDate(), D = R.D[m], W = R.W[m], days = [], d;
+    for (d = 1; d <= last; d++) days.push(d);
+    function dv(f) { return days.map(function (dd) { var c = D[dd]; return c && c[f] ? hmS(c[f]) : ""; }); }
+    return {
+      last: last, days: days,
+      rows: [
+        { l: "Sollstunden", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), w = dt.getDay(); return w >= 1 && w <= 5 && R.fd && dt >= R.fd ? hm(Math.round(480 * R.pct / 100)) : ""; }) },
+        { l: "Feiertage (Std.)", key: "ft", man: 1 },
+        { l: "Tagarbeit 06.00–20.00", v: dv("tag") },
+        { l: "Nachtarbeit 20.00–06.00", v: dv("night") },
+        { l: "Reisezeit (gesamt)", v: dv("reise") },
+        { l: "Reisezeitabzug max. " + TARA + "'", v: dv("tara") },
+        { l: "Tagestotal inkl. Reisezeit", v: days.map(function (dd) { var c = D[dd]; return c && c.net ? hmS(c.net) : ""; }), b: 1 },
+        { l: "Wochentotal", v: days.map(function (dd) { return W[dd] ? hmS(W[dd]) : ""; }), b: 1 },
+        { l: "Zuschlag " + R.zs.r1 + "% Höchstarbeitszeit", v: dv("z1") },
+        { l: "Zuschlag " + R.zs.r2 + "% Nachtarbeit", v: dv("z2") },
+        { l: "Zuschlag " + R.zs.r3 + "% Sonn-/Feiertag", key: "z3", man: 1 },
+        { l: "Ferien", v: dv("ferien") },
+        { l: "Krankheit", v: dv("krank") },
+        { l: "Frei / Überstunden", v: dv("frei") },
+        { l: "Weitere Absenzen (Std.)", key: "ab", man: 1 }
+      ]
+    };
+  }
+  function buildMonatPdf(R, m, name, firma) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var doc = new J({ orientation: "landscape", unit: "mm", format: "a4" });
+    var mx = 8, tw = 281, cl = 44, mo = monRows(R, m), nd = mo.last, cw = (tw - cl) / 31, rh = 6.2, y = 10, k, mm = monLoad(R.y, m), M = R.M[m];
+    var cols = [mx + cl]; for (k = 1; k <= 31; k++) cols.push(mx + cl + k * cw);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.text("Arbeitszeitkontrolle " + R.y, mx, y + 5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text(firma || "", mx + tw, y + 5, { align: "right" });
+    y += 9; doc.setFontSize(9); doc.text("Mitarbeiter:in", mx, y + 3); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(name || "", mx + 24, y + 3);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Anstellung " + pctTxt(R.pct), mx + 90, y + 3);
+    doc.text("Saldo für das Jahr im " + MNAME[m] + ": " + (M.show ? hmS(M.saldo) : ""), mx + 130, y + 3); doc.text("Saldo Monat +/-: " + (M.show ? hmS(M.diff) : ""), mx + 215, y + 3);
+    y += 6; doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(MNAME[m], mx, y + 4); y += 6;
+    function line(label, vals, o) {
+      o = o || {}; doc.setLineWidth(0.12); if (o.fill) { doc.setFillColor(o.fill[0], o.fill[1], o.fill[2]); doc.rect(mx, y, tw, rh, "F"); }
+      pdfGrid(doc, mx, y, tw, rh, cols); doc.setFont("helvetica", o.b ? "bold" : "normal"); doc.setFontSize(7.5); doc.text(label, mx + 1.5, y + 4.2);
+      vals.forEach(function (t, i) { if (t !== "") { doc.setFontSize(o.fs || 6.3); doc.text(String(t), mx + cl + (i + 1) * cw - 0.6, y + 4.2, { align: "right" }); } });
+      y += rh;
+    }
+    // Kalenderwochen
+    var kw = [], i2 = 1; while (i2 <= nd) { var dt = new Date(R.y, m, i2), wd = (dt.getDay() + 6) % 7, span = Math.min(nd - i2 + 1, 7 - wd); kw.push([i2, span, isoWeek(dt).w]); i2 += span; }
+    doc.setLineWidth(0.12); doc.rect(mx, y, tw, rh); doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.text("Kalenderwoche", mx + 1.5, y + 4.2);
+    kw.forEach(function (q) { var x0 = mx + cl + (q[0] - 1) * cw; doc.line(x0, y, x0, y + rh); doc.text(String(q[2]), x0 + q[1] * cw / 2, y + 4.2, { align: "center" }); }); doc.line(mx + cl, y, mx + cl, y + rh); y += rh;
+    line("Tag", mo.days.map(String), { b: 1, fill: [207, 224, 243], fs: 7 });
+    line("Wochentag", mo.days.map(function (dd) { return WDS[new Date(R.y, m, dd).getDay()]; }));
+    mo.rows.forEach(function (r) {
+      var vals = r.man ? mo.days.map(function (dd) { var s = (mm[r.key] || {})[dd]; var v = pmin(s); return v ? hmS(v) : ""; }) : r.v;
+      line(r.l, vals, { b: r.b });
+    });
+    var tot = hmB(M.net), tf = M.ferien + M.krank + M.frei + M.ft + M.ab;
+    y += 3; doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    doc.text("Summen Monat:  Total produktiv " + hmS(M.net) + "   ·   Zuschläge " + hmS(M.z1 + M.z2 + M.z3) + "   ·   Unproduktiv " + hmS(tf) + "   ·   Total inkl. Zuschläge " + hmS(M.tot) + "   ·   Soll " + hm(M.soll), mx, y + 3);
+    y += 9; doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("Manuelle Korrekturen:  Ausbezahlte Stunden Vorjahressaldo " + (mm.k1 || "–") + "   ·   Ausbezahlte Stunden laufendes Jahr (Überstunden) " + (mm.k2 || "–") + "   ·   Gutschrift/Abzug Ferien " + (mm.k3 || "–"), mx, y + 3);
+    y += 7; doc.rect(mx, y, tw, 14); doc.text("Bemerkungen", mx + 1.5, y + 4); var bl = doc.splitTextToSize(String(mm.bem || ""), tw - 30); bl.slice(0, 3).forEach(function (t, i) { doc.text(t, mx + 28, y + 4 + i * 4); });
+    y += 21; doc.setFontSize(8); doc.text("Ich habe die Monatsabrechnung kontrolliert und auf ihre Richtigkeit geprüft", mx, y);
+    y += 9; doc.setFontSize(9);
+    doc.text("Visum Mitarbeiter:in", mx, y); doc.line(mx + 34, y, mx + 100, y); doc.text("Visum vorgesetzte Stelle", mx + 112, y); doc.line(mx + 148, y, mx + 214, y); doc.text("Datum", mx + 224, y); doc.line(mx + 236, y, mx + tw, y);
+    doc.setFontSize(6.5); doc.text("Std.Min. Zuschläge: " + R.zs.r1 + " % über " + R.zs.h + " Std./Woche, " + R.zs.r2 + " % Nachtarbeit (20–06 Uhr), " + R.zs.r3 + " % Sonn-/Feiertagsarbeit. Sonn-/Feiertagsarbeit und Feiertage werden von Hand erfasst.", mx, 206);
+    return doc;
+  }
+  function closeJahr() { var o = $("jahr"); if (o) o.remove(); var q = $("monat"); if (q) q.remove(); }
+  async function sharePdf(doc, fn, label, msg) {
+    var blob = doc.output("blob"), file = null;
+    try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
+    if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    showFallback(blob, doc, fn, file, label);
+  }
+  function tdStyle(b) { return "padding:3px 4px;border:1px solid var(--line);text-align:right;white-space:nowrap;font-weight:" + (b ? 700 : 400); }
+  function openJahr() {
+    closeJahr(); var yr = new Date().getFullYear(), R = null, saved = {};
+    var msg = el("div", { "class": "status", role: "status" }), yl = el("b", { text: String(yr), style: "min-width:3.5em;text-align:center" });
+    var prev = el("button", { type: "button", "class": "btn", text: "‹", "aria-label": "Vorjahr" }), next = el("button", { type: "button", "class": "btn", text: "›", "aria-label": "Nächstes Jahr" });
+    var pdf = el("button", { type: "button", "class": "btn primary", text: "PDF erstellen" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var wrap = el("div", { style: "overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px" }), manual = el("div", { "class": "editbox" }), sumEl = el("div", { "class": "big", style: "font-size:1rem" });
+    var sheet = el("div", { "class": "sheet bil", style: "max-width:min(1100px,96vw)" }, [el("h2", { text: "Jahresübersicht" }),
+      el("p", { text: "Nur für dich. Alle Zeiten in Std.Min. Feiertage und weitere Absenzen trägst du in der Monatsübersicht ein, die Vorjahreswerte unten." }),
+      el("div", { "class": "actions", style: "align-items:center" }, [prev, yl, next]), msg, wrap, manual, el("div", { "class": "actions" }, [pdf, close])]);
+    var ov = el("div", { "class": "overlay sites", id: "jahr", role: "dialog", "aria-modal": "true", "aria-label": "Jahresübersicht" }, [sheet]), cells = [];
+    function store() { try { localStorage.setItem(JY + yr, JSON.stringify(saved)); } catch (e) { } }
+    function refresh() {
+      R = jahrCalc(yr); var rows = jahrRows(R);
+      rows.forEach(function (r, ri) { cells[ri].forEach(function (td, k) { td.textContent = k < 12 ? r.v[k] : r.j; }); });
+      sumEl.textContent = "Stundensaldo Übertrag " + (yr + 1) + ": " + hmS(R.saldo) + "   ·   Ferien Übertrag: " + hmS(R.fuebertrag);
+    }
+    function build() {
+      saved = jahrLoad(yr); R = jahrCalc(yr); var rows = jahrRows(R); wrap.textContent = ""; cells = [];
+      var tb = el("table", { style: "border-collapse:collapse;font-size:.78rem;font-variant-numeric:tabular-nums;width:100%" });
+      var th = "padding:4px 6px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink)";
+      tb.appendChild(el("tr", {}, [el("th", { style: "position:sticky;left:0;background:var(--surface);min-width:11em" })].concat(JMON.map(function (m) { return el("th", { text: m, style: th }); }), [el("th", { text: "Jahr", style: th })])));
+      rows.forEach(function (r) {
+        var tds = [], tr = el("tr", {});
+        tr.appendChild(el("td", { text: r.l, style: "position:sticky;left:0;background:var(--surface);padding:4px 6px;border:1px solid var(--line);white-space:nowrap;font-weight:" + (r.b ? 700 : 400) }));
+        for (var k = 0; k < 12; k++) { var td = el("td", { text: r.v[k], style: tdStyle(r.b) }); tds.push(td); tr.appendChild(td); }
+        var tj = el("td", { text: r.j, style: tdStyle(1) }); tds.push(tj); tr.appendChild(tj); cells.push(tds); tb.appendChild(tr);
+      });
+      wrap.appendChild(tb); manual.textContent = "";
+      function fld(label, key) { var ip = el("input", { type: "text", inputmode: "text", autocomplete: "off", placeholder: "0.00", "aria-label": label }); ip.value = saved[key] || ""; ip.addEventListener("input", function () { saved[key] = ip.value.trim(); store(); refresh(); }); return el("label", {}, [el("span", { "class": "lbl", text: label }), ip]); }
+      manual.appendChild(el("div", { "class": "lbl", text: "Von Hand (Std.Min)" }));
+      manual.appendChild(fld("Anstellung in % (z. B. 100 oder 80)", "pct")); manual.appendChild(fld("Saldo Vorjahr (auch minus möglich)", "sv")); manual.appendChild(fld("Ferienguthaben Vorjahr", "fv")); manual.appendChild(fld("Ferienguthaben nach GAV", "fg")); manual.appendChild(sumEl); refresh();
+    }
+    prev.addEventListener("click", function () { yr--; yl.textContent = String(yr); build(); });
+    next.addEventListener("click", function () { yr++; yl.textContent = String(yr); build(); });
+    pdf.addEventListener("click", async function () {
+      var mb = memberGet(), doc = null; try { doc = buildJahrPdf(R, (state.name || lsGet("wr2:name") || ""), (mb && mb.firma) || ""); } catch (e) { }
+      if (!doc) { msg.textContent = "Das PDF konnte nicht erstellt werden."; msg.className = "status bad"; return; }
+      await sharePdf(doc, "Jahresuebersicht_" + yr + ".pdf", "Jahresübersicht");
+    });
+    close.addEventListener("click", closeJahr); ov.addEventListener("click", function (e) { if (e.target === ov) closeJahr(); });
+    document.body.appendChild(ov); build();
+  }
+  function openMonat() {
+    closeJahr(); var now = new Date(), yr = now.getFullYear(), mo = now.getMonth(), R = null, saved = {}, zs = zsGet();
+    var msg = el("div", { "class": "status", role: "status" }), ml = el("b", { style: "min-width:9em;text-align:center" });
+    var prev = el("button", { type: "button", "class": "btn", text: "‹", "aria-label": "Vormonat" }), next = el("button", { type: "button", "class": "btn", text: "›", "aria-label": "Nächster Monat" });
+    var pdf = el("button", { type: "button", "class": "btn primary", text: "PDF erstellen" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var wrap = el("div", { style: "overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px" }), manual = el("div", { "class": "editbox" }), head = el("div", { "class": "big", style: "font-size:.95rem" });
+    var sheet = el("div", { "class": "sheet bil", style: "max-width:min(1100px,96vw)" }, [el("h2", { text: "Arbeitszeitkontrolle" }),
+      el("p", { text: "Nur für dich. Alle Zeiten in Std.Min. Weiss kommt aus dem Wochenrapport, die Felder mit Rahmen trägst du von Hand ein (z. B. 8.00)." }),
+      el("div", { "class": "actions", style: "align-items:center" }, [prev, ml, next]), msg, head, wrap, manual, el("div", { "class": "actions" }, [pdf, close])]);
+    var ov = el("div", { "class": "overlay sites", id: "monat", role: "dialog", "aria-modal": "true", "aria-label": "Arbeitszeitkontrolle" }, [sheet]), cells = [], lastMo = null;
+    function store() { monSave(yr, mo, saved); }
+    function refresh() {
+      R = jahrCalc(yr); var M = R.M[mo]; lastMo = monRows(R, mo);
+      head.textContent = "Saldo für das Jahr im " + MNAME[mo] + ": " + (M.show ? hmS(M.saldo) : "–") + "   ·   Saldo Monat +/-: " + (M.show ? hmS(M.diff) : "–") + "   ·   Total inkl. Zuschläge: " + hmS(M.tot) + " von " + hm(M.soll);
+      lastMo.rows.forEach(function (r, ri) { if (r.man) return; cells[ri].forEach(function (td, k) { td.textContent = r.v[k]; }); });
+    }
+    function build() {
+      ml.textContent = MNAME[mo] + " " + yr; saved = monLoad(yr, mo); ["ft", "ab", "z3"].forEach(function (k) { if (!saved[k]) saved[k] = {}; });
+      R = jahrCalc(yr); lastMo = monRows(R, mo); wrap.textContent = ""; cells = [];
+      var tb = el("table", { style: "border-collapse:collapse;font-size:.74rem;font-variant-numeric:tabular-nums" }), th = "padding:3px 4px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);min-width:3.6em";
+      var kwr = el("tr", {}, [el("td", { text: "Kalenderwoche", style: "position:sticky;left:0;background:var(--surface);padding:3px 6px;border:1px solid var(--line);white-space:nowrap" })]);
+      var i2 = 1; while (i2 <= lastMo.last) { var dt = new Date(yr, mo, i2), wd = (dt.getDay() + 6) % 7, span = Math.min(lastMo.last - i2 + 1, 7 - wd); kwr.appendChild(el("td", { text: String(isoWeek(dt).w), colspan: String(span), style: "text-align:center;border:1px solid var(--line)" })); i2 += span; }
+      tb.appendChild(kwr);
+      tb.appendChild(el("tr", {}, [el("th", { text: "Tag", style: th + ";position:sticky;left:0;min-width:13em;text-align:left" })].concat(lastMo.days.map(function (d) { var w = new Date(yr, mo, d).getDay(); return el("th", { text: String(d), style: th + (w === 0 || w === 6 ? ";color:#c0392b" : "") }); }))));
+      tb.appendChild(el("tr", {}, [el("td", { text: "Wochentag", style: "position:sticky;left:0;background:var(--surface);padding:3px 6px;border:1px solid var(--line)" })].concat(lastMo.days.map(function (d) { var w = new Date(yr, mo, d).getDay(); return el("td", { text: WDS[w], style: "text-align:center;border:1px solid var(--line);" + (w === 0 || w === 6 ? "background:var(--surface-2)" : "") }); }))));
+      lastMo.rows.forEach(function (r) {
+        var tds = [], tr = el("tr", {}); tr.appendChild(el("td", { text: r.l, style: "position:sticky;left:0;background:var(--surface);padding:3px 6px;border:1px solid var(--line);white-space:nowrap;font-weight:" + (r.b ? 700 : 400) }));
+        lastMo.days.forEach(function (d, k) {
+          var w = new Date(yr, mo, d).getDay(), we = w === 0 || w === 6, td = el("td", { style: tdStyle(r.b) + (we ? ";background:var(--surface-2)" : "") });
+          if (r.man && (r.key === "z3" || !we)) {
+            var ip = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": r.l + " " + d + "." + (mo + 1) + ".", style: "width:3.3em;min-height:0;height:1.8em;font-size:.74rem;text-align:right;padding:1px 3px" });
+            ip.value = (saved[r.key] || {})[d] || ""; (function (key, dd, inp) { inp.addEventListener("input", function () { var v = inp.value.trim(); if (v) saved[key][dd] = v; else delete saved[key][dd]; store(); refresh(); }); })(r.key, d, ip); td.appendChild(ip);
+          } else if (!r.man) td.textContent = r.v[k];
+          tds.push(td); tr.appendChild(td);
+        });
+        cells.push(tds); tb.appendChild(tr);
+      });
+      wrap.appendChild(tb); manual.textContent = "";
+      function fld(label, get, set, ph, area) { var ip = el(area ? "textarea" : "input", area ? { rows: "2", maxlength: "500", "aria-label": label, style: "display:block;width:100%;box-sizing:border-box;font:inherit;padding:8px" } : { type: "text", inputmode: "text", autocomplete: "off", placeholder: ph || "0.00", "aria-label": label }); ip.value = get() || ""; ip.addEventListener("input", function () { set(ip.value.trim()); }); return el("label", { style: "display:flex;flex-direction:column;gap:4px" }, [el("span", { "class": "lbl", text: label }), ip]); }
+      function mset(k) { return function (v) { saved[k] = v; store(); refresh(); }; }
+      manual.appendChild(el("div", { "class": "lbl", text: "Anstellung (gilt für das ganze Jahr)" }));
+      manual.appendChild(fld("Anstellung in % (z. B. 100 oder 80)", function () { return jahrLoad(yr).pct; }, function (v) { var o = jahrLoad(yr); o.pct = v; try { localStorage.setItem(JY + yr, JSON.stringify(o)); } catch (e) { } refresh(); }, "100"));
+      manual.appendChild(el("div", { "class": "lbl", text: "Manuelle Korrekturen dieses Monats (Std.Min)" }));
+      manual.appendChild(fld("Ausbezahlte Stunden Vorjahressaldo", function () { return saved.k1; }, mset("k1")));
+      manual.appendChild(fld("Ausbezahlte Stunden laufendes Jahr (Überstunden)", function () { return saved.k2; }, mset("k2")));
+      manual.appendChild(fld("Gutschrift / Abzug Ferien", function () { return saved.k3; }, mset("k3")));
+      manual.appendChild(fld("Bemerkungen", function () { return saved.bem; }, function (v) { saved.bem = v; store(); }, "", true));
+      manual.appendChild(el("div", { "class": "lbl", text: "Zuschläge und Höchstarbeitszeit (gilt für alle Monate)" }));
+      function zset(k) { return function (v) { var o = zsGet(); o[k] = v; lsSet(ZS, JSON.stringify(o)); refresh(); rebuildLabels(); }; }
+      manual.appendChild(fld("Höchstarbeitszeit pro Woche (Std.Min)", function () { return zs.h; }, zset("h")));
+      manual.appendChild(fld("Zuschlag 1 in % (Überschreitung Höchstarbeitszeit)", function () { return zs.r1; }, zset("r1")));
+      manual.appendChild(fld("Zuschlag 2 in % (Nachtarbeit 20–06 Uhr)", function () { return zs.r2; }, zset("r2")));
+      manual.appendChild(fld("Zuschlag 3 in % (Sonn- und Feiertagsarbeit, Stunden trägst du oben von Hand ein)", function () { return zs.r3; }, zset("r3")));
+      refresh();
+    }
+    function rebuildLabels() { zs = zsGet(); }
+    prev.addEventListener("click", function () { mo--; if (mo < 0) { mo = 11; yr--; } build(); });
+    next.addEventListener("click", function () { mo++; if (mo > 11) { mo = 0; yr++; } build(); });
+    pdf.addEventListener("click", async function () {
+      R = jahrCalc(yr); var mb = memberGet(), doc = null; try { doc = buildMonatPdf(R, mo, (state.name || lsGet("wr2:name") || ""), (mb && mb.firma) || ""); } catch (e) { }
+      if (!doc) { msg.textContent = "Das PDF konnte nicht erstellt werden."; msg.className = "status bad"; return; }
+      await sharePdf(doc, "Arbeitszeitkontrolle_" + yr + "-" + pad(mo + 1) + ".pdf", "Arbeitszeitkontrolle");
+    });
+    close.addEventListener("click", closeJahr); ov.addEventListener("click", function (e) { if (e.target === ov) closeJahr(); });
+    document.body.appendChild(ov); build();
+  }
   function isOwner() { return !!(user && String(user.email || "").toLowerCase() === "davidbader@gmx.ch"); }
   function openOwner() {
     var ex = $("owner"); if (ex) ex.remove();
@@ -2115,7 +2421,7 @@ function openReport(pre) {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
     if (isAdmin()) { items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
-    if (isOwner()) items.push(["Inhaber: Firma wechseln", openOwner]);
+    if (isOwner()) { items.push(["Monatsübersicht", openMonat]); items.push(["Jahresübersicht", openJahr]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
