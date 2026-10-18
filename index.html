@@ -2112,12 +2112,11 @@ function openReport(pre) {
   }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellenrapport schreiben", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Baustellen-Liste", function () { openSites("search"); }]];
-    if (isAdmin()) { items.push(["Neue Registrierungen und Mitarbeiter", openMembers]); items.push(["Auswertung pro Baustelle", openBilanz]); }
+    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport schreiben", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
+    if (isAdmin()) { items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isOwner()) items.push(["Inhaber: Firma wechseln", openOwner]);
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
-    var x = el("button", { type: "button", "class": "btn", text: "Schliessen" }); x.addEventListener("click", closeMenu); box.appendChild(x);
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMenu(); });
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
