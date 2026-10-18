@@ -393,6 +393,9 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 .srow .t small { display: block; color: var(--muted); }
 .srow button { background: none; border: 0; padding: 4px 2px; color: var(--accent-text); cursor: pointer; text-decoration: underline; font: inherit; font-size: .85rem; }
 .srow button.x { color: var(--muted); }
+.srow.tap { cursor: pointer; }
+.srow.tap:active { background: var(--line); }
+.srow.tap .t b { text-decoration: underline; }
 textarea.bulk { width: 100%; min-height: 110px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; font-family: inherit; margin-block: 8px; }
 .sheet details summary { cursor: pointer; font-weight: 500; }
 .sform .trv { display: flex; gap: 8px; }
@@ -1545,7 +1548,13 @@ h1 { color: #2c2166; }
   }
   function toast(t) { var o = document.getElementById("toast"); if (o) o.remove(); o = el("div", { id: "toast", role: "status", text: t }); document.body.appendChild(o); setTimeout(function () { if (o.parentNode) o.remove(); }, 3200); }
   function closeReport() { var o = $("report"); if (o) o.remove(); }
-  function openReport(pre) {
+  function tapRow(t, fn) {
+  var r = el("div", { "class": "srow tap", role: "button", tabindex: "0" }, [t]);
+  r.addEventListener("click", fn);
+  r.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } });
+  return r;
+}
+function openReport(pre) {
     closeReport(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); hideSug();
     pre = pre || {};
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
@@ -1556,9 +1565,7 @@ h1 { color: #2c2166; }
       dl.hidden = !items.length;
       items.forEach(function (x) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
-        var b = el("button", { type: "button", text: "Wählen" });
-        b.addEventListener("click", function () { inp.value = x.nr; dl.hidden = true; refresh(); });
-        dl.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+        dl.appendChild(tapRow(t, function () { inp.value = x.nr; dl.hidden = true; refresh(); }));
       });
     }
     var nm = el("div", { "class": "status" });
@@ -1590,11 +1597,9 @@ h1 { color: #2c2166; }
       mine.hidden = !ks.length;
       ks.forEach(function (k) {
         var p = k.split("|"), info = siteByNr(p[0]);
-        var b = el("button", { type: "button", text: "Öffnen" });
-        b.addEventListener("click", function () { inp.value = p[0]; dt.value = p[1]; refresh(); window.scrollTo(0, 0); });
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: p[0] })); t.appendChild(document.createTextNode((info && info.n) || ""));
         t.appendChild(el("small", { text: dmy(fromKey(p[1])) + " · " + s[k].slice(0, 70) }));
-        mine.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+        mine.appendChild(tapRow(t, function () { inp.value = p[0]; dt.value = p[1]; refresh(); window.scrollTo(0, 0); }));
       });
     }
     var sheet = el("div", { "class": "sheet bil" }, [
@@ -1767,8 +1772,7 @@ h1 { color: #2c2166; }
       list.hidden = !items.length || !!(sel && one && items[0].nr === sel.nr);
       items.forEach(function (x) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
-        var b = el("button", { type: "button", text: "Anzeigen" }); b.addEventListener("click", function () { q.value = x.nr + " " + (x.n || ""); show(x); list.hidden = true; });
-        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+        list.appendChild(tapRow(t, function () { q.value = x.nr + " " + (x.n || ""); show(x); list.hidden = true; }));
       });
       if (one && !sel) show(items[0]); else if (!q.value.trim()) show(null);
     }
@@ -1876,8 +1880,7 @@ h1 { color: #2c2166; }
       sug.hidden = !items.length;
       items.forEach(function (x) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
-        var b = el("button", { type: "button", text: "Wählen" }); b.addEventListener("click", function () { inp.value = x.nr; sug.hidden = true; pick(x.nr); });
-        sug.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+        sug.appendChild(tapRow(t, function () { inp.value = x.nr; sug.hidden = true; pick(x.nr); }));
       });
     }
     async function pick(nr) {
@@ -1906,8 +1909,7 @@ h1 { color: #2c2166; }
         var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
         t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isAdmin() && r.autor ? " · " + r.autor : "") }));
-        var b = el("button", { type: "button", text: "Öffnen" }); b.addEventListener("click", function () { edit(r.nr, d); });
-        list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b]));
+        list.appendChild(tapRow(t, function () { edit(r.nr, d); }));
       });
       if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isAdmin() ? "" : " Du siehst nur deine eigenen."), "");
     }
