@@ -393,6 +393,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 .srow .t small { display: block; color: var(--muted); }
 .srow button { background: none; border: 0; padding: 4px 2px; color: var(--accent-text); cursor: pointer; text-decoration: underline; font: inherit; font-size: .85rem; }
 .srow button.x { color: var(--muted); }
+.srow.stack { flex-direction: column; align-items: stretch; gap: 2px; }
+.srow .acts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .srow.tap { cursor: pointer; }
 .srow.tap:active { background: var(--line); }
 .srow.tap .t b { text-decoration: underline; }
@@ -1452,7 +1454,7 @@ h1 { color: #2c2166; }
           b.addEventListener("click", function () { run(function () { return call("member_set", { p_email: p.email, p_rolle: "mitarbeiter" }); }, p.email + " ist jetzt Mitarbeiter."); });
           var x = el("button", { type: "button", "class": "x", text: "Löschen" });
           x.addEventListener("click", function () { if (confirm(p.email + " löschen? Das Konto wird entfernt. Die Person kann sich später neu registrieren.")) run(function () { return call("pending_delete", { p_email: p.email }); }, "Gelöscht: " + p.email); });
-          pbox.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, b, x]));
+          pbox.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [b, x])]));
         });
       }
       cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen");
@@ -1475,7 +1477,7 @@ h1 { color: #2c2166; }
           });
           kids.push(tog, pwb, del);
         }
-        list.appendChild(el("div", { "class": "srow", role: "listitem" }, kids));
+        list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, kids.length > 1 ? [kids[0], el("div", { "class": "acts" }, kids.slice(1))] : kids));
       });
     }
     add.addEventListener("click", async function () {
