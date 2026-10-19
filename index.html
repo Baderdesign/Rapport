@@ -2528,87 +2528,176 @@ function openReport(pre) {
     var KEY = "wr2:m2", LK = "wr2:m2list", saved = null;
     function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; }
     function f2(x) { return (Math.round(x * 100) / 100).toFixed(2).replace(".", ","); }
-    function mkWall(h) { return { l: "", h: h, t: 0, f: 0 }; }
-    function mkRoom(i, h) { return { n: "Zimmer " + i, dl: "", db: "", walls: [mkWall(h)] }; }
+    function css() {
+      if (document.getElementById("m2css")) return; var st = document.createElement("style"); st.id = "m2css";
+      st.textContent = "#m2 .fc{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:16px;margin:12px 0}" +
+        "#m2 .fh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}#m2 .fh b{font-size:1.3rem;overflow-wrap:anywhere}" +
+        "#m2 .lk{background:none;border:0;color:var(--muted);font-size:.9rem;padding:4px 0;cursor:pointer}" +
+        "#m2 .fl{font-size:.8rem;font-weight:700;color:var(--muted);margin:12px 0 5px}#m2 .fl.c{text-align:center}" +
+        "#m2 .fc input[type=text]{height:46px;border-radius:14px;padding:0 14px;font-size:1.05rem}" +
+        "#m2 .f3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}#m2 .f3 .fl{margin-top:12px}" +
+        "#m2 .chips{display:grid;grid-template-columns:repeat(2,minmax(0,150px));gap:10px;justify-content:center}" +
+        "#m2 .chip{border:1.5px solid var(--line);border-radius:999px;padding:10px 8px;font-weight:700;font-size:.92rem;background:var(--surface);color:var(--muted);cursor:pointer;text-align:center}" +
+        "#m2 .chip.on{background:#2c2166;border-color:#2c2166;color:#fff}" +
+        "#m2 .chip.all{grid-column:1/-1;justify-self:center;width:200px;border-color:var(--accent);color:var(--accent-text);background:transparent}#m2 .chip.all.on{background:var(--accent);color:#2a1f05;border-color:var(--accent)}" +
+        "#m2 .addw{display:block;margin:10px auto 0;background:none;border:0;color:var(--muted);font-size:.85rem;text-decoration:underline;cursor:pointer}" +
+        "#m2 .wb{border-top:1px solid var(--line);padding:8px 0}#m2 .wb:first-of-type{border-top:0}" +
+        "#m2 .wr{display:flex;flex-direction:column;gap:2px}#m2 .sts{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:4px}" +
+        "#m2 .wl{min-width:0;text-align:left;background:none;border:0;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;gap:1px;color:inherit}" +
+        "#m2 .wl b{font-size:1rem}#m2 .wl .wa{font-size:.82rem;color:var(--muted)}#m2 .wl .tg{font-size:.72rem;font-weight:700;color:var(--accent-text)}" +
+        "#m2 .wl::after{content:'Masse ändern';font-size:.72rem;color:var(--muted);text-decoration:underline}" +
+        "#m2 .st{display:flex;align-items:center;gap:3px;font-size:.78rem;color:var(--muted)}" +
+        "#m2 .st button{width:28px;height:28px;min-height:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:1rem;padding:0;color:var(--ink);cursor:pointer}#m2 .st em{font-style:normal;min-width:14px;text-align:center;font-weight:700;color:var(--ink)}" +
+        "#m2 .ep{background:var(--surface-2);border-radius:14px;padding:10px 12px;margin:2px 0 6px}#m2 .ep .er{display:flex;align-items:center;gap:8px;flex-wrap:wrap}#m2 .ep input[type=text]{height:40px;width:88px;text-align:center;padding:0 6px}" +
+        "#m2 .ep .btn{min-height:0;height:2.2em;font-size:.85rem}" +
+        "#m2 .std{font-size:.8rem;color:var(--muted);margin-top:6px}" +
+        "#m2 .chk{display:flex;align-items:center;gap:10px;margin:14px 0 4px;font-size:1rem}#m2 .chk input{width:24px;height:24px;accent-color:var(--accent)}" +
+        "#m2 .res{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:var(--surface-2);border-radius:16px;padding:12px 14px;margin-top:12px}#m2 .res small{display:block;color:var(--muted);font-size:.78rem}#m2 .res b{font-size:1.05rem;font-variant-numeric:tabular-nums}#m2 .res .m{color:var(--bad)}" +
+        "#m2 .add{display:block;width:100%;border:1.5px dashed var(--line);border-radius:16px;background:transparent;padding:13px;font-weight:700;color:var(--ink);cursor:pointer;margin:6px 0 12px}" +
+        "#m2 .tot{background:linear-gradient(135deg,#2c2166,#1d1450);border-radius:22px;padding:18px 18px 16px;color:#fff;box-shadow:inset 0 -4px 0 #d4af5a;margin:6px 0 14px}#m2 .tot h3{margin:0 0 4px;font-size:1.3rem}" +
+        "#m2 .tl{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #ffffff2e}#m2 .tl span:last-child{font-weight:700;white-space:nowrap}" +
+        "#m2 .tk{margin-top:12px;color:#cfc9ee;font-size:.85rem}#m2 .tv{font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums}#m2 .tg2{font-size:2.3rem;font-weight:800;color:#f1d98f;font-variant-numeric:tabular-nums}";
+      document.head.appendChild(st);
+    }
+    var ed = {};
+    function mkWall() { return { on: true, l: "", h: "", t: 0, f: 0 }; }
+    function mkRoom(i, h) { var w = []; for (var k = 0; k < 4; k++) w.push(mkWall()); return { n: "Zimmer " + i, dl: "", db: "", h: h, deck: true, walls: w }; }
+    function auto(r, j) { return (j === 0 || j === 2) ? pn(r.dl) : ((j === 1 || j === 3) ? pn(r.db) : 0); }
+    function norm(o) {
+      o.tuer = o.tuer || { b: "1,00", h: "2,10" }; o.fenster = o.fenster || { b: "1,20", h: "1,20" }; o.hoehe = o.hoehe || "2,50";
+      o.rooms.forEach(function (r) {
+        if (r.h !== undefined && r.walls) return;
+        var old = r.walls || [], n = Math.max(4, old.length), w = [];
+        r.h = (old[0] && old[0].h) || o.hoehe; r.deck = pn(r.dl) * pn(r.db) > 0;
+        for (var j = 0; j < n; j++) {
+          var ow = old[j];
+          if (ow) w.push({ on: true, l: (pn(ow.l) && Math.abs(pn(ow.l) - auto(r, j)) > 0.004) ? ow.l : "", h: (pn(ow.h) && Math.abs(pn(ow.h) - pn(r.h)) > 0.004) ? ow.h : "", t: ow.t || 0, f: ow.f || 0 });
+          else w.push({ on: false, l: "", h: "", t: 0, f: 0 });
+        }
+        r.walls = w;
+      });
+      return o;
+    }
     var S = null;
-    try { var o = JSON.parse(lsGet(KEY) || "null"); if (o && o.rooms && o.rooms.length) S = o; } catch (e) { }
+    try { var o = JSON.parse(lsGet(KEY) || "null"); if (o && o.rooms && o.rooms.length) S = norm(o); } catch (e) { }
     if (!S) S = { rooms: [mkRoom(1, "2,50")], tuer: { b: "1,00", h: "2,10" }, fenster: { b: "1,20", h: "1,20" }, hoehe: "2,50" };
     function save() { lsSet(KEY, JSON.stringify(S)); }
+    function tuerA() { return pn(S.tuer.b) * pn(S.tuer.h); }
+    function fenA() { return pn(S.fenster.b) * pn(S.fenster.h); }
+    function wc(r, j) {
+      var w = r.walls[j], l = pn(w.l) || auto(r, j), hh = pn(w.h) || pn(r.h), m2 = l * hh, ab = m2 ? Math.min(m2, (w.t || 0) * tuerA() + (w.f || 0) * fenA()) : 0;
+      return { on: w.on !== false, l: l, h: hh, m2: m2, ab: ab, net: m2 - ab, ch: !!(pn(w.l) || pn(w.h)) };
+    }
+    function rc(r) {
+      var wm = 0, wa = 0, wn = 0; r.walls.forEach(function (w, j) { var c = wc(r, j); if (c.on) { wm += c.m2; wa += c.ab; wn += c.net; } });
+      var dk = r.deck ? pn(r.dl) * pn(r.db) : 0; return { wm: wm, wa: wa, wn: wn, dk: dk, tot: wn + dk };
+    }
     var wrap = el("div", {}), refs = null;
     var cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
-    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Quadratmeter-Rechner" }), wrap, el("div", { "class": "actions" }, [cl])]);
-    var ov = el("div", { "class": "overlay sites", id: "m2", role: "dialog", "aria-modal": "true", "aria-label": "Quadratmeter-Rechner" }, [sheet]);
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Flächen-Rechner" }), wrap, el("div", { "class": "actions" }, [cl])]);
+    var ov = el("div", { "class": "overlay sites", id: "m2", role: "dialog", "aria-modal": "true", "aria-label": "Flächen-Rechner" }, [sheet]);
+    css();
+    function sp(t, st) { var x = el("span", { text: t || "" }); if (st) x.style.cssText = st; return x; }
+    function line(children) { return el("div", { style: "display:flex;align-items:center;gap:6px;margin:5px 0;flex-wrap:wrap" }, children); }
     function numIn(obj, key, ph, w) {
       var ip = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: ph || "0,00", "aria-label": ph || "Mass" });
       ip.style.cssText = "min-height:0;height:2.4em;width:" + (w || "4.6em") + ";text-align:center;flex:none"; ip.value = obj[key] || "";
       ip.addEventListener("input", function () { obj[key] = ip.value; save(); calc(); }); return ip;
     }
-    function sp(t, st) { var x = el("span", { text: t || "" }); if (st) x.style.cssText = st; return x; }
-    function line(children) { var d = el("div", { style: "display:flex;align-items:center;gap:6px;margin:5px 0;flex-wrap:wrap" }, children); return d; }
-    function stepper(label, obj, key, getA, minusSpan) {
-      var m = el("button", { type: "button", "class": "btn", text: "−", "aria-label": label + " weniger" }), p = el("button", { type: "button", "class": "btn", text: "+", "aria-label": label + " mehr" }), c = sp(String(obj[key] || 0), "min-width:1.4em;text-align:center;font-weight:700");
-      [m, p].forEach(function (b) { b.style.cssText = "min-height:0;height:2.2em;width:2.2em;padding:0"; });
+    function fld(label, aria, obj, key) {
+      var ip = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "0,00", "aria-label": aria }); ip.value = obj[key] || "";
+      ip.addEventListener("input", function () { obj[key] = ip.value; save(); calc(); });
+      return el("div", {}, [el("div", { "class": "fl", text: label }), ip]);
+    }
+    function stepper(label, aria, obj, key) {
+      var m = el("button", { type: "button", text: "−", "aria-label": aria + " weniger" }), p = el("button", { type: "button", text: "+", "aria-label": aria + " mehr" }), c = el("em", { text: String(obj[key] || 0) });
       m.addEventListener("click", function () { obj[key] = Math.max(0, (obj[key] || 0) - 1); c.textContent = obj[key]; save(); calc(); });
       p.addEventListener("click", function () { obj[key] = (obj[key] || 0) + 1; c.textContent = obj[key]; save(); calc(); });
-      return [sp(label, "min-width:3.6em"), m, c, p];
+      return el("div", { "class": "st" }, [el("span", { text: label }), m, c, p]);
     }
-    function tuerA() { return pn(S.tuer.b) * pn(S.tuer.h); }
-    function fenA() { return pn(S.fenster.b) * pn(S.fenster.h); }
     function calc() {
       var gD = 0, gW = 0;
       refs.rooms.forEach(function (R, i) {
-        var r = S.rooms[i], dk = pn(r.dl) * pn(r.db), wsum = 0;
-        R.decke.textContent = dk ? f2(dk) + " m²" : "";
-        R.walls.forEach(function (W, j) {
-          var w = r.walls[j], m2 = pn(w.l) * pn(w.h), ab = (w.t || 0) * tuerA() + (w.f || 0) * fenA(), net = m2 ? Math.max(0, m2 - ab) : 0;
-          W.res.textContent = m2 ? f2(m2) + " m²" : ""; W.ab.textContent = ab ? "Abzug −" + f2(ab) + " m² → " + f2(net) + " m²" : ""; wsum += net;
+        var r = S.rooms[i], t = rc(r);
+        Object.keys(R.w).forEach(function (j) {
+          var c = wc(r, +j), W = R.w[j];
+          W.ar.textContent = f2(c.m2) + " m²" + (c.ab ? " · Abzug −" + f2(c.ab) + " m²" : ""); W.tag.textContent = c.ch ? "geändert" : "";
+          W.il.placeholder = auto(r, +j) ? f2(auto(r, +j)) : "Länge"; W.ih.placeholder = pn(r.h) ? f2(pn(r.h)) : "Höhe";
         });
-        R.dsum.textContent = f2(dk) + " m²"; R.wsum.textContent = f2(wsum) + " m²"; R.tot.textContent = f2(dk + wsum) + " m²"; gD += dk; gW += wsum;
+        r.walls.forEach(function (w, j) { if (R.chip[j]) R.chip[j].textContent = "Wand " + (j + 1) + " · " + (wc(r, j).l ? f2(wc(r, j).l) : "–"); });
+        R.dk.textContent = "Decke streichen (" + f2(pn(r.dl) * pn(r.db)) + " m²)";
+        R.a.textContent = f2(t.wm) + " m²"; R.b.textContent = "−" + f2(t.wa) + " m²"; R.c.textContent = f2(t.wn) + " m²";
+        refs.tn[i].textContent = r.n || "Zimmer"; refs.tv[i].textContent = f2(t.tot) + " m²"; gD += t.dk; gW += t.wn;
       });
       refs.gD.textContent = f2(gD) + " m²"; refs.gW.textContent = f2(gW) + " m²"; refs.gT.textContent = f2(gD + gW) + " m²";
     }
-    function sum(label, bold, big) { var v = sp("0,00 m²", "font-variant-numeric:tabular-nums" + (bold ? ";font-weight:700" : "")); var d = el("div", { style: "display:flex;justify-content:space-between;padding:3px 0" + (big ? ";border-top:2px solid var(--ink);margin-top:6px;padding-top:8px;font-weight:800;font-size:1.1em" : "") }, [sp(label), v]); return { row: d, val: v }; }
     function draw() {
-      wrap.textContent = ""; refs = { rooms: [] };
+      wrap.textContent = ""; refs = { rooms: [], tn: [], tv: [] };
       var tt = el("input", { type: "text", autocomplete: "off", placeholder: "Bezeichnung / Baustelle (für PDF und Speichern)", "aria-label": "Bezeichnung" }); tt.value = S.titel || "";
       tt.addEventListener("input", function () { S.titel = tt.value; save(); }); wrap.appendChild(tt);
       var set = el("details", {}); set.appendChild(el("summary", { text: "Abzüge einstellen (Standardwerte)" }));
       set.appendChild(line([sp("Tür", "min-width:4.2em"), numIn(S.tuer, "b", "Breite"), sp("×"), numIn(S.tuer, "h", "Höhe"), sp("m")]));
       set.appendChild(line([sp("Fenster", "min-width:4.2em"), numIn(S.fenster, "b", "Breite"), sp("×"), numIn(S.fenster, "h", "Höhe"), sp("m")]));
-      set.appendChild(line([sp("Wandhöhe", "min-width:4.2em"), numIn(S, "hoehe", "Höhe"), sp("m (für neue Wände)")]));
+      set.appendChild(line([sp("Wandhöhe", "min-width:4.2em"), numIn(S, "hoehe", "Höhe"), sp("m (für neue Zimmer)")]));
       wrap.appendChild(set);
       S.rooms.forEach(function (r, i) {
-        var R = { walls: [] }, card = el("div", { "class": "editbox" });
-        var nm = el("input", { type: "text", autocomplete: "off", "aria-label": "Name des Zimmers" }); nm.value = r.n; nm.style.cssText = "font-weight:700;flex:1;min-width:0"; nm.addEventListener("input", function () { r.n = nm.value; save(); });
-        var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.style.cssText = "min-height:0;height:2.4em";
-        del.addEventListener("click", function () { if (!confirm("«" + (r.n || "Zimmer") + "» löschen?")) return; S.rooms.splice(i, 1); if (!S.rooms.length) S.rooms.push(mkRoom(1, S.hoehe || "2,50")); save(); draw(); calc(); });
-        card.appendChild(line([nm, del]));
-        card.appendChild(el("div", { "class": "lbl", text: "Decke (Länge × Breite)" }));
-        R.decke = sp("", "margin-left:auto;font-weight:700"); card.appendChild(line([numIn(r, "dl", "Länge"), sp("×"), numIn(r, "db", "Breite"), R.decke]));
-        card.appendChild(el("div", { "class": "lbl", text: "Wände (Länge × Höhe)" }));
+        var R = { w: {}, chip: {} }, card = el("div", { "class": "fc" });
+        var hn = el("b", { text: r.n || "Zimmer" }), rm = el("button", { type: "button", "class": "lk", text: "Entfernen" });
+        rm.addEventListener("click", function () { if (!confirm("«" + (r.n || "Zimmer") + "» entfernen?")) return; S.rooms.splice(i, 1); if (!S.rooms.length) S.rooms.push(mkRoom(1, S.hoehe || "2,50")); save(); draw(); calc(); });
+        card.appendChild(el("div", { "class": "fh" }, [hn, rm]));
+        card.appendChild(el("div", { "class": "fl", text: "Raumbezeichnung" }));
+        var nm = el("input", { type: "text", autocomplete: "off", "aria-label": "Name des Zimmers" }); nm.value = r.n; nm.addEventListener("input", function () { r.n = nm.value; hn.textContent = r.n || "Zimmer"; save(); calc(); }); card.appendChild(nm);
+        card.appendChild(el("div", { "class": "f3" }, [fld("Länge (m)", "Länge", r, "dl"), fld("Breite (m)", "Breite", r, "db"), fld("Höhe (m)", "Höhe", r, "h")]));
+        card.appendChild(el("div", { "class": "fl c", text: "Welche Wände werden gestrichen?" }));
+        var chips = el("div", { "class": "chips" }), allOn = r.walls.every(function (w) { return w.on !== false; });
         r.walls.forEach(function (w, j) {
-          var W = {}; W.res = sp("", "margin-left:auto;font-weight:700"); W.ab = sp("", "font-size:.85em;color:var(--bad)");
-          var wd = el("button", { type: "button", "class": "btn", text: "×", "aria-label": "Wand löschen" }); wd.style.cssText = "min-height:0;height:2.2em;width:2.4em;padding:0";
-          wd.addEventListener("click", function () { r.walls.splice(j, 1); save(); draw(); calc(); });
-          card.appendChild(line([sp("Wand " + (j + 1), "min-width:4.2em"), numIn(w, "l", "Länge"), sp("×"), numIn(w, "h", "Höhe"), W.res, wd]));
-          card.appendChild(line(stepper("Türen", w, "t").concat(stepper("Fenster", w, "f")))); card.appendChild(line([W.ab]));
-          R.walls.push(W);
+          var on = w.on !== false, b = el("button", { type: "button", "class": "chip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false" }); R.chip[j] = b;
+          b.addEventListener("click", function () { w.on = !on; save(); draw(); calc(); }); chips.appendChild(b);
         });
-        var aw = el("button", { type: "button", "class": "btn", text: "+ Wand" }), a4 = el("button", { type: "button", "class": "btn", text: "Alle Wände wählen" });
-        aw.addEventListener("click", function () { r.walls.push(mkWall(S.hoehe || "2,50")); save(); draw(); calc(); });
-        a4.addEventListener("click", function () { if (!pn(r.dl) || !pn(r.db)) { toast("Für «Alle Wände» zuerst Länge und Breite der Decke eingeben."); return; } var h = S.hoehe || "2,50"; r.walls = [{ l: r.dl, h: h, t: 0, f: 0 }, { l: r.db, h: h, t: 0, f: 0 }, { l: r.dl, h: h, t: 0, f: 0 }, { l: r.db, h: h, t: 0, f: 0 }]; save(); draw(); calc(); });
-        card.appendChild(el("div", { "class": "actions" }, [aw, a4]));
-        var sd = sum("Decke", 1), sw = sum("Wände nach Abzug", 1), st = sum(r.n || "Zimmer", 1, 1); R.dsum = sd.val; R.wsum = sw.val; R.tot = st.val;
-        card.appendChild(sd.row); card.appendChild(sw.row); card.appendChild(st.row); wrap.appendChild(card); refs.rooms.push(R);
+        var al = el("button", { type: "button", "class": "chip all" + (allOn ? " on" : ""), "aria-pressed": allOn ? "true" : "false", text: "Alle Wände" });
+        al.addEventListener("click", function () { r.walls.forEach(function (w) { w.on = true; }); save(); draw(); calc(); }); chips.appendChild(al);
+        card.appendChild(chips);
+        var aw = el("button", { type: "button", "class": "addw", text: "+ weitere Wand (z. B. Nische)" });
+        aw.addEventListener("click", function () { r.walls.push(mkWall()); ed[i + "-" + (r.walls.length - 1)] = true; save(); draw(); calc(); }); card.appendChild(aw);
+        var any = r.walls.some(function (w) { return w.on !== false; });
+        card.appendChild(el("div", { "class": "fl", text: any ? "Masse und Abzüge pro Wand" : "Keine Wand gewählt" }));
+        r.walls.forEach(function (w, j) {
+          if (w.on === false) return;
+          var key = i + "-" + j, W = {}, box = el("div", { "class": "wb" });
+          W.ar = el("span", { "class": "wa" }); W.tag = el("span", { "class": "tg" });
+          var left = el("button", { type: "button", "class": "wl", "aria-label": "Wand " + (j + 1) + " Masse ändern" }, [el("b", { text: "Wand " + (j + 1) }), W.ar, W.tag]);
+          var row = el("div", { "class": "wr" }, [left, el("div", { "class": "sts" }, [stepper("Fenster", "Fenster", w, "f"), stepper("Tür", "Türen", w, "t")])]);
+          var ep = el("div", { "class": "ep" }); ep.hidden = !ed[key];
+          W.il = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Wandlänge" }); W.il.value = w.l || "";
+          W.ih = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Wandhöhe" }); W.ih.value = w.h || "";
+          W.il.addEventListener("input", function () { w.l = W.il.value; save(); calc(); }); W.ih.addEventListener("input", function () { w.h = W.ih.value; save(); calc(); });
+          var rs = el("button", { type: "button", "class": "btn", text: "Automatisch" }); rs.addEventListener("click", function () { w.l = ""; w.h = ""; save(); draw(); calc(); });
+          var er = el("div", { "class": "er" }, [sp("Länge"), W.il, sp("×"), sp("Höhe"), W.ih, sp("m"), rs]);
+          if (j >= 4) { var dw = el("button", { type: "button", "class": "btn", text: "Wand entfernen" }); dw.addEventListener("click", function () { r.walls.splice(j, 1); ed = {}; save(); draw(); calc(); }); er.appendChild(dw); }
+          ep.appendChild(er);
+          left.addEventListener("click", function () { ed[key] = !ed[key]; ep.hidden = !ed[key]; if (!ep.hidden) W.il.focus(); });
+          box.appendChild(row); box.appendChild(ep); card.appendChild(box); R.w[j] = W;
+        });
+        card.appendChild(el("div", { "class": "std", text: "Standard: Fenster " + f2(pn(S.fenster.b)) + " × " + f2(pn(S.fenster.h)) + " m · Tür " + f2(pn(S.tuer.b)) + " × " + f2(pn(S.tuer.h)) + " m (änderbar oben)" }));
+        var cb = el("input", { type: "checkbox", id: "m2d" + i }); cb.checked = !!r.deck; R.dk = el("span", {});
+        cb.addEventListener("change", function () { r.deck = cb.checked; save(); calc(); });
+        var lab = el("label", { "for": "m2d" + i, "class": "chk" }, [cb, R.dk]); card.appendChild(lab);
+        function cell(l, c) { var v = el("b", { "class": c || "" }); return { box: el("div", {}, [el("small", { text: l }), v]), v: v }; }
+        var a = cell("Wandfläche"), b2 = cell("Abzüge", "m"), c2 = cell("Netto Wand"); R.a = a.v; R.b = b2.v; R.c = c2.v;
+        card.appendChild(el("div", { "class": "res" }, [a.box, b2.box, c2.box]));
+        wrap.appendChild(card); refs.rooms.push(R);
       });
-      var ar = el("button", { type: "button", "class": "btn primary", text: "+ Zimmer hinzufügen" });
+      var ar = el("button", { type: "button", "class": "add", text: "+ Zimmer hinzufügen" });
       ar.addEventListener("click", function () { S.rooms.push(mkRoom(S.rooms.length + 1, S.hoehe || "2,50")); save(); draw(); calc(); });
-      wrap.appendChild(el("div", { "class": "actions" }, [ar]));
-      var g = el("div", { "class": "editbox" }), a = sum("Alle Decken", 1), b = sum("Alle Wände (nach Abzug)", 1), c = sum("Gesamt", 1, 1); refs.gD = a.val; refs.gW = b.val; refs.gT = c.val;
-      g.appendChild(a.row); g.appendChild(b.row); g.appendChild(c.row); wrap.appendChild(g);
+      wrap.appendChild(ar);
+      var tot = el("div", { "class": "tot" }, [el("h3", { text: "Gesamtaufmass" })]);
+      S.rooms.forEach(function (r, i) { var n = el("span", {}), v = el("span", {}); refs.tn.push(n); refs.tv.push(v); tot.appendChild(el("div", { "class": "tl" }, [n, v])); });
+      function big(label, cls) { var v = el("div", { "class": cls }); tot.appendChild(el("div", { "class": "tk", text: label })); tot.appendChild(v); return v; }
+      refs.gW = big("Wandfläche netto (gesamt)", "tv"); refs.gD = big("Deckenfläche (gesamt)", "tv"); refs.gT = big("Gesamtfläche", "tg2");
+      wrap.appendChild(tot);
       var pdfB = el("button", { type: "button", "class": "btn primary", text: "PDF erstellen (A4)" }), saveB = el("button", { type: "button", "class": "btn", text: "Speichern" }), newB = el("button", { type: "button", "class": "btn", text: "Neues Ausmass" });
       pdfB.addEventListener("click", async function () {
-        var mb = memberGet(), doc = null; try { doc = buildM2Pdf(); } catch (e) { }
+        var doc = null; try { doc = buildM2Pdf(); } catch (e) { }
         if (!doc) { toast("Das PDF konnte nicht erstellt werden."); return; }
         await sharePdf(doc, "Ausmass_" + ((S.titel || "").replace(/[^\w\-äöüÄÖÜ]+/g, "_").slice(0, 30) || key(new Date())) + ".pdf", "Ausmass");
       });
@@ -2618,7 +2707,7 @@ function openReport(pre) {
         lsSet(LK, JSON.stringify(l.slice(0, 50))); drawSaved();
         remote("ausmass_save", { p_titel: t, p_data: rec.data }).then(function (m) { toast(m === "" ? "Gespeichert: " + t + " (auf allen Geräten)" : "Gespeichert: " + t + " (nur auf diesem Gerät)"); });
       });
-      newB.addEventListener("click", function () { if (!confirm("Neues, leeres Ausmass beginnen? Das aktuelle bleibt nur erhalten, wenn du es vorher gespeichert hast.")) return; S = { rooms: [mkRoom(1, S.hoehe || "2,50")], tuer: S.tuer, fenster: S.fenster, hoehe: S.hoehe, titel: "" }; save(); draw(); calc(); });
+      newB.addEventListener("click", function () { if (!confirm("Neues, leeres Ausmass beginnen? Das aktuelle bleibt nur erhalten, wenn du es vorher gespeichert hast.")) return; S = { rooms: [mkRoom(1, S.hoehe || "2,50")], tuer: S.tuer, fenster: S.fenster, hoehe: S.hoehe, titel: "" }; ed = {}; save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
       wrap.appendChild(el("div", { "class": "actions" }, [pdfB, saveB, newB]));
       saved = el("div", {}); wrap.appendChild(saved); drawSaved();
     }
@@ -2642,7 +2731,7 @@ function openReport(pre) {
         var d = el("button", { type: "button", "class": "btn", text: "Löschen" }); d.style.cssText = "min-height:0;height:2.2em";
         var tx = el("span", { text: x.t + " · " + dmy(new Date(x.d)) }); tx.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
         var row = el("div", { "class": "srow tap", role: "listitem" }, [tx, d]);
-        rowTap(row, function () { S = JSON.parse(JSON.stringify(x.data)); save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
+        rowTap(row, function () { S = norm(JSON.parse(JSON.stringify(x.data))); ed = {}; save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
         d.addEventListener("click", function (e) { e.stopPropagation(); if (!confirm("«" + x.t + "» löschen?")) return; var q = listGet(); q.splice(i, 1); lsSet(LK, JSON.stringify(q)); drawSaved(); remote("ausmass_delete", { p_titel: x.t }); });
         ls.appendChild(row);
       });
@@ -2657,16 +2746,16 @@ function openReport(pre) {
       doc.setFontSize(11); doc.setFont("helvetica", "bold"); T(S.titel || "", X, y); y += 3; doc.setLineWidth(0.4); doc.line(X, y, R, y); y += 6;
       var gD = 0, gW = 0;
       S.rooms.forEach(function (r) {
-        var dk = pn(r.dl) * pn(r.db), ws = 0; chk(30);
-        doc.setFont("helvetica", "bold"); doc.setFontSize(11); T(r.n || "Zimmer", X, y); y += 6; doc.setFontSize(9.5); doc.setFont("helvetica", "normal");
-        T("Decke  " + f2(pn(r.dl)) + " × " + f2(pn(r.db)), X + 3, y); T(f2(dk) + " m²", R, y, { align: "right" }); y += 5.5;
+        var t = rc(r); chk(30);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); T(r.n || "Zimmer", X, y); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); T("Höhe " + f2(pn(r.h)) + " m", R, y, { align: "right" }); y += 6; doc.setFontSize(9.5);
+        if (r.deck) { T("Decke  " + f2(pn(r.dl)) + " × " + f2(pn(r.db)), X + 3, y); T(f2(t.dk) + " m²", R, y, { align: "right" }); y += 5.5; }
         r.walls.forEach(function (w, j) {
-          var m2 = pn(w.l) * pn(w.h), ab = (w.t || 0) * tuerA() + (w.f || 0) * fenA(), net = m2 ? Math.max(0, m2 - ab) : 0; ws += net; chk(12);
-          T("Wand " + (j + 1) + "  " + f2(pn(w.l)) + " × " + f2(pn(w.h)), X + 3, y); T(f2(m2) + " m²", R, y, { align: "right" }); y += 5;
-          if (ab) { doc.setFontSize(8.5); T("Abzug: " + ((w.t || 0) ? w.t + " Tür(en) " : "") + ((w.f || 0) ? w.f + " Fenster " : "") + " −" + f2(ab) + " m²  →  " + f2(net) + " m²", X + 8, y); doc.setFontSize(9.5); y += 5; }
+          var c = wc(r, j); if (!c.on) return; chk(12);
+          T("Wand " + (j + 1) + "  " + f2(c.l) + " × " + f2(c.h), X + 3, y); T(f2(c.m2) + " m²", R, y, { align: "right" }); y += 5;
+          if (c.ab) { doc.setFontSize(8.5); T("Abzug: " + ((w.t || 0) ? w.t + " Tür(en) " : "") + ((w.f || 0) ? w.f + " Fenster " : "") + " −" + f2(c.ab) + " m²  →  " + f2(c.net) + " m²", X + 8, y); doc.setFontSize(9.5); y += 5; }
         });
         chk(14); doc.setLineWidth(0.2); doc.line(X, y - 1.5, R, y - 1.5); y += 2;
-        T("Decke " + f2(dk) + " m²  ·  Wände nach Abzug " + f2(ws) + " m²", X + 3, y); doc.setFont("helvetica", "bold"); T((r.n || "Zimmer") + ": " + f2(dk + ws) + " m²", R, y, { align: "right" }); doc.setFont("helvetica", "normal"); y += 9; gD += dk; gW += ws;
+        T((r.deck ? "Decke " + f2(t.dk) + " m²  ·  " : "") + "Wände nach Abzug " + f2(t.wn) + " m²", X + 3, y); doc.setFont("helvetica", "bold"); T((r.n || "Zimmer") + ": " + f2(t.tot) + " m²", R, y, { align: "right" }); doc.setFont("helvetica", "normal"); y += 9; gD += t.dk; gW += t.wn;
       });
       chk(22); doc.setLineWidth(0.5); doc.line(X, y, R, y); y += 6; doc.setFontSize(10); T("Alle Decken", X, y); T(f2(gD) + " m²", R, y, { align: "right" }); y += 5.5; T("Alle Wände (nach Abzug)", X, y); T(f2(gW) + " m²", R, y, { align: "right" }); y += 7;
       doc.setFont("helvetica", "bold"); doc.setFontSize(12); T("Gesamt", X, y); T(f2(gD + gW) + " m²", R, y, { align: "right" });
@@ -2924,7 +3013,7 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
-    if (isAdmin()) { items.push(["Quadratmeter-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
+    if (isAdmin()) { items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Gleitzeit pro Mitarbeiter", openGleit]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
