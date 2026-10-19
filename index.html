@@ -1234,7 +1234,7 @@ h1 { color: #2c2166; }
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeGleit(); closeDateien(); closeM2(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeGleit(); closeDateien(); closeM2(); closeRegieGen(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -1998,7 +1998,8 @@ function openReport(pre) {
     var newBtn = el("button", { type: "button", "class": "btn primary", text: "+ Neuer Regie-Rapport" }); newBtn.hidden = true;
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var dbox = el("div", {});
-    var main = el("div", { "class": "regmain" }, [inp, sug, nm, msg, list, el("div", { "class": "actions" }, [newBtn]), dbox]);
+    var genBtn = el("button", { type: "button", "class": "btn", text: "Aus Rapporten erstellen" }); genBtn.hidden = true;
+    var main = el("div", { "class": "regmain" }, [inp, sug, nm, msg, list, el("div", { "class": "actions" }, [newBtn, genBtn]), dbox]);
     var ed = el("div", { "class": "regedit" }); ed.hidden = true;
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Regie-Rapport" }), main, ed, el("div", { "class": "actions", id: "regclose" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "regie", role: "dialog", "aria-modal": "true", "aria-label": "Regie-Rapport" }, [sheet]);
@@ -2015,7 +2016,7 @@ function openReport(pre) {
     }
     async function pick(nr) {
       site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : "";
-      list.textContent = ""; newBtn.hidden = !nr; dbox.textContent = ""; if (!nr) return;
+      list.textContent = ""; newBtn.hidden = !nr; genBtn.hidden = !nr || !isAdmin(); dbox.textContent = ""; if (!nr) return;
       dateienLoad(nr, "regie", dbox);
       await loadList();
     }
@@ -2112,12 +2113,14 @@ function openReport(pre) {
       back.addEventListener("click", function () { ed.hidden = true; main.hidden = false; $("regclose").hidden = false; editing = null; loadList(); window.scrollTo(0, 0); });
     }
     newBtn.addEventListener("click", function () { if (site) edit(null, null); });
+    genBtn.addEventListener("click", function () { if (site) openRegieGen(site); });
     inp.addEventListener("input", function () { suggest(); var nr = curNr(); if (siteByNr(nr) && nr !== site) pick(nr); else if (!siteByNr(nr)) { site = ""; nm.textContent = ""; list.textContent = ""; newBtn.hidden = true; say(""); } });
     inp.addEventListener("focus", suggest);
     close.addEventListener("click", closeRegie);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeRegie(); });
     document.body.appendChild(ov);
     if (pre.nr) { inp.value = pre.nr; pick(pre.nr); } else suggest();
+    if (pre.draft && pre.nr) { site = pre.nr; edit(null, pre.draft); }
   }
 
   /* ---------- Menü rechts ---------- */
@@ -2688,6 +2691,81 @@ function openReport(pre) {
       } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
     }
     load();
+  }
+
+  /* ---------- Regie-Rapport aus Stunden und Baustellenrapporten erstellen (nur Administratoren) ---------- */
+  var RG_FUNK = ["Polier / Meister", "Vorarbeiter", "Kundenmaler", "Maler", "Verputzer / Grundeur", "Hilfsarbeiter", "Lehrling"];
+  function closeRegieGen() { var o = $("regiegen"); if (o) o.remove(); }
+  function openRegieGen(nr) {
+    closeRegieGen(); var busy = false, res = null, mon = mondayOf(new Date());
+    var wk = el("input", { type: "date", "aria-label": "Montag der Woche" }); wk.value = key(mon);
+    var prev = el("button", { type: "button", "class": "btn", text: "‹", "aria-label": "Vorherige Woche" }), next = el("button", { type: "button", "class": "btn", text: "›", "aria-label": "Nächste Woche" });
+    var msg = el("div", { "class": "status", role: "status" }), pbox = el("div", {}), lbox = el("div", {}), tot = el("div", { "class": "status" });
+    var go = el("button", { type: "button", "class": "btn primary", text: "Regie-Rapport erstellen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var info = siteByNr(nr), pers = [], lines = [], extra = [];
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Regie-Rapport aus Rapporten" }), el("p", { text: nr + (info && info.n ? " · " + info.n : "") }),
+      el("div", { style: "display:flex;gap:6px;align-items:center" }, [prev, wk, next]), msg,
+      el("div", { "class": "lbl", text: "Mitarbeitende (Stunden aus den Wochenrapporten)" }), pbox,
+      el("div", { "class": "lbl", text: "Ausgeführte Arbeiten (aus den Baustellenrapporten)" }), lbox, tot, el("div", { "class": "actions" }, [go, cl]),
+      el("div", { "class": "status", text: "Der Regie-Rapport öffnet sich zum Prüfen und Ändern. Erst mit «Speichern» wird er abgelegt." })]);
+    var ov = el("div", { "class": "overlay sites", id: "regiegen", role: "dialog", "aria-modal": "true", "aria-label": "Regie aus Rapporten" }, [sheet]);
+    function mondayVal() { var v = wk.value; if (!v) return null; return mondayOf(fromKey(v)); }
+    function box(checked, on) { var c = el("input", { type: "checkbox", "aria-label": "Einschliessen" }); c.checked = checked; c.style.cssText = "width:1.3em;height:1.3em;flex:none;min-height:0"; c.addEventListener("change", on); return c; }
+    function sums() { var t = 0; pers.forEach(function (p) { if (p.cb.checked) p.min.forEach(function (m) { t += m; }); }); tot.textContent = "Vorschau: Total " + hm(t) + " Std. (" + pers.filter(function (p) { return p.cb.checked; }).length + " Personen aus den Rapporten)"; }
+    function funcSel(def) { var s2 = el("select", { "aria-label": "Funktion" }, RG_FUNK.map(function (f) { return el("option", { value: f, text: f }); })); s2.value = def || "Maler"; s2.style.cssText = "flex:none;max-width:9.5em"; return s2; }
+    function draw() {
+      pbox.textContent = ""; lbox.textContent = ""; pers = []; lines = [];
+      var m0 = mondayVal(), days = [0, 1, 2, 3, 4].map(function (i) { return key(addDays(m0, i)); });
+      var heads = days.map(function (d) { var x = fromKey(d); return x.getDate() + "." + (x.getMonth() + 1); });
+      res.cols.forEach(function (em) {
+        var min = days.map(function (d) { var r = res.rows.filter(function (x) { return x.day === d; })[0]; return r && r.hours[em] ? Math.round(r.hours[em]) : 0; });
+        var cb = box(true, sums), fs = funcSel("Maler"), top = el("div", { style: "display:flex;align-items:center;gap:8px" }, [cb, el("b", { text: rpName(res, em), style: "flex:1;min-width:0;overflow-wrap:anywhere" }), fs]);
+        var hr = el("div", { style: "display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:4px" }, min.map(function (m, i) { return el("div", { style: "border:1px solid var(--line);border-radius:6px;text-align:center;padding:3px 0;font-size:.85em" }, [el("small", { text: heads[i], style: "display:block;color:var(--muted);font-size:.75em" }), el("span", { text: m ? hm(m) : "–" })]); }));
+        pbox.appendChild(el("div", { "class": "editbox" }, [top, hr])); pers.push({ cb: cb, fs: fs, name: rpName(res, em), min: min });
+      });
+      if (!res.cols.length) pbox.appendChild(el("div", { "class": "status", text: "In dieser Woche gibt es keine Stunden für diese Baustelle." }));
+      var add = el("button", { type: "button", "class": "btn", text: "+ Weitere Person von Hand" });
+      add.addEventListener("click", function () {
+        var nm = el("input", { type: "text", placeholder: "Name", "aria-label": "Name" }); nm.style.cssText = "flex:1;min-width:0"; var fs = funcSel("Maler"), cb = box(true, sums);
+        var row = el("div", { "class": "editbox" }, [el("div", { style: "display:flex;align-items:center;gap:8px" }, [cb, nm, fs]), el("div", { "class": "status", text: "Stunden trägst du im Regie-Rapport selbst ein." })]);
+        extra.push({ cb: cb, fs: fs, nm: nm }); pbox.insertBefore(row, add);
+      });
+      pbox.appendChild(add);
+      var n = 0;
+      res.rows.forEach(function (d) {
+        if (days.indexOf(d.day) < 0) return;
+        rpTextOf(res, d).split("\n").map(function (z) { return z.trim(); }).filter(Boolean).forEach(function (z) {
+          var cb = box(true, function () { }), x = fromKey(d.day), t = el("div", { style: "flex:1;min-width:0" }, [el("small", { text: x.getDate() + "." + (x.getMonth() + 1) + "  ", style: "color:var(--muted)" }), el("span", { text: z, style: "overflow-wrap:anywhere" })]);
+          lbox.appendChild(el("div", { style: "display:flex;gap:8px;align-items:flex-start;margin:6px 0" }, [cb, t])); lines.push({ cb: cb, z: z }); n++;
+        });
+      });
+      if (!n) lbox.appendChild(el("div", { "class": "status", text: "Für diese Woche wurden keine Baustellenrapporte geschrieben. Du kannst die Arbeiten im Regie-Rapport selbst eintragen." }));
+      sums();
+    }
+    async function load() {
+      var m0 = mondayVal(); if (!m0 || busy) return; if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; return; } if (!navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
+      busy = true; msg.textContent = "Einen Moment …"; msg.className = "status"; extra = [];
+      var a = key(m0), b = key(addDays(m0, 4));
+      try {
+        var w = await sb.rpc("firma_wochen", { p_von: a, p_bis: b }); if (w.error) { msg.textContent = sharedMsg(w.error); msg.className = "status bad"; busy = false; return; }
+        var r = await sb.rpc("firma_reports", { p_von: a, p_bis: b }); var reps = r.error ? [] : (r.data || []);
+        res = rpBuild(nr, a, b, w.data || [], reps); msg.textContent = ""; draw();
+      } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+      busy = false;
+    }
+    function shift(n) { var m0 = mondayVal() || mondayOf(new Date()); wk.value = key(addDays(m0, n * 7)); load(); }
+    prev.addEventListener("click", function () { shift(-1); }); next.addEventListener("click", function () { shift(1); }); wk.addEventListener("change", load);
+    go.addEventListener("click", function () {
+      var m0 = mondayVal(); if (!m0 || !res) return;
+      var rows = [], over = false;
+      pers.forEach(function (p) { if (!p.cb.checked) return; rows.push({ l: p.fs.value + ": " + p.name, h: p.min.map(function (m) { return m ? hm(m) : ""; }) }); });
+      extra.forEach(function (x) { if (x.cb.checked && x.nm.value.trim()) rows.push({ l: x.fs.value + ": " + x.nm.value.trim(), h: ["", "", "", "", ""] }); });
+      if (rows.length > RG_ROWS.length) { over = true; rows = rows.slice(0, RG_ROWS.length); }
+      var draft = { datum: "", auftraggeber: "", baustelle: nr + (info && info.n ? " " + info.n : ""), montag: key(m0), arbeiten: lines.filter(function (l) { return l.cb.checked; }).map(function (l) { return l.z; }).join("\n"), transporte: "", total: "", rows: rows, mat: [{ b: "Kleinmaterial", e: "", t: "" }] };
+      closeRegieGen(); openRegie({ nr: nr, draft: draft }); if (over) toast("Mehr als " + RG_ROWS.length + " Personen: nur die ersten " + RG_ROWS.length + " wurden übernommen.");
+    });
+    cl.addEventListener("click", closeRegieGen); ov.addEventListener("click", function (e) { if (e.target === ov) closeRegieGen(); });
+    document.body.appendChild(ov); load();
   }
   function openJahr() {
     closeJahr(); var yr = new Date().getFullYear(), R = null, saved = {};
