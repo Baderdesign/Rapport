@@ -647,9 +647,31 @@ h1 { color: #2c2166; }
     if (/fetch|network|load failed/i.test(m)) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
     return m || "Das hat nicht geklappt.";
   }
+  var abo = null; /* {firma, status: gratis|probe|aktiv|abgelaufen, bis, tage} */
+  function aboText() {
+    if (!abo || abo.status === "gratis" || abo.status === "aktiv" && !abo.bis) return "";
+    var b = abo.bis ? dmy(new Date(abo.bis + "T00:00:00")) : "";
+    if (abo.status === "probe") return "Testphase bis " + b + " (noch " + Math.max(0, abo.tage) + " Tag" + (abo.tage === 1 ? "" : "e") + ")";
+    if (abo.status === "aktiv") return "Abo bis " + b;
+    return "Abo abgelaufen am " + b;
+  }
+  function aboCheck() {
+    var old = $("abolock"); if (abo && abo.status === "abgelaufen") {
+      if (old) return;
+      var out = el("button", { type: "button", "class": "btn primary", text: "Abmelden" });
+      var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Abo abgelaufen" }), el("p", { text: "Das Abo der Firma «" + abo.firma + "» ist am " + dmy(new Date(abo.bis + "T00:00:00")) + " abgelaufen. Deine Daten bleiben erhalten. Bitte den Anbieter der App kontaktieren, um das Abo zu verlängern." }), el("div", { "class": "actions" }, [out])]);
+      var ov = el("div", { "class": "overlay sites", id: "abolock", role: "alertdialog", "aria-modal": "true" }, [sheet]); ov.style.zIndex = "90";
+      out.addEventListener("click", function () { var b = $("doLogout"); ov.remove(); if (b) b.click(); });
+      document.body.appendChild(ov); return;
+    }
+    if (old) old.remove();
+    if (abo && abo.status === "probe" && !aboCheck.shown) { var m = memberGet(); if (m && m.rolle === "admin") { aboCheck.shown = 1; toast(aboText()); } }
+  }
   async function pullSites() { /* Firma und Rolle des Kontos holen, dann die Baustellen der Firma */
     if (!sb || !user || !navigator.onLine) return;
     try {
+      try { var ab = await sb.rpc("abo_status"); if (!ab.error) { abo = (Array.isArray(ab.data) ? ab.data[0] : ab.data) || null; } } catch (e) { }
+      aboCheck();
       var m = await sb.rpc("my_member"), faErr = "";
       if (m.error) { sharedErr = sharedMsg(m.error); }
       else {
@@ -669,7 +691,7 @@ h1 { color: #2c2166; }
         }
       }
     } catch (e) { sharedErr = sharedMsg(e); }
-    renderSitesInfo(); renderAuth(); if (window.__sitesRedraw && $("sites")) window.__sitesRedraw();
+    renderSitesInfo(); renderAuth(); aboCheck(); if (window.__sitesRedraw && $("sites")) window.__sitesRedraw();
   }
   async function sharedWrite(add, del) {
     if (!sb || !user) return "Bitte zuerst anmelden.";
@@ -1435,7 +1457,7 @@ h1 { color: #2c2166; }
     }
     function draw() {
       var me = String((user && user.email) || "").toLowerCase(), m = memberGet();
-      info.textContent = m ? "Firma " + m.firma + "." : "";
+      info.textContent = m ? "Firma " + m.firma + "." + (aboText() ? " " + aboText() + "." : "") : "";
       cbox.textContent = ""; cbox.hidden = !code;
       if (code) {
         cbox.appendChild(el("div", { "class": "lbl", text: "Firmen-Code für neue Mitarbeiter" }));
@@ -2634,6 +2656,39 @@ function openReport(pre) {
     cl.addEventListener("click", closeM2); ov.addEventListener("click", function (e) { if (e.target === ov) closeM2(); });
     document.body.appendChild(ov); draw(); calc();
   }
+
+  function openAbos() {
+    var ex = $("abos"); if (ex) ex.remove();
+    var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" });
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Inhaber: Abos" }), el("p", { text: "Neue Firmen starten mit 14 Tagen Testphase. «Theo Fischer» ist gratis, bis du es hier änderst. Dein eigenes Konto bleibt immer gratis." }), msg, list, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "abos", role: "dialog", "aria-modal": "true", "aria-label": "Abos" }, [sheet]);
+    function shut() { ov.remove(); }
+    close.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+    document.body.appendChild(ov);
+    function lab(f) { var b = f.abo_bis ? dmy(new Date(f.abo_bis + "T00:00:00")) : ""; return f.status === "gratis" ? "Gratis" : f.status === "probe" ? "Testphase bis " + b : f.status === "aktiv" ? (b ? "Bezahlt bis " + b : "Aktiv, ohne Ende") : "ABGELAUFEN am " + b; }
+    async function set(f, gratis, bis, probe) {
+      var r = await sb.rpc("inhaber_abo_setzen", { p_firma: f.name, p_gratis: gratis, p_bis: bis, p_probe: probe });
+      if (r.error) { msg.textContent = sharedMsg(r.error); msg.className = "status bad"; return; } load();
+    }
+    async function load() {
+      msg.textContent = "Einen Moment …"; msg.className = "status";
+      try {
+        var r = await sb.rpc("inhaber_abo_liste");
+        if (r.error) { msg.textContent = /schema cache|does not exist|could not find/i.test(String(r.error.message)) ? "Die Abo-Funktion ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(r.error); msg.className = "status bad"; return; }
+        msg.textContent = ""; list.textContent = "";
+        (r.data || []).forEach(function (f) {
+          var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: f.name })); t.appendChild(el("small", { text: lab(f) + " · " + f.mitarbeiter + " Mitarbeiter" }));
+          var plus = el("button", { type: "button", "class": "btn", text: "+1 Monat" }), gr = el("button", { type: "button", "class": "btn", text: f.gratis ? "Gratis aus" : "Gratis" });
+          [plus, gr].forEach(function (b) { b.style.cssText = "min-height:0;height:2.2em"; });
+          plus.addEventListener("click", function () { var base = f.abo_bis && new Date(f.abo_bis + "T00:00:00") > new Date() ? new Date(f.abo_bis + "T00:00:00") : new Date(); base.setMonth(base.getMonth() + 1); set(f, false, key(base), false); });
+          gr.addEventListener("click", function () { if (f.gratis) set(f, false, key(addDays(new Date(), 14)), true); else set(f, true, null, false); });
+          list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [plus, gr])]));
+        });
+      } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+    }
+    load();
+  }
   function openJahr() {
     closeJahr(); var yr = new Date().getFullYear(), R = null, saved = {};
     var msg = el("div", { "class": "status", role: "status" }), yl = el("b", { text: String(yr), style: "min-width:3.5em;text-align:center" });
@@ -2775,7 +2830,7 @@ function openReport(pre) {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
     if (isAdmin()) { items.push(["Quadratmeter-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
-    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Gleitzeit pro Mitarbeiter", openGleit]); items.push(["Inhaber: Firma wechseln", openOwner]); }
+    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Gleitzeit pro Mitarbeiter", openGleit]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
