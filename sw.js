@@ -1,5 +1,5 @@
 /* Service Worker: macht die App installierbar und startet sie auch ohne Netz. Liegt im selben Ordner wie index.html. */
-var CACHE = "wochenrapport-v3-41";
+var CACHE = "wochenrapport-v3-42";
 var CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 var LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",

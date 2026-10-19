@@ -1676,6 +1676,11 @@ h1 { color: #2c2166; }
   }
   function toast(t) { var o = document.getElementById("toast"); if (o) o.remove(); o = el("div", { id: "toast", role: "status", text: t }); document.body.appendChild(o); setTimeout(function () { if (o.parentNode) o.remove(); }, 3200); }
   function closeReport() { var o = $("report"); if (o) o.remove(); }
+  function rowTap(r, fn) {
+  r.setAttribute("role", "button"); r.tabIndex = 0;
+  r.addEventListener("click", fn);
+  r.addEventListener("keydown", function (e) { if (e.target === r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); fn(); } });
+}
   function tapRow(t, fn) {
   var r = el("div", { "class": "srow tap", role: "button", tabindex: "0" }, [t]);
   r.addEventListener("click", fn);
@@ -2485,7 +2490,7 @@ function openReport(pre) {
           var nm = el("span", { text: (d.ordner === "regie" ? "Regie · " : "Rapport · ") + d.name + " · " + dmy(new Date(d.created)) }); nm.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
           var del = el("button", { type: "button", "class": "btn", text: "Löschen" });
           var row = el("div", { "class": "srow tap", role: "listitem" }, [nm, del]);
-          tapRow(row, function () { dateiOpen(d); });
+          rowTap(row, function () { dateiOpen(d); });
           del.addEventListener("click", async function (e) {
             e.stopPropagation(); if (!confirm("«" + d.name + "» wirklich löschen?")) return;
             var q = await sb.rpc("datei_delete", { p_id: d.id }); if (q.error) { say(sharedMsg(q.error), "bad"); return; } show();
@@ -2610,11 +2615,23 @@ function openReport(pre) {
       saveB.addEventListener("click", function () {
         var l = listGet(), t = (S.titel || "").trim() || ("Ausmass " + dmy(new Date())), ex = l.filter(function (x) { return x.t === t; })[0];
         var rec = { t: t, d: new Date().toISOString(), data: JSON.parse(JSON.stringify(S)) }; if (ex) l[l.indexOf(ex)] = rec; else l.unshift(rec);
-        lsSet(LK, JSON.stringify(l.slice(0, 50))); toast("Gespeichert: " + t); drawSaved();
+        lsSet(LK, JSON.stringify(l.slice(0, 50))); drawSaved();
+        remote("ausmass_save", { p_titel: t, p_data: rec.data }).then(function (m) { toast(m === "" ? "Gespeichert: " + t + " (auf allen Geräten)" : "Gespeichert: " + t + " (nur auf diesem Gerät)"); });
       });
       newB.addEventListener("click", function () { if (!confirm("Neues, leeres Ausmass beginnen? Das aktuelle bleibt nur erhalten, wenn du es vorher gespeichert hast.")) return; S = { rooms: [mkRoom(1, S.hoehe || "2,50")], tuer: S.tuer, fenster: S.fenster, hoehe: S.hoehe, titel: "" }; save(); draw(); calc(); });
       wrap.appendChild(el("div", { "class": "actions" }, [pdfB, saveB, newB]));
       saved = el("div", {}); wrap.appendChild(saved); drawSaved();
+    }
+    async function remote(fn, args) { try { var r = await sb.rpc(fn, args); return r.error ? String(r.error.message || "Fehler") : ""; } catch (e) { return String(e && e.message || e); } }
+    async function pull() {
+      try {
+        var r = await sb.rpc("ausmass_list"); if (r.error || !Array.isArray(r.data)) return;
+        var rem = r.data, have = {}; rem.forEach(function (x) { have[x.titel] = 1; });
+        var MIG = "wr2:m2mig";
+        if (!lsGet(MIG)) { var loc = listGet(); for (var i = 0; i < loc.length; i++) { if (!have[loc[i].t]) { var m = await remote("ausmass_save", { p_titel: loc[i].t, p_data: loc[i].data }); if (m === "") { rem.push({ titel: loc[i].t, data: loc[i].data, updated: loc[i].d }); have[loc[i].t] = 1; } } } lsSet(MIG, "1"); }
+        lsSet(LK, JSON.stringify(rem.map(function (x) { return { t: x.titel, d: x.updated, data: x.data }; }).slice(0, 200)));
+        if (saved && saved.isConnected) drawSaved();
+      } catch (e) { }
     }
     function listGet() { try { var a = JSON.parse(lsGet(LK) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
     function drawSaved() {
@@ -2625,8 +2642,8 @@ function openReport(pre) {
         var d = el("button", { type: "button", "class": "btn", text: "Löschen" }); d.style.cssText = "min-height:0;height:2.2em";
         var tx = el("span", { text: x.t + " · " + dmy(new Date(x.d)) }); tx.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
         var row = el("div", { "class": "srow tap", role: "listitem" }, [tx, d]);
-        tapRow(row, function () { S = JSON.parse(JSON.stringify(x.data)); save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
-        d.addEventListener("click", function (e) { e.stopPropagation(); if (!confirm("«" + x.t + "» löschen?")) return; var q = listGet(); q.splice(i, 1); lsSet(LK, JSON.stringify(q)); drawSaved(); });
+        rowTap(row, function () { S = JSON.parse(JSON.stringify(x.data)); save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
+        d.addEventListener("click", function (e) { e.stopPropagation(); if (!confirm("«" + x.t + "» löschen?")) return; var q = listGet(); q.splice(i, 1); lsSet(LK, JSON.stringify(q)); drawSaved(); remote("ausmass_delete", { p_titel: x.t }); });
         ls.appendChild(row);
       });
       saved.appendChild(ls);
@@ -2657,7 +2674,7 @@ function openReport(pre) {
       return doc;
     }
     cl.addEventListener("click", closeM2); ov.addEventListener("click", function (e) { if (e.target === ov) closeM2(); });
-    document.body.appendChild(ov); draw(); calc();
+    document.body.appendChild(ov); draw(); calc(); pull();
   }
 
   function openAbos() {
