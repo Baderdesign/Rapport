@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de"><head>
+<html lang="de"><head><script>try{var _t=localStorage.getItem("wr_theme");if(_t==="light"||_t==="dark")document.documentElement.setAttribute("data-theme",_t);}catch(e){}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
@@ -3110,6 +3110,12 @@ function openReport(pre) {
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
+    var th = lsGet("wr_theme") || "auto", tb = el("div", { "class": "row-btns" }), tl = el("p", { text: "Darstellung", style: "margin:14px 0 6px;font-weight:600" });
+    [["auto", "Automatisch"], ["light", "Hell"], ["dark", "Dunkel"]].forEach(function (o) {
+      var b = el("button", { type: "button", "class": "btn", text: o[0] === th ? "✓ " + o[1] : o[1], style: "flex:1;margin:0 3px" });
+      b.addEventListener("click", function () { lsSet("wr_theme", o[0]); if (o[0] === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", o[0]); closeMenu(); });
+      tb.appendChild(b); });
+    tb.style.display = "flex"; box.appendChild(tl); box.appendChild(tb);
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMenu(); });
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
