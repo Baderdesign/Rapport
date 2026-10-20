@@ -1236,7 +1236,6 @@ h1 { color: #2c2166; }
   if (window.visualViewport) window.visualViewport.addEventListener("resize", function () { if (!sug.hidden && sugInp) fitSug(sugInp); });
   function showSug(inp) {
     var q = inp.value;
-    if ((inp.dataset.k === "obj" || inp.dataset.k === "obj2") && !q.trim()) { hideSug(); return; }
     var list = sitesFind(q, 40);
     if (!list.length) { hideSug(); return; }
     sug.textContent = "";
@@ -1271,7 +1270,7 @@ h1 { color: #2c2166; }
   function isSiteInput(i) { return i && i.dataset && (i.dataset.k === "nr" || i.dataset.k === "obj" || i.dataset.k === "obj2"); }
   $("days").addEventListener("focusin", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); else hideSug(); });
   $("days").addEventListener("input", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); });
-  $("days").addEventListener("keydown", function (ev) { if (ev.key === "Enter" && isSiteInput(ev.target) && !sug.hidden) { var f = sug.querySelector(".sug-i"); if (f) { ev.preventDefault(); f.click(); } } });
+  $("days").addEventListener("keydown", function (ev) { if (ev.key === "Enter" && isSiteInput(ev.target) && !sug.hidden) { if (ev.target.dataset.k === "obj2") { hideSug(); return; } var f = sug.querySelector(".sug-i"); if (f) { ev.preventDefault(); f.click(); } } });
   $("days").addEventListener("focusout", function (ev) {
     var i = ev.target, row = i.closest ? i.closest(".row") : null; if (!row || !isSiteInput(i)) return;
     clearTimeout(sugTimer); sugTimer = setTimeout(hideSug, 220);
