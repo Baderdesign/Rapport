@@ -377,8 +377,19 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 .sitesbar .status { margin: 0; }
 .gated > :not(.top):not(.auth) { display: none !important; }
 .gated .weeknav, .gated .name, .gated #acctBtn, .gated .sync { display: none !important; }
-.sug { position: absolute; z-index: 9; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); overflow-y: auto; max-height: 55vh; }
-.sug-i { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; cursor: pointer; color: var(--ink); font: inherit; line-height: 1.3; }
+.sug, .slist.pick { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-snap-type: y proximity; max-height: min(330px, 48vh);
+  background: linear-gradient(var(--surface) 30%, rgba(0,0,0,0)), linear-gradient(rgba(0,0,0,0), var(--surface) 70%) 0 100%, radial-gradient(farthest-side at 50% 0, rgba(0,0,0,.22), rgba(0,0,0,0)), radial-gradient(farthest-side at 50% 100%, rgba(0,0,0,.22), rgba(0,0,0,0)) 0 100%;
+  background-color: var(--surface); background-repeat: no-repeat; background-size: 100% 36px, 100% 36px, 100% 12px, 100% 12px; background-attachment: local, local, scroll, scroll; }
+.sug-i, .slist.pick .srow { scroll-snap-align: start; }
+.wa { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .wa { display: block; position: sticky; width: 100%; height: 22px; border: 0; padding: 0; font-size: 11px; line-height: 22px; text-align: center; color: var(--ink); background: var(--surface); cursor: pointer; z-index: 3; }
+  .wa.up { top: 0; margin-bottom: -22px; border-bottom: 1px solid var(--line); }
+  .wa.dn { bottom: 0; margin-top: -22px; border-top: 1px solid var(--line); }
+  .wa:hover { background: var(--surface-2); }
+}
+.sug { position: absolute; z-index: 9; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); overflow-y: auto; }
+.sug-i { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 11px 12px; min-height: 46px; cursor: pointer; color: var(--ink); font: inherit; line-height: 1.3; }
 .sug-i:last-child { border-bottom: 0; }
 .sug-i:hover, .sug-i:focus-visible { background: var(--surface-2); }
 .sug-i b { font-variant-numeric: tabular-nums; margin-right: 6px; }
@@ -1185,13 +1196,47 @@ h1 { color: #2c2166; }
     out.sort(function (a, b) { return (String(a.nr).indexOf(t[0]) === 0 ? 0 : 1) - (String(b.nr).indexOf(t[0]) === 0 ? 0 : 1); });
     return out.slice(0, limit);
   }
-  var sug = el("div", { "class": "sug", id: "sug", role: "listbox", hidden: "" }), sugRow = null, sugTimer = null;
+  /* Such-Liste als kleines Fenster (ca. 7 Zeilen), das beim Tippen über der Tastatur bleibt */
+  function fitBox(inp, box) {
+    var sh = inp.closest ? inp.closest(".sheet") : null;
+    if (box.hidden) { box._f = 0; if (sh) sh.style.paddingBottom = ""; return; }
+    if (box._f) return; box._f = 1;
+    if (sh) sh.style.paddingBottom = "360px";
+    setTimeout(function () { try { inp.scrollIntoView({ block: "start" }); } catch (e) { } }, 80);
+  }
+  /* kleine Pfeile oben/unten für die Maus (nur am Laptop) */
+  function updArrows(box) {
+    var u = box.querySelector(".wa.up"), d = box.querySelector(".wa.dn"); if (!u || !d) return;
+    u.style.visibility = box.scrollTop > 2 ? "visible" : "hidden";
+    d.style.visibility = box.scrollTop + box.clientHeight < box.scrollHeight - 2 ? "visible" : "hidden";
+  }
+  function arrows(box) {
+    if (!window.matchMedia || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    function mk(cls, txt, label, dir) {
+      var b = el("button", { type: "button", "class": "wa " + cls, "aria-label": label, tabindex: "-1", text: txt }), t = null;
+      function step() { box.scrollBy(0, dir * 44); }
+      b.addEventListener("mousedown", function (e) { e.preventDefault(); step(); clearInterval(t); t = setInterval(step, 120); });
+      ["mouseup", "mouseleave"].forEach(function (n) { b.addEventListener(n, function () { clearInterval(t); }); });
+      return b;
+    }
+    box.insertBefore(mk("up", "▲", "Nach oben", -1), box.firstChild); box.appendChild(mk("dn", "▼", "Nach unten", 1));
+    if (!box._wa) { box._wa = 1; box.addEventListener("scroll", function () { updArrows(box); }); }
+    updArrows(box); setTimeout(function () { updArrows(box); }, 0);
+  }
+  var sug = el("div", { "class": "sug", id: "sug", role: "listbox", hidden: "" }), sugRow = null, sugTimer = null, sugInp = null;
   document.body.appendChild(sug);
-  function hideSug() { sug.hidden = true; }
+  function hideSug() { sug.hidden = true; sugInp = null; document.body.style.paddingBottom = ""; }
+  function fitSug(inp) {
+    var vv = window.visualViewport, avail = vv ? vv.height : window.innerHeight, r = inp.getBoundingClientRect(), top = 60;
+    sug.style.maxHeight = Math.max(150, Math.min(330, avail - top - r.height - 16)) + "px";
+    document.body.style.paddingBottom = "380px";
+    if (Math.abs(r.top - top) > 8) window.scrollBy(0, r.top - top);
+  }
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", function () { if (!sug.hidden && sugInp) fitSug(sugInp); });
   function showSug(inp) {
     var q = inp.value;
     if (inp.dataset.k === "obj" && !q.trim()) { hideSug(); return; }
-    var list = sitesFind(q, 8);
+    var list = sitesFind(q, 40);
     if (!list.length) { hideSug(); return; }
     sug.textContent = "";
     list.forEach(function (x) {
@@ -1205,7 +1250,7 @@ h1 { color: #2c2166; }
     sug.style.width = w + "px";
     sug.style.left = (Math.max(8, Math.min(r.left, vw - w - 8)) + window.pageXOffset) + "px";
     sug.style.top = (r.bottom + window.pageYOffset + 3) + "px";
-    sugRow = inp.closest(".row"); sug.hidden = false;
+    sugRow = inp.closest(".row"); sug.hidden = false; sug.scrollTop = 0; sugInp = inp; fitSug(inp); arrows(sug);
   }
   function fillRow(row, x) {
     var e = state.days[+row.dataset.d][+row.dataset.r];
@@ -1225,6 +1270,7 @@ h1 { color: #2c2166; }
   function isSiteInput(i) { return i && i.dataset && (i.dataset.k === "nr" || i.dataset.k === "obj"); }
   $("days").addEventListener("focusin", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); else hideSug(); });
   $("days").addEventListener("input", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); });
+  $("days").addEventListener("keydown", function (ev) { if (ev.key === "Enter" && isSiteInput(ev.target) && !sug.hidden) { var f = sug.querySelector(".sug-i"); if (f) { ev.preventDefault(); f.click(); } } });
   $("days").addEventListener("focusout", function (ev) {
     var i = ev.target, row = i.closest ? i.closest(".row") : null; if (!row || !isSiteInput(i)) return;
     clearTimeout(sugTimer); sugTimer = setTimeout(hideSug, 220);
@@ -1691,15 +1737,16 @@ function openReport(pre) {
     closeReport(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); hideSug();
     pre = pre || {};
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
-    var dl = el("div", { "class": "slist", role: "list" }); dl.hidden = true;
+    var dl = el("div", { "class": "slist pick", role: "list" }); dl.hidden = true;
     function suggest() {
-      var q = inp.value.trim(), items = sitesFind(q, 6); dl.textContent = "";
-      if (q && siteByNr(curNr()) && items.length === 1 && items[0].nr === curNr()) { dl.hidden = true; return; }
-      dl.hidden = !items.length;
+      var q = inp.value.trim(), items = sitesFind(q, 40); dl.textContent = ""; dl.scrollTop = 0;
+      if (q && siteByNr(curNr()) && items.length === 1 && items[0].nr === curNr()) { dl.hidden = true; fitBox(inp, dl); return; }
+      dl.hidden = !items.length; fitBox(inp, dl);
       items.forEach(function (x) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
-        dl.appendChild(tapRow(t, function () { inp.value = x.nr; dl.hidden = true; refresh(); }));
+        dl.appendChild(tapRow(t, function () { inp.value = x.nr; dl.hidden = true; fitBox(inp, dl); refresh(); }));
       });
+      arrows(dl);
     }
     var nm = el("div", { "class": "status" });
     var dt = el("input", { type: "date", "aria-label": "Datum" }); dt.value = pre.day || key(new Date());
@@ -1743,7 +1790,7 @@ function openReport(pre) {
       el("div", { "class": "lbl", text: "Meine letzten Rapporte" }), mine, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "report", role: "dialog", "aria-modal": "true", "aria-label": "Baustellenrapport" }, [sheet]);
     inp.addEventListener("input", function () { suggest(); if (siteByNr(curNr())) refresh(); else { nm.textContent = ""; hrs.textContent = ""; } });
-    inp.addEventListener("focus", suggest);
+    inp.addEventListener("focus", function () { dl._f = 0; suggest(); });
     dt.addEventListener("change", refresh);
     save.addEventListener("click", async function () {
       var nr = curNr(), day = dt.value, body = ta.value.trim();
@@ -1891,7 +1938,7 @@ function openReport(pre) {
     pre = (pre && pre.nr) ? pre : {};
     closeColors(); closeMenu(); closeSites(); closeMembers(); if (!pre.nr) closeBilanz(); closeReport(); hideSug();
     var q = el("input", { type: "text", placeholder: "Baustelle suchen (Nummer oder Name)", autocomplete: "off", "aria-label": "Baustelle suchen" });
-    var list = el("div", { "class": "slist", role: "list" }), card = el("div", { "class": "editbox" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var list = el("div", { "class": "slist pick", role: "list" }), card = el("div", { "class": "editbox" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var sel = null;
     function show(x) {
       sel = x; card.textContent = ""; card.hidden = !x; if (!x) return;
@@ -1901,17 +1948,18 @@ function openReport(pre) {
       card.appendChild(x.f ? el("div", { style: "white-space:pre-wrap;line-height:1.55", text: x.f }) : el("div", { "class": "status", text: "Noch nichts hinterlegt. Das trägt der Administrator bei der Baustelle ein." }));
     }
     function draw() {
-      var items = sitesFind(q.value, 8); list.textContent = "";
+      var items = sitesFind(q.value, 40); list.textContent = ""; list.scrollTop = 0;
       var one = q.value.trim() && items.length === 1;
-      list.hidden = !items.length || !!(sel && one && items[0].nr === sel.nr);
+      list.hidden = !items.length || !!(sel && one && items[0].nr === sel.nr); fitBox(q, list);
       items.forEach(function (x) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
-        list.appendChild(tapRow(t, function () { q.value = x.nr + " " + (x.n || ""); show(x); list.hidden = true; }));
+        list.appendChild(tapRow(t, function () { q.value = x.nr + " " + (x.n || ""); show(x); list.hidden = true; fitBox(q, list); }));
       });
+      arrows(list);
       if (one && !sel) show(items[0]); else if (!q.value.trim()) show(null);
     }
     q.addEventListener("input", function () { sel = null; draw(); });
-    q.addEventListener("focus", function () { if (!sel) draw(); });
+    q.addEventListener("focus", function () { list._f = 0; if (!sel) draw(); });
     close.addEventListener("click", closeColors);
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Farbtöne & Hersteller" }), el("p", { text: "Suche die Baustelle. Darunter steht, was der Administrator dazu hinterlegt hat." }), q, list, card, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "colors", role: "dialog", "aria-modal": "true", "aria-label": "Farbtöne und Hersteller" }, [sheet]);
@@ -1998,7 +2046,7 @@ function openReport(pre) {
     closeRegie(); closeMenu(); closeSites(); closeMembers(); if (!pre.nr) closeBilanz(); closeRapport(); closeReport(); closeColors(); hideSug();
     var site = "", rows = [], editing = null; /* editing: {nr|null, d} */
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
-    var sug = el("div", { "class": "slist", role: "list" }); sug.hidden = true;
+    var sug = el("div", { "class": "slist pick", role: "list" }); sug.hidden = true;
     var nm = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" }), msg = el("div", { "class": "status", role: "status" });
     var newBtn = el("button", { type: "button", "class": "btn primary", text: "+ Neuer Regie-Rapport" }); newBtn.hidden = true;
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
@@ -2011,13 +2059,14 @@ function openReport(pre) {
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     function curNr() { var m = /^(\S+)/.exec(inp.value.trim()); return m ? m[1] : ""; }
     function suggest() {
-      var q = inp.value.trim(), items = sitesFind(q, 6); sug.textContent = "";
-      if (q && items.length === 1 && items[0].nr === curNr() && site === items[0].nr) { sug.hidden = true; return; }
-      sug.hidden = !items.length;
+      var q = inp.value.trim(), items = sitesFind(q, 40); sug.textContent = ""; sug.scrollTop = 0;
+      if (q && items.length === 1 && items[0].nr === curNr() && site === items[0].nr) { sug.hidden = true; fitBox(inp, sug); return; }
+      sug.hidden = !items.length; fitBox(inp, sug);
       items.forEach(function (x) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || ""));
-        sug.appendChild(tapRow(t, function () { inp.value = x.nr; sug.hidden = true; pick(x.nr); }));
+        sug.appendChild(tapRow(t, function () { inp.value = x.nr; sug.hidden = true; fitBox(inp, sug); pick(x.nr); }));
       });
+      arrows(sug);
     }
     async function pick(nr) {
       site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : "";
@@ -2120,7 +2169,7 @@ function openReport(pre) {
     newBtn.addEventListener("click", function () { if (site) edit(null, null); });
     genBtn.addEventListener("click", function () { if (site) openRegieGen(site); });
     inp.addEventListener("input", function () { suggest(); var nr = curNr(); if (siteByNr(nr) && nr !== site) pick(nr); else if (!siteByNr(nr)) { site = ""; nm.textContent = ""; list.textContent = ""; newBtn.hidden = true; say(""); } });
-    inp.addEventListener("focus", suggest);
+    inp.addEventListener("focus", function () { sug._f = 0; suggest(); });
     close.addEventListener("click", closeRegie);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeRegie(); });
     document.body.appendChild(ov);
