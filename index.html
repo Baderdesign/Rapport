@@ -640,7 +640,8 @@ h1 { color: #2c2166; }
   function sharedOn() { return !!user && !!memberGet() && !!sharedGet(); } /* angemeldet, einer Firma zugeordnet, Firmenliste geladen */
   function canEditSites() { var m = memberGet(); if (user && noFirma) return false; return (user && m) ? (m.rolle === "admin" && sharedOn()) : true; } /* ohne Firma gilt nur die eigene Liste auf diesem Gerät */
   function isAdmin() { var m = memberGet(); return !!(user && m && m.rolle === "admin"); }
-  function roleText(m) { return m ? "Firma " + m.firma + " · " + (m.rolle === "admin" ? "Administrator" : "Mitarbeiter") : ""; }
+  function roleLbl(r) { return r === "admin" ? "Administrator" : (r === "temporaer" ? "Temporär" : "Mitarbeiter"); }
+  function roleText(m) { return m ? "Firma " + m.firma + " · " + roleLbl(m.rolle) : ""; }
   function byNr(a) { return a.sort(function (p, q) { return String(q.nr).localeCompare(String(p.nr), "de", { numeric: true }); }); }
   function localSites() { var o = sitesGet(); return Object.keys(o.s).map(function (k) { return o.s[k]; }).filter(function (x) { return !x.d; }); }
   function sitesList() {
@@ -651,6 +652,7 @@ h1 { color: #2c2166; }
   function sharedMsg(er) {
     var m = String((er && er.message) || er || "");
     if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
+    if (/ungültige rolle|members_rolle_check/i.test(m)) return "Die Rolle «Temporär» ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/firma_wochen/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Auswertung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/firma_code|member_passwort|firma_anlegen|code_gueltig|firma_frei/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Firmen-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/members_list|member_set|member_remove|pending_delete/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
@@ -1471,7 +1473,7 @@ h1 { color: #2c2166; }
     var msg = el("div", { "class": "status", role: "status" });
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     var em = el("input", { type: "email", inputmode: "email", autocapitalize: "none", autocomplete: "off", placeholder: "E-Mail-Adresse des Mitarbeiters", "aria-label": "E-Mail-Adresse" });
-    var role = el("select", { "aria-label": "Rolle" }, [el("option", { value: "mitarbeiter", text: "Mitarbeiter (darf suchen)" }), el("option", { value: "admin", text: "Administrator (darf auch hinzufügen)" })]);
+    var role = el("select", { "aria-label": "Rolle" }, [el("option", { value: "mitarbeiter", text: "Mitarbeiter (darf suchen)" }), el("option", { value: "temporaer", text: "Temporär (wie Mitarbeiter, ohne Gleitzeit)" }), el("option", { value: "admin", text: "Administrator (darf auch hinzufügen)" })]);
     var add = el("button", { type: "button", "class": "btn primary", text: "Hinzufügen" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var form = el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), em, role, el("div", { "class": "actions" }, [add])]);
@@ -1539,11 +1541,12 @@ h1 { color: #2c2166; }
           var d = p.created ? new Date(p.created) : null;
           var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: p.email }));
           t.appendChild(el("small", { text: (d ? "registriert am " + dmy(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) : "") + (p.confirmed ? "" : " · E-Mail noch nicht bestätigt") }));
-          var b = el("button", { type: "button", text: "Als Mitarbeiter aufnehmen" });
+          var b = el("button", { type: "button", text: "Als Mitarbeiter aufnehmen" }), bt = el("button", { type: "button", text: "Als Temporär aufnehmen" });
           b.addEventListener("click", function () { run(function () { return call("member_set", { p_email: p.email, p_rolle: "mitarbeiter" }); }, p.email + " ist jetzt Mitarbeiter."); });
+          bt.addEventListener("click", function () { run(function () { return call("member_set", { p_email: p.email, p_rolle: "temporaer" }); }, p.email + " ist jetzt Temporär."); });
           var x = el("button", { type: "button", "class": "x", text: "Löschen" });
           x.addEventListener("click", function () { if (confirm(p.email + " löschen? Das Konto wird entfernt. Die Person kann sich später neu registrieren.")) run(function () { return call("pending_delete", { p_email: p.email }); }, "Gelöscht: " + p.email); });
-          pbox.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [b, x])]));
+          pbox.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [b, bt, x])]));
         });
       }
       cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen");
@@ -1551,11 +1554,16 @@ h1 { color: #2c2166; }
       rows.forEach(function (r) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.email }));
         var prot = r.email === "davidbader@gmx.ch";
-        t.appendChild(el("small", { text: (r.rolle === "admin" ? "Administrator" : "Mitarbeiter") + (r.email === me ? " · du" : "") + (prot ? " · geschützt" : "") }));
+        t.appendChild(el("small", { text: roleLbl(r.rolle) + (r.email === me ? " · du" : "") + (prot ? " · geschützt" : "") }));
         var kids = [t];
         if (r.email !== me && !prot) {
           var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
           tog.addEventListener("click", function () { run(function () { return call("member_set", { p_email: r.email, p_rolle: r.rolle === "admin" ? "mitarbeiter" : "admin" }); }, r.email + " ist jetzt " + (r.rolle === "admin" ? "Mitarbeiter" : "Administrator") + "."); });
+          var tmp = null;
+          if (r.rolle !== "admin") {
+            tmp = el("button", { type: "button", text: r.rolle === "temporaer" ? "Zu Mitarbeiter" : "Zu Temporär" });
+            tmp.addEventListener("click", function () { var nr = r.rolle === "temporaer" ? "mitarbeiter" : "temporaer"; run(function () { return call("member_set", { p_email: r.email, p_rolle: nr }); }, r.email + " ist jetzt " + roleLbl(nr) + "."); });
+          }
           del.addEventListener("click", function () { if (confirm(r.email + " entfernen? Die Person sieht danach keine Baustellen mehr.")) run(function () { return call("member_remove", { p_email: r.email }); }, "Entfernt: " + r.email); });
           var pwb = el("button", { type: "button", text: "Neues Passwort" });
           pwb.addEventListener("click", function () {
@@ -1564,7 +1572,7 @@ h1 { color: #2c2166; }
             if (v.length < 6) { say("Das Passwort braucht mindestens 6 Zeichen.", "bad"); return; }
             run(function () { return call("member_passwort", { p_email: r.email, p_pw: v }); }, "Neues Passwort für " + r.email + " gesetzt. Gib es der Person weiter. Sie kann es danach selbst ändern (Konto → Passwort ändern).");
           });
-          kids.push(tog, pwb, del);
+          kids.push(tog); if (tmp) kids.push(tmp); kids.push(pwb, del);
         }
         list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, kids.length > 1 ? [kids[0], el("div", { "class": "acts" }, kids.slice(1))] : kids));
       });
@@ -2458,7 +2466,7 @@ function openReport(pre) {
     var mi = el("input", { type: "month", "aria-label": "Monat" }); mi.value = now.getFullYear() + "-" + pad(now.getMonth() + 1);
     var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" }); list.style.maxHeight = "58vh";
-    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Gleitzeit pro Mitarbeiter" }), el("p", { text: "Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten." }), mi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Gleitzeit pro Mitarbeiter" }), el("p", { text: "Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat." }), mi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
     var ov = el("div", { "class": "overlay sites", id: "gleit", role: "dialog", "aria-modal": "true", "aria-label": "Gleitzeit pro Mitarbeiter" }, [sheet]);
     function line(l, v, b) { return el("div", { style: "display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums" + (b ? ";font-weight:700" : "") }, [el("span", { text: l }), el("span", { text: v })]); }
     async function load() {
@@ -2470,14 +2478,24 @@ function openReport(pre) {
         var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(new Date(y, 0, 1))), p_bis: key(new Date(y, mo + 1, 0)) });
         if (r.error) { msg.textContent = sharedMsg(r.error); return; }
         msg.textContent = ""; list.textContent = "";
-        var res = gleitCalc(r.data || [], y, mo);
-        if (!res.length) list.appendChild(el("div", { "class": "status", text: "Keine Daten." }));
+        var tmpMail = {};
+        try { var ml = await sb.rpc("members_list"); if (!ml.error && Array.isArray(ml.data)) ml.data.forEach(function (x) { if (x.rolle === "temporaer") tmpMail[String(x.email).toLowerCase()] = 1; }); } catch (e) { }
+        var allP = gleitCalc(r.data || [], y, mo), res = allP.filter(function (o) { return !tmpMail[o.em]; }), tmps = allP.filter(function (o) { return tmpMail[o.em]; });
+        if (!res.length && !tmps.length) list.appendChild(el("div", { "class": "status", text: "Keine Daten." }));
         res.forEach(function (o) {
           var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
           if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." }));
           else [["Gearbeitet", hm(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hm(o.abs)], ["Zuschläge", hm(o.zus)], ["Feiertage bezahlt", hm(o.fth)], ["Ist-Konto", hm(o.ist), 1], ["Soll-Konto", hm(o.soll), 1], ["Saldo Monat +/−", hmS(o.saldo), 1], ["Saldo Jahr kumuliert", hmS(o.kum), 1]].forEach(function (x) { c.appendChild(line(x[0], x[1], x[2])); });
           list.appendChild(c);
         });
+        if (tmps.length) { /* Temporäre: nur die Gesamtzeit im Monat, ohne Soll, Saldo und Gleitzeit */
+          list.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Temporäre · nur Gesamtzeit im Monat" }));
+          tmps.forEach(function (o) {
+            var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
+            if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." })); else c.appendChild(line("Gesamtzeit im Monat", hm(o.work), 1));
+            list.appendChild(c);
+          });
+        }
       } catch (e) { msg.textContent = sharedMsg(e); } finally { busy = false; }
     }
     go.addEventListener("click", load); mi.addEventListener("change", load); cl.addEventListener("click", closeGleit); ov.addEventListener("click", function (e) { if (e.target === ov) closeGleit(); });
