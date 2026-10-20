@@ -574,16 +574,28 @@ h1 { color: #2c2166; }
   function num(s) { var v = parseFloat(String(s == null ? "" : s).replace(",", ".")); return isFinite(v) && v > 0 ? v : 0; }
   function hm(min) { min = Math.round(min); return Math.floor(min / 60) + "." + pad(min % 60); }
   function fmtAbs(v) { return v ? String(Math.round(v * 100) / 100).replace(".", ",") : ""; }
-  function calcRow(e) {
+  function effs(rows) { /* Überschneidungen: jede Minute zählt nur einmal, und zwar für den kürzesten (genauesten) Eintrag */
+    var R = rows.map(function (e) { var a = tmin(e.von), b = tmin(e.bis); return (a !== null && b !== null && b > a) ? { a: a, b: b } : null; });
+    var out = rows.map(function () { return { gross: 0, night: 0 }; }), pts = [];
+    R.forEach(function (x) { if (x) { pts.push(x.a, x.b); } });
+    pts = pts.filter(function (v, i) { return pts.indexOf(v) === i; }).sort(function (u, v) { return u - v; });
+    for (var i = 0; i + 1 < pts.length; i++) {
+      var p = pts[i], q = pts[i + 1], best = -1;
+      R.forEach(function (x, k) { if (x && x.a <= p && x.b >= q && (best < 0 || (x.b - x.a) < (R[best].b - R[best].a))) best = k; });
+      if (best >= 0) { out[best].gross += q - p; out[best].night += ovl(p, q, 0, 360) + ovl(p, q, 1200, 1440); }
+    }
+    return out;
+  }
+  function calcRow(e, ef) {
     var a = tmin(e.von), b = tmin(e.bis), gross = 0, work = 0;
     var invalid = !!((e.von && a === null) || (e.bis && b === null) || (a !== null && b !== null && b <= a));
-    if (a !== null && b !== null && b > a) { gross = b - a; work = Math.max(0, gross - num(e.pause)); }
+    if (a !== null && b !== null && b > a) { gross = ef ? ef.gross : b - a; work = Math.max(0, gross - num(e.pause)); }
     var hin = num(e.hin), zur = num(e.zur);
     return { gross: gross, work: work, pause: num(e.pause), hin: hin, zur: zur, reise: hin + zur, abs: num(e.abs), invalid: invalid, hasTime: a !== null && b !== null && !invalid, von: a, bis: b };
   }
   function dayStats(rows) {
     var s = { gross: 0, work: 0, pause: 0, hin: 0, zur: 0, reise: 0, abs: 0 };
-    rows.forEach(function (e) { var c = calcRow(e); s.gross += c.gross; s.work += c.work; s.pause += c.pause; s.hin += c.hin; s.zur += c.zur; s.reise += c.reise; s.abs += c.abs; });
+    var ef = effs(rows); rows.forEach(function (e, i) { var c = calcRow(e, ef[i]); s.gross += c.gross; s.work += c.work; s.pause += c.pause; s.hin += c.hin; s.zur += c.zur; s.reise += c.reise; s.abs += c.abs; });
     s.tara = Math.min(s.reise, TARA, s.work); s.net = s.work - s.tara;
     return s;
   }
@@ -959,8 +971,9 @@ h1 { color: #2c2166; }
     state.days.forEach(function (rows, di) {
       var ds = dayStats(rows);
       if (absDay(rows)) { secs[di].querySelector("[data-dt]").innerHTML = ds.abs ? "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : ""; return; }
+      var ef = effs(rows);
       rows.forEach(function (e, ri) {
-        var c = calcRow(e), row = secs[di].querySelector('.row[data-r="' + ri + '"]');
+        var c = calcRow(e, ef[ri]), row = secs[di].querySelector('.row[data-r="' + ri + '"]');
         var w = row.querySelector('[data-c="work"]'); w.textContent = c.invalid ? "Zeit prüfen" : (c.hasTime ? hm(c.work) : "–"); w.className = "calc" + (c.invalid ? " warn" : "");
         w.title = c.hasTime ? "von–bis " + hm(c.gross) + " minus Pause" : "";
         var rc = row.querySelector('[data-c="reise"]'), lastRow = ri === rows.length - 1;
@@ -1091,8 +1104,9 @@ h1 { color: #2c2166; }
       if (!absDay(rows) && typOf(rows)) txt(2, y, ABS_T[typOf(rows)], 7.5);
       var ds = dayStats(rows), ry = startOf(rows);
       txt(0, y + rh, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work) ktxt(y + rh, hm(ds.net), 8, false);
+      var ef = effs(rows);
       rows.forEach(function (e, k) {
-        var c = calcRow(e), y1 = y + ry * rh, y2 = y1 + rh;
+        var c = calcRow(e, ef[k]), y1 = y + ry * rh, y2 = y1 + rh;
         if (e.nr) txt(1, y1, e.nr, 7.5, false, "c");
         if (e.obj) txt(2, y1, e.obj, 7.5);
         if (e.obj2) txt(2, y2, e.obj2, 7.5);
@@ -1600,8 +1614,9 @@ h1 { color: #2c2166; }
       days.forEach(function (list, di) {
         var dk = key(addDays(mon, di)); if (dk < von || dk > bis) return;
         var ds = dayStats(list);
-        list.forEach(function (e) {
-          var c = calcRow(e); tot.abs += c.abs; if (c.abs) { var tk = e.typ && ABS_T[e.typ] ? ABS_T[e.typ] : "Andere"; tot.absBy[tk] = (tot.absBy[tk] || 0) + c.abs; }
+        var ef = effs(list);
+        list.forEach(function (e, ei) {
+          var c = calcRow(e, ef[ei]); tot.abs += c.abs; if (c.abs) { var tk = e.typ && ABS_T[e.typ] ? ABS_T[e.typ] : "Andere"; tot.absBy[tk] = (tot.absBy[tk] || 0) + c.abs; }
           if (c.work <= 0) return;
           var nr = String(e.nr == null ? "" : e.nr).trim(), k = nr || "";
           var st = sites[k] || (sites[k] = { nr: nr, name: "", net: 0, work: 0, reise: 0, days: {}, who: {} });
@@ -1701,8 +1716,9 @@ h1 { color: #2c2166; }
       dl.forEach(function (list, di) {
         var dk = key(addDays(mon, di)); if (dk < von || dk > bis) return;
         var ds = dayStats(list);
-        list.forEach(function (e) {
-          var c = calcRow(e); if (c.work <= 0 || String(e.nr == null ? "" : e.nr).trim() !== nr) return;
+        var ef = effs(list);
+        list.forEach(function (e, ei) {
+          var c = calcRow(e, ef[ei]); if (c.work <= 0 || String(e.nr == null ? "" : e.nr).trim() !== nr) return;
           var share = ds.work > 0 ? ds.tara * c.work / ds.work : 0;
           var o = days[dk] || (days[dk] = {}); o[em] = (o[em] || 0) + c.work - share;
         });
@@ -2236,9 +2252,10 @@ function openReport(pre) {
     if (absDay(list) && typeof sollMin === "number") am = sollMin; /* GAV: Krank / Unfall / Ferien = Tagessoll, keine Minusstunden */
     if (absDay(list)) { if (am) { if (typ === "ferien") o.ferien = am; else o.krank = am; o.any = true; } return o; }
     if (am) { o.frei = am; o.any = true; }
-    list.forEach(function (e) {
+    var ef = effs(list);
+    list.forEach(function (e, ei) {
       var a = tmin(e.von), b = tmin(e.bis); if (a === null || b === null || b <= a) return;
-      var N = ovl(a, b, 0, 360) + ovl(a, b, 1200, 1440), D = (b - a) - N, p = num(e.pause), pD = Math.min(p, D), pN = Math.min(Math.max(0, p - pD), N);
+      var N = ef[ei].night, D = ef[ei].gross - N, p = num(e.pause), pD = Math.min(p, D), pN = Math.min(Math.max(0, p - pD), N);
       o.tag += D - pD; o.night += N - pN;
     });
     if (ds.work > 0) { o.any = true; o.reise = ds.reise; o.tara = ds.tara; o.net = ds.net; o.tag = Math.max(0, o.tag - ds.reise); }
