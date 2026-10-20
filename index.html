@@ -899,7 +899,7 @@ h1 { color: #2c2166; }
           meta = { beitritt_code: cd };
         }
       }
-      var r = mode === "up" ? await sb.auth.signUp({ email: em, password: pw, options: { data: meta } }) : await sb.auth.signInWithPassword({ email: em, password: pw });
+      var r = mode === "up" ? await sb.auth.signUp({ email: em, password: pw, options: { data: meta, emailRedirectTo: (/^https?:/.test(location.protocol) ? location.origin + location.pathname.replace(/[^\/]*$/, "") : undefined) } }) : await sb.auth.signInWithPassword({ email: em, password: pw });
       if (r.error) { authMsg(authError(r.error.message), "bad"); return; }
       if (mode === "up" && !(r.data && r.data.session)) { authMsg("Registriert. Bitte bestätige die E-Mail von Supabase und melde dich danach an.", "ok"); return; }
       $("pw").value = ""; authMsg("Angemeldet.", "ok");
