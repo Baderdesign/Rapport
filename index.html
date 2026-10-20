@@ -2462,25 +2462,31 @@ function openReport(pre) {
   }
   function closeGleit() { var o = $("gleit"); if (o) o.remove(); }
   function openGleit() {
-    closeGleit(); var now = new Date(), busy = false;
+    closeGleit(); var now = new Date(), busy = false, adm = isAdmin(), mine = memberGet(), meMail = String((user && user.email) || "").toLowerCase(), meTemp = !!(mine && mine.rolle === "temporaer");
     var mi = el("input", { type: "month", "aria-label": "Monat" }); mi.value = now.getFullYear() + "-" + pad(now.getMonth() + 1);
     var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" }); list.style.maxHeight = "58vh";
-    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Gleitzeit pro Mitarbeiter" }), el("p", { text: "Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat." }), mi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
-    var ov = el("div", { "class": "overlay sites", id: "gleit", role: "dialog", "aria-modal": "true", "aria-label": "Gleitzeit pro Mitarbeiter" }, [sheet]);
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Stundenübersicht" }), el("p", { text: adm ? "Alle Mitarbeiter: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat." : (meTemp ? "Deine Gesamtzeit pro Monat." : "Deine Stunden: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten.") }), mi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
+    var ov = el("div", { "class": "overlay sites", id: "gleit", role: "dialog", "aria-modal": "true", "aria-label": "Stundenübersicht" }, [sheet]);
     function line(l, v, b) { return el("div", { style: "display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums" + (b ? ";font-weight:700" : "") }, [el("span", { text: l }), el("span", { text: v })]); }
     async function load() {
       if (busy) return; var p = (mi.value || "").split("-"); if (p.length < 2) return; var y = +p[0], mo = +p[1] - 1;
-      if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; return; }
-      if (!navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
+      if (adm && !sb) { msg.textContent = "Bitte zuerst anmelden."; return; }
+      if (adm && !navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
       busy = true; msg.textContent = "Einen Moment …";
       try {
-        var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(new Date(y, 0, 1))), p_bis: key(new Date(y, mo + 1, 0)) });
-        if (r.error) { msg.textContent = sharedMsg(r.error); return; }
+        var rowsAll, tmpMail = {};
+        if (adm) { /* Administrator: alle Mitarbeiter der Firma */
+          var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(new Date(y, 0, 1))), p_bis: key(new Date(y, mo + 1, 0)) });
+          if (r.error) { msg.textContent = sharedMsg(r.error); return; }
+          rowsAll = r.data || [];
+          try { var ml = await sb.rpc("members_list"); if (!ml.error && Array.isArray(ml.data)) ml.data.forEach(function (x) { if (x.rolle === "temporaer") tmpMail[String(x.email).toLowerCase()] = 1; }); } catch (e) { }
+        } else { /* alle anderen: nur die eigenen Stunden */
+          rowsAll = []; localKeys().forEach(function (wk) { var o = localWeek(wk); if (o) rowsAll.push({ email: meMail || "ich", week: wk, data: o }); });
+          if (meTemp) tmpMail[meMail || "ich"] = 1;
+        }
         msg.textContent = ""; list.textContent = "";
-        var tmpMail = {};
-        try { var ml = await sb.rpc("members_list"); if (!ml.error && Array.isArray(ml.data)) ml.data.forEach(function (x) { if (x.rolle === "temporaer") tmpMail[String(x.email).toLowerCase()] = 1; }); } catch (e) { }
-        var allP = gleitCalc(r.data || [], y, mo), res = allP.filter(function (o) { return !tmpMail[o.em]; }), tmps = allP.filter(function (o) { return tmpMail[o.em]; });
+        var allP = gleitCalc(rowsAll, y, mo), res = allP.filter(function (o) { return !tmpMail[o.em]; }), tmps = allP.filter(function (o) { return tmpMail[o.em]; });
         if (!res.length && !tmps.length) list.appendChild(el("div", { "class": "status", text: "Keine Daten." }));
         res.forEach(function (o) {
           var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
@@ -3082,9 +3088,9 @@ function openReport(pre) {
   }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }]];
+    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }]];
     if (isAdmin()) { items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
-    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Gleitzeit pro Mitarbeiter", openGleit]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
+    if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
