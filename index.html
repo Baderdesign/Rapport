@@ -1584,12 +1584,13 @@ h1 { color: #2c2166; }
           pbox.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [b, bt, x])]));
         });
       }
+      if (isOwner() && !rows.some(function (x) { return x.email === "davidbader@gmx.ch"; })) rows = [{ email: "davidbader@gmx.ch", rolle: "admin" }].concat(rows);
       cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen");
       list.textContent = ""; list.hidden = !rows.length;
       rows.forEach(function (r) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.email }));
         var prot = r.email === "davidbader@gmx.ch";
-        t.appendChild(el("small", { text: roleLbl(r.rolle) + (r.email === me ? " · du" : "") + (prot ? " · geschützt" : "") }));
+        t.appendChild(el("small", { text: roleLbl(r.rolle) + (r.email === me ? " · du" : "") + (prot ? " · Entwickler · geschützt" : "") }));
         var kids = [t];
         if (r.email !== me && !prot) {
           var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
@@ -2909,10 +2910,19 @@ function openReport(pre) {
         (r.data || []).forEach(function (f) {
           var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: f.name })); t.appendChild(el("small", { text: lab(f) + " · " + f.mitarbeiter + " Mitarbeiter" }));
           var plus = el("button", { type: "button", "class": "btn", text: "+1 Monat" }), gr = el("button", { type: "button", "class": "btn", text: f.gratis ? "Gratis aus" : "Gratis" });
-          [plus, gr].forEach(function (b) { b.style.cssText = "min-height:0;height:2.2em"; });
+          var dl = el("button", { type: "button", "class": "btn", text: "Firma löschen" });
+          [plus, gr, dl].forEach(function (b) { b.style.cssText = "min-height:0;height:2.2em"; });
+          dl.addEventListener("click", async function () {
+            if (!confirm("Firma «" + f.name + "» mit allen Baustellen, Rapporten, Regie-Rapporten, Ausmassen, Dateien und Mitarbeiter-Zuordnungen LÖSCHEN? Das kann nicht rückgängig gemacht werden. Die Wochenrapporte der Leute bleiben auf deren Geräten.")) return;
+            var t2 = prompt("Zur Bestätigung den Firmennamen eintippen:"); if (t2 === null) return;
+            if (String(t2).trim().toLowerCase() !== f.name.toLowerCase()) { msg.textContent = "Name stimmt nicht. Nichts gelöscht."; msg.className = "status bad"; return; }
+            var rr = await sb.rpc("inhaber_firma_loeschen", { p_firma: f.name });
+            if (rr.error) { msg.textContent = /eigene firma/i.test(String(rr.error.message)) ? "Die eigene Firma kann nicht gelöscht werden." : /schema cache|does not exist|could not find/i.test(String(rr.error.message)) ? "Die Lösch-Funktion ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(rr.error); msg.className = "status bad"; return; }
+            toast("Firma «" + f.name + "» gelöscht."); load();
+          });
           plus.addEventListener("click", function () { var base = f.abo_bis && new Date(f.abo_bis + "T00:00:00") > new Date() ? new Date(f.abo_bis + "T00:00:00") : new Date(); base.setMonth(base.getMonth() + 1); set(f, false, key(base), false); });
           gr.addEventListener("click", function () { if (f.gratis) set(f, false, key(addDays(new Date(), 14)), true); else set(f, true, null, false); });
-          list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [plus, gr])]));
+          list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [plus, gr, dl])]));
         });
       } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
     }
