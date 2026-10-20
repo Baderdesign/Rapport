@@ -1041,7 +1041,8 @@ h1 { color: #2c2166; }
 
     /* Zeilenbedarf: pro Tag eine Beschriftungszeile, dazu je Baustelle 1 Zeile (2 mit zweiter Textzeile), mindestens 5 Zeilen wie im Formular */
     function erows(e) { return e.obj2 ? 2 : 1; }
-    function need(rows) { var n = 1; rows.forEach(function (e) { n += erows(e); }); return Math.max(5, n); }
+    function startOf(rows) { return (!absDay(rows) && typOf(rows)) ? 1 : 0; } /* die erste Baustelle steht gleich auf der Zeile mit dem Wochentag; nur bei «Frei / Üstd» steht dort der Hinweis, dann beginnt sie eine Zeile tiefer */
+    function need(rows) { var n = startOf(rows); rows.forEach(function (e) { n += erows(e); }); return Math.max(5, n); }
     var totalRows = 3; st.days.forEach(function (r) { totalRows += need(r); });
     var rh = Math.max(3.9, Math.min(4.9, (bottom - tableTop - 22) / totalRows));
     var fk = Math.max(0.8, Math.min(1, rh / 4.9));
@@ -1086,10 +1087,10 @@ h1 { color: #2c2166; }
       for (var r = 0; r < n; r++) { for (var i = 0; i < 10; i++) cell(i, y + r * rh, rh); kcell(y + r * rh, rh); }
       txt(0, y, DAYS[di], 8);
       if (!absDay(rows) && typOf(rows)) txt(2, y, ABS_T[typOf(rows)], 7.5);
-      var ds = dayStats(rows), ry = 1;
+      var ds = dayStats(rows), ry = startOf(rows);
+      txt(0, y + rh, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work) ktxt(y + rh, hm(ds.net), 8, false);
       rows.forEach(function (e, k) {
         var c = calcRow(e), y1 = y + ry * rh, y2 = y1 + rh;
-        if (k === 0) { txt(0, y1, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work) ktxt(y1, hm(ds.net), 8, false); }
         if (e.nr) txt(1, y1, e.nr, 7.5, false, "c");
         if (e.obj) txt(2, y1, e.obj, 7.5);
         if (e.obj2) txt(2, y2, e.obj2, 7.5);
@@ -1101,7 +1102,7 @@ h1 { color: #2c2166; }
         ry += erows(e);
       });
       if (ds.reise) txt(8, y + (n - 1) * rh, Math.round(ds.reise), 7.5, true, "c"); /* Reisezeit des ganzen Tages, am Ende des Tagesblocks */
-      doc.setLineWidth(0.35); doc.line(cx[0], y, kx + KW, y);
+      doc.setLineWidth(0.5); doc.line(cx[0], y, kx + KW, y);
       y += h;
     });
     var t = totals(st.days), th = rh + 0.6;
@@ -1235,7 +1236,7 @@ h1 { color: #2c2166; }
   if (window.visualViewport) window.visualViewport.addEventListener("resize", function () { if (!sug.hidden && sugInp) fitSug(sugInp); });
   function showSug(inp) {
     var q = inp.value;
-    if (inp.dataset.k === "obj" && !q.trim()) { hideSug(); return; }
+    if ((inp.dataset.k === "obj" || inp.dataset.k === "obj2") && !q.trim()) { hideSug(); return; }
     var list = sitesFind(q, 40);
     if (!list.length) { hideSug(); return; }
     sug.textContent = "";
@@ -1267,7 +1268,7 @@ h1 { color: #2c2166; }
     fillRow(row, o);
     var nx = row.querySelector('[data-k="von"]'); if (nx) nx.focus();
   });
-  function isSiteInput(i) { return i && i.dataset && (i.dataset.k === "nr" || i.dataset.k === "obj"); }
+  function isSiteInput(i) { return i && i.dataset && (i.dataset.k === "nr" || i.dataset.k === "obj" || i.dataset.k === "obj2"); }
   $("days").addEventListener("focusin", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); else hideSug(); });
   $("days").addEventListener("input", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); });
   $("days").addEventListener("keydown", function (ev) { if (ev.key === "Enter" && isSiteInput(ev.target) && !sug.hidden) { var f = sug.querySelector(".sug-i"); if (f) { ev.preventDefault(); f.click(); } } });
