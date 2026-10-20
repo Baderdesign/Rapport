@@ -1252,20 +1252,23 @@ h1 { color: #2c2166; }
     sug.style.top = (r.bottom + window.pageYOffset + 3) + "px";
     sugRow = inp.closest(".row"); sug.hidden = false; sug.scrollTop = 0; sugInp = inp; fitSug(inp); arrows(sug);
   }
-  function fillRow(row, x) {
+  function fillRow(row, x, only2) {
     var e = state.days[+row.dataset.d][+row.dataset.r];
-    e.nr = x.nr; e.obj = x.n; e.obj2 = x.n2 || "";
+    if (only2) { /* Auswahl in der «2. Zeile»: nur diese Zeile wird gefüllt, Nummer und Objekt bleiben unberührt */
+      e.obj2 = x.nr + " " + x.n; var i2 = row.querySelector('[data-k="obj2"]'); if (i2) i2.value = e.obj2; recalc(); persist(); return;
+    }
+    e.nr = x.nr; e.obj = x.n; /* die «2. Zeile» bleibt für sich */
     if ((x.h || x.z) && !e.hin && !e.zur) { e.hin = x.h || ""; e.zur = x.z || ""; } /* Vorschlag für die Reise, nur wenn noch nichts eingetragen ist */
-    ["nr", "obj", "obj2", "hin", "zur"].forEach(function (k) { var i = row.querySelector('[data-k="' + k + '"]'); if (i) i.value = e[k]; });
+    ["nr", "obj", "hin", "zur"].forEach(function (k) { var i = row.querySelector('[data-k="' + k + '"]'); if (i) i.value = e[k]; });
     recalc(); persist();
   }
   sug.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
   sug.addEventListener("click", function (ev) {
     var b = ev.target.closest ? ev.target.closest(".sug-i") : null; if (!b || !sugRow) return;
-    var o = siteByNr(b.getAttribute("data-nr")), row = sugRow;
+    var o = siteByNr(b.getAttribute("data-nr")), row = sugRow, only2 = !!(sugInp && sugInp.dataset.k === "obj2");
     hideSug(); if (!o) return;
-    fillRow(row, o);
-    var nx = row.querySelector('[data-k="von"]'); if (nx) nx.focus();
+    fillRow(row, o, only2);
+    if (!only2) { var nx = row.querySelector('[data-k="von"]'); if (nx) nx.focus(); } else if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   });
   function isSiteInput(i) { return i && i.dataset && (i.dataset.k === "nr" || i.dataset.k === "obj" || i.dataset.k === "obj2"); }
   $("days").addEventListener("focusin", function (ev) { if (isSiteInput(ev.target)) showSug(ev.target); else hideSug(); });
@@ -1276,7 +1279,7 @@ h1 { color: #2c2166; }
     clearTimeout(sugTimer); sugTimer = setTimeout(hideSug, 220);
     if (i.dataset.k === "nr" && i.value.trim()) { /* genaue Nummer getippt: Name automatisch einsetzen */
       var e = state.days[+row.dataset.d][+row.dataset.r], o = siteByNr(i.value.trim());
-      if (o && !e.obj && !e.obj2) fillRow(row, o);
+      if (o && !e.obj) fillRow(row, o);
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
