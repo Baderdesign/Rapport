@@ -671,6 +671,7 @@ h1 { color: #2c2166; }
   function siteByNr(nr) { var l = sitesList(); for (var i = 0; i < l.length; i++) { if (l[i].nr === nr) return l[i]; } return null; }
   function sharedMsg(er) {
     var m = String((er && er.message) || er || "");
+    if (/testabo/i.test(m)) return DEMO_MSG;
     if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
     if (/ungültige rolle|members_rolle_check/i.test(m)) return "Die Rolle «Temporär» ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/firma_wochen/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Auswertung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
@@ -681,7 +682,18 @@ h1 { color: #2c2166; }
     return m || "Das hat nicht geklappt.";
   }
   var abo = null; /* {firma, status: gratis|probe|aktiv|abgelaufen, bis, tage} */
+  function isDemo() { return !!(abo && abo.status === "demo"); }
+  var DEMO_MSG = "Im Testabo nicht möglich: Das lässt sich nur in einer echten Firma speichern.";
+  function demoPdf(doc, label) { /* Testabo: Vorschau mit Wasserzeichen, ohne Öffnen/Teilen/Speichern */
+    try { var n = doc.getNumberOfPages(), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(); for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setTextColor(215, 215, 215); doc.setFontSize(80); doc.text("TESTABO", W / 2, H / 2, { align: "center", angle: 45 }); } doc.setTextColor(0, 0, 0); } catch (e) { }
+    var url = ""; try { url = URL.createObjectURL(doc.output("blob")); } catch (e) { }
+    closeSheet();
+    var close = el("button", { type: "button", "class": "btn primary", text: "Schliessen" }); close.addEventListener("click", closeSheet);
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: label + " – Vorschau" }), el("p", { text: "Im Testabo kann das PDF nur angesehen werden. Speichern, Drucken und Versenden sind nicht möglich." }), el("iframe", { src: url + "#toolbar=0&navpanes=0", title: "Vorschau" }), el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay", id: "sheet", role: "dialog", "aria-modal": "true", "aria-label": label + " Vorschau" }, [sheet]); if (url) ov.dataset.url = url; document.body.appendChild(ov);
+  }
   function aboText() {
+    if (abo && abo.status === "demo") return "Testabo: Baustellenrapport, Regie und Dateien lassen sich nicht speichern.";
     if (!abo || abo.status === "gratis" || abo.status === "aktiv" && !abo.bis) return "";
     var b = abo.bis ? dmy(new Date(abo.bis + "T00:00:00")) : "";
     if (abo.status === "probe") return "Testphase bis " + b + " (noch " + Math.max(0, abo.tage) + " Tag" + (abo.tage === 1 ? "" : "e") + ")";
@@ -698,6 +710,7 @@ h1 { color: #2c2166; }
       document.body.appendChild(ov); return;
     }
     if (old) old.remove();
+    if (abo && abo.status === "demo" && !aboCheck.shown) { aboCheck.shown = 1; toast(aboText()); }
     if (abo && abo.status === "probe" && !aboCheck.shown) { var m = memberGet(); if (m && m.rolle === "admin") { aboCheck.shown = 1; toast(aboText()); } }
   }
   async function pullSites() { /* Firma und Rolle des Kontos holen, dann die Baustellen der Firma */
@@ -1829,6 +1842,7 @@ function openReport(pre) {
     dt.addEventListener("change", refresh);
     save.addEventListener("click", async function () {
       var nr = curNr(), day = dt.value, body = ta.value.trim();
+      if (isDemo()) { say(DEMO_MSG, "bad"); return; }
       if (!nr) { say("Bitte die Baustelle wählen.", "bad"); return; }
       if (!day) { say("Bitte das Datum wählen.", "bad"); return; }
       var o = rpGet(); if (body) o.s[nr + "|" + day] = body; else delete o.s[nr + "|" + day]; rpSet(o); drawMine();
@@ -1938,6 +1952,7 @@ function openReport(pre) {
       if (!res) return;
       var doc = null; try { doc = buildRapportPdf(nr, a, b, res); } catch (e) { }
       if (!doc) { msg.textContent = "Das PDF konnte nicht erstellt werden."; msg.className = "status bad"; return; }
+      if (isDemo()) { demoPdf(doc, "Baustellenrapport"); return; }
       var fn = "Baustellenrapport_" + nr + "_" + a + "_" + b + ".pdf", blob = doc.output("blob"), file = null;
       try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
       if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
@@ -2177,6 +2192,7 @@ function openReport(pre) {
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
       sv.addEventListener("click", async function () {
+        if (isDemo()) { es(DEMO_MSG, "bad"); return; }
         if (!sb || !user || !navigator.onLine) { es("Keine Verbindung. Zum Speichern brauchst du Internet.", "bad"); return; }
         es("Einen Moment …");
         try {
@@ -2188,6 +2204,7 @@ function openReport(pre) {
       pf.addEventListener("click", async function () {
         var doc = null; try { doc = buildRegiePdf(editing.nr || "", collect()); } catch (e) { }
         if (!doc) { es("Das PDF konnte nicht erstellt werden.", "bad"); return; }
+        if (isDemo()) { demoPdf(doc, "Regie-Rapport"); return; }
         var fn = "Regie-Rapport_" + site + "_Nr" + (editing.nr || "neu") + ".pdf", blob = doc.output("blob"), file = null;
         try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
         if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
@@ -2603,6 +2620,7 @@ function openReport(pre) {
       } catch (e) { say(sharedMsg(e), "bad"); }
     }
     go.addEventListener("click", async function () {
+      if (isDemo()) { say(DEMO_MSG, "bad"); return; }
       if (busy) return; var fs = Array.prototype.slice.call(fi.files || []); if (!fs.length) { say("Bitte zuerst eine Datei wählen.", "bad"); return; }
       if (!navigator.onLine) { say("Keine Verbindung.", "bad"); return; }
       busy = true; var ok = 0;
@@ -2803,6 +2821,7 @@ function openReport(pre) {
         await sharePdf(doc, "Ausmass_" + ((S.titel || "").replace(/[^\w\-äöüÄÖÜ]+/g, "_").slice(0, 30) || key(new Date())) + ".pdf", "Ausmass");
       });
       saveB.addEventListener("click", function () {
+        if (isDemo()) { toast(DEMO_MSG); return; }
         var l = listGet(), t = (S.titel || "").trim() || ("Ausmass " + dmy(new Date())), ex = l.filter(function (x) { return x.t === t; })[0];
         var rec = { t: t, d: new Date().toISOString(), data: JSON.parse(JSON.stringify(S)) }; if (ex) l[l.indexOf(ex)] = rec; else l.unshift(rec);
         lsSet(LK, JSON.stringify(l.slice(0, 50))); drawSaved();
