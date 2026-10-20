@@ -358,6 +358,13 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 .titlebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; }
 .titlebar .brand { flex: 1 1 100%; justify-content: center; }
 .titlebar .acct { flex: 1 1 100%; justify-content: center; }
+.acol { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.thsw {  display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.thsw .lb { display: flex; justify-content: space-between; width: 132px; font-size: 13px; color: var(--muted); padding: 0 2px; }
+.thsw .lb button { all: unset; cursor: pointer; padding: 2px 4px; }
+.thsw .lb button[aria-pressed="true"] { color: var(--ink); font-weight: 700; }
+.thsw .tr { all: unset; cursor: pointer; position: relative; width: 132px; height: 30px; border-radius: 15px; background: var(--line); border: 2px solid #cdae6a; box-sizing: border-box; }
+.thsw .tr i { position: absolute; top: 2px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 1px solid #cdae6a; box-shadow: 0 1px 3px #0004; transition: left .18s; }
 .acct { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sync { font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .sync::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -470,7 +477,8 @@ h1 { color: #2c2166; }
   <div class="top">
     <div style="display:flex;flex-direction:column;gap:12px;flex:1 1 260px;min-width:0">
       <div class="titlebar"><div class="brand"><img class="logo" id="logoImg" alt="" width="46" height="46"><h1>Wochenrapport</h1></div>
-        <div class="acct"><span class="sync" id="sync" role="status"></span><button class="btn" id="acctBtn" type="button" aria-expanded="false" aria-controls="auth">Anmelden</button><button class="btn icon" id="menuBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Menü">☰</button></div></div>
+        <div class="acct"><span class="sync" id="sync" role="status"></span><div class="acol"><button class="btn" id="acctBtn" type="button" aria-expanded="false" aria-controls="auth">Anmelden</button><div class="thsw" id="thsw"><div class="lb"><button type="button" data-t="light">Hell</button><button type="button" data-t="auto">Auto.</button><button type="button" data-t="dark">Dunkel</button></div><button type="button" class="tr" id="thTr" aria-label="Darstellung Hell, Auto oder Dunkel"><i></i></button></div></div><button class="btn icon" id="menuBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Menü">☰</button></div>
+        </div>
       <label class="name" for="name"><span class="lbl">Name</span><input type="text" id="name" autocomplete="name" placeholder="Vor- und Nachname"></label>
     </div>
     <div class="weeknav">
@@ -3110,17 +3118,21 @@ function openReport(pre) {
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("h2", { text: "Menü" })]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
-    var th = lsGet("wr_theme") || "auto", tb = el("div", { "class": "row-btns" }), tl = el("p", { text: "Darstellung", style: "margin:14px 0 6px;font-weight:600" });
-    [["auto", "Automatisch"], ["light", "Hell"], ["dark", "Dunkel"]].forEach(function (o) {
-      var b = el("button", { type: "button", "class": "btn", text: o[0] === th ? "✓ " + o[1] : o[1], style: "flex:1;margin:0 3px" });
-      b.addEventListener("click", function () { lsSet("wr_theme", o[0]); if (o[0] === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", o[0]); closeMenu(); });
-      tb.appendChild(b); });
-    tb.style.display = "flex"; box.appendChild(tl); box.appendChild(tb);
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMenu(); });
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
   }
   $("menuBtn").addEventListener("click", openMenu);
+  (function () {
+    var pos = { light: 3, auto: 53, dark: 103 };
+    function cur() { var t = lsGet("wr_theme"); return t === "light" || t === "dark" ? t : "auto"; }
+    function setT(t) { lsSet("wr_theme", t); if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); draw(); }
+    function draw() { var t = cur(); $("thTr").firstChild.style.left = pos[t] + "px"; $("thTr").setAttribute("aria-valuetext", t);
+      Array.prototype.forEach.call(document.querySelectorAll("#thsw .lb button"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-t") === t)); }); }
+    $("thTr").addEventListener("click", function () { setT({ auto: "dark", dark: "light", light: "auto" }[cur()]); });
+    Array.prototype.forEach.call(document.querySelectorAll("#thsw .lb button"), function (b) { b.addEventListener("click", function () { setT(b.getAttribute("data-t")); }); });
+    draw();
+  })();
   window.addEventListener("online", function () { rpFlush(); });
 
   renderSitesInfo();
