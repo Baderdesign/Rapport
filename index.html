@@ -2901,7 +2901,7 @@ function openReport(pre) {
         "#m2 .chip.all{grid-column:1/-1;justify-self:center;width:200px;border-color:var(--accent);color:var(--accent-text);background:transparent}#m2 .chip.all.on{background:var(--accent);color:#2a1f05;border-color:var(--accent)}" +
         "#m2 .addw{display:block;margin:10px auto 0;background:none;border:0;color:var(--muted);font-size:.85rem;text-decoration:underline;cursor:pointer}" +
         "#m2 .wb{border-top:1px solid var(--line);padding:8px 0}#m2 .wb:first-of-type{border-top:0}" +
-        "#m2 .wr{display:flex;flex-direction:column;gap:2px}#m2 .sts{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:4px}" +
+        "#m2 .wr{display:flex;flex-direction:column;gap:2px}#m2 .sts{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px}" +
         "#m2 .wl{min-width:0;text-align:left;background:none;border:0;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;gap:1px;color:inherit}" +
         "#m2 .wl b{font-size:1rem}#m2 .wl .wa{font-size:.82rem;color:var(--muted)}#m2 .wl .tg{font-size:.72rem;font-weight:700;color:var(--accent-text)}" +
         "#m2 .wl::after{content:'Masse ändern';font-size:.72rem;color:var(--muted);text-decoration:underline}" +
@@ -2909,6 +2909,8 @@ function openReport(pre) {
         "#m2 .st button{width:28px;height:28px;min-height:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:1rem;padding:0;color:var(--ink);cursor:pointer}#m2 .st em{font-style:normal;min-width:14px;text-align:center;font-weight:700;color:var(--ink)}" +
         "#m2 .ep{background:var(--surface-2);border-radius:14px;padding:10px 12px;margin:2px 0 6px}#m2 .ep .er{display:flex;align-items:center;gap:8px;flex-wrap:wrap}#m2 .ep input[type=text]{height:40px;width:88px;text-align:center;padding:0 6px}" +
         "#m2 .ep .btn{min-height:0;height:2.2em;font-size:.85rem}" +
+        "#m2 .sts .pl{min-height:0;height:34px;padding:0 20px;font-size:.86rem;font-weight:600;letter-spacing:.01em;border-radius:999px;border:2px solid #d4af5a !important;background:linear-gradient(180deg,#fff,#f3efe2);box-shadow:0 1px 0 #fff inset,0 -2px 3px rgba(212,175,90,.25) inset,0 4px 8px rgba(26,18,68,.22),0 1px 2px rgba(26,18,68,.2) !important;color:inherit;transition:transform .1s,box-shadow .1s}#m2 .sts .pl:active{transform:translateY(2px);box-shadow:0 1px 0 #fff inset,0 1px 2px rgba(26,18,68,.25) !important}" +
+        "#m2 .ep .er{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}#m2 .ep .er label{font-size:.78rem;color:var(--muted,#6b7280)}#m2 .ep .er input[type=text]{width:100%}#m2 .ep .er .rs{grid-column:1/-1;justify-self:start;background:none;border:0 !important;box-shadow:none !important;height:auto;padding:4px 0;font-size:.82rem;text-decoration:underline;color:var(--muted,#6b7280)}" +
         "#m2 .std{font-size:.8rem;color:var(--muted);margin-top:6px}" +
         "#m2 .chk{display:flex;align-items:center;gap:10px;margin:14px 0 4px;font-size:1rem}#m2 .chk input{width:24px;height:24px;accent-color:var(--accent)}" +
         "#m2 .res{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:var(--surface-2);border-radius:16px;padding:12px 14px;margin-top:12px}#m2 .res small{display:block;color:var(--muted);font-size:.78rem}#m2 .res b{font-size:1.05rem;font-variant-numeric:tabular-nums}#m2 .res .m{color:var(--bad)}" +
@@ -3063,7 +3065,7 @@ function openReport(pre) {
           var key = i + "-" + j, W = {}, box = el("div", { "class": "wb" });
           W.ar = el("span", { "class": "wa" }); W.tag = el("span", { "class": "tg" });
           var left = el("button", { type: "button", "class": "wl", "aria-label": "Wand " + (j + 1) + " Masse ändern" }, [el("b", { text: "Wand " + (j + 1) }), W.ar, W.tag]);
-          var bf = el("button", { type: "button", "class": "btn", text: "+ Fenster" }), bt = el("button", { type: "button", "class": "btn", text: "+ Tür" });
+          var bf = el("button", { type: "button", "class": "btn pl", text: "+ Fenster" }), bt = el("button", { type: "button", "class": "btn pl", text: "+ Tür" });
           bf.addEventListener("click", function () { openOeff(r, j, w, "f"); }); bt.addEventListener("click", function () { openOeff(r, j, w, "t"); });
           var row = el("div", { "class": "wr" }, [left, el("div", { "class": "sts" }, [bf, bt])]);
           var ol = el("div", { "class": "ol" });
@@ -3076,8 +3078,8 @@ function openReport(pre) {
           W.il = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Wandlänge" }); W.il.value = w.l || "";
           W.ih = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Wandhöhe" }); W.ih.value = w.h || "";
           W.il.addEventListener("input", function () { w.l = W.il.value; save(); calc(); }); W.ih.addEventListener("input", function () { w.h = W.ih.value; save(); calc(); });
-          var rs = el("button", { type: "button", "class": "btn", text: "Automatisch" }); rs.addEventListener("click", function () { w.l = ""; w.h = ""; save(); draw(); calc(); });
-          var er = el("div", { "class": "er" }, [sp("Länge"), W.il, sp("×"), sp("Höhe"), W.ih, sp("m"), rs]);
+          var rs = el("button", { type: "button", "class": "btn rs", text: "Automatisch aus Zimmermassen" }); rs.addEventListener("click", function () { w.l = ""; w.h = ""; save(); draw(); calc(); });
+          var er = el("div", { "class": "er" }, [el("label", { text: "Wandlänge (m)" }), el("label", { text: "Wandhöhe (m)" }), W.il, W.ih, rs]);
           if (j >= 4) { var dw = el("button", { type: "button", "class": "btn", text: "Wand entfernen" }); dw.addEventListener("click", function () { r.walls.splice(j, 1); ed = {}; save(); draw(); calc(); }); er.appendChild(dw); }
           ep.appendChild(er);
           left.addEventListener("click", function () { ed[key] = !ed[key]; ep.hidden = !ed[key]; if (!ep.hidden) W.il.focus(); });
