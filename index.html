@@ -1454,7 +1454,17 @@ h1 { color: #2c2166; }
       if (!nr || !n) { say("Bitte Nummer und Name eingeben.", "bad"); return; }
       var ex = siteByNr(nr);
       if (ex && editNr !== nr && !confirm("Die Nummer " + nr + " gibt es schon (" + ex.n + "). Ersetzen?")) return;
-      var ok = await run(function () { return sitesSave([{ nr: nr, n: n, n2: n2, h: h, z: z, f: ffa.value.trim() }], editNr && editNr !== nr ? [editNr] : []); }, "Gespeichert: " + nr);
+      var old = editNr ? siteByNr(editNr) : null, oldNr = editNr, chg = !!old && (oldNr !== nr || old.n !== n || (old.n2 || "") !== n2);
+      var ok = await run(async function () {
+        var er = await sitesSave([{ nr: nr, n: n, n2: n2, h: h, z: z, f: ffa.value.trim() }], editNr && editNr !== nr ? [editNr] : []);
+        if (er || !chg || !sharedOn()) return er;
+        try {
+          var rr = await sb.rpc("site_refs_aendern", { p_alt: oldNr, p_neu: nr, p_obj_alt: old.n, p_obj_neu: n, p_obj2_alt: old.n2 || "", p_obj2_neu: n2 });
+          if (rr.error) return "Die Baustelle ist geändert. Die alten Rapporte und Stunden konnten aber nicht angepasst werden: " + (/schema cache|does not exist|could not find/i.test(String(rr.error.message)) ? "Die Funktion ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(rr.error));
+          pullAll();
+        } catch (e2) { return "Die Baustelle ist geändert. Die alten Rapporte und Stunden konnten nicht angepasst werden: " + sharedMsg(e2); }
+        return "";
+      }, "Gespeichert: " + nr + (chg ? " (alte Einträge angepasst)" : ""));
       if (ok) { reset(); fnr.focus(); }
     });
     seedBtn.addEventListener("click", async function () {
