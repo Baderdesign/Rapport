@@ -355,9 +355,13 @@ html { -webkit-text-size-adjust: 100%; }
 [hidden] { display: none !important; }
 img { max-width: 100%; }
 body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px)); }
-.titlebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; }
-.titlebar .brand { flex: 1 1 100%; justify-content: center; }
-.titlebar .acct { flex: 1 1 100%; justify-content: center; }
+.titlebar { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; gap: 8px; }
+.titlebar .brand, .titlebar .acct { display: contents; }
+.titlebar .brand .logo { grid-column: 1; grid-row: 1; width: 48px; height: 48px; }
+.titlebar .brand h1 { grid-column: 2; grid-row: 1; margin: 0; text-align: center; font-size: 1.7rem; }
+.titlebar #menuBtn { grid-column: 3; grid-row: 1; width: 48px; height: 48px; padding: 0; justify-self: end; }
+.titlebar .sync { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
+.titlebar #acctBtn { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
 .acol { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .thsw { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .thsw .lb { display: flex; justify-content: space-between; width: 118px; font-size: 13px; color: var(--muted); padding: 0 2px; }
