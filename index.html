@@ -2687,9 +2687,10 @@ function openReport(pre) {
     return Object.keys(P).map(function (em) {
       var p = P[em], o = { em: em, name: p.name, work: 0, abs: 0, zus: 0, soll: 0, kum: 0, fth: 0, fer: 0, frj: 0, has: !!p.fd };
       if (!p.fd) return o;
-      var dd = new Date(Math.max(p.fd.getTime(), new Date(y, 0, 1).getTime())), ksoll = 0, kist = 0;
-      while (dd <= end) {
+      var dd = new Date(Math.max(p.fd.getTime(), new Date(y, 0, 1).getTime())), ksoll = 0, kist = 0, now0 = new Date(), tdy = new Date(now0.getFullYear(), now0.getMonth(), now0.getDate()); /* Soll nur bis heute, nicht bis Monatsende */
+      while (dd <= end && dd <= tdy) {
         var c = p.D[key(dd)], so = sollDay(dd, 100), ist = 0;
+        if (!c && dd.getTime() === tdy.getTime()) so = 0; /* heute ohne Eintrag: noch kein Soll */
         if (c) ist = c.net + c.ferien + c.krank + c.unfall + c.frei + c.z1 + c.z2;
         ksoll += so; kist += ist + feierDay(dd, 100);
         if (dd.getMonth() === mo) { o.soll += so; o.fth += feierDay(dd, 100); if (c) { o.work += c.net; o.abs += c.ferien + c.krank + c.unfall + c.frei; o.zus += c.z1 + c.z2; } }
