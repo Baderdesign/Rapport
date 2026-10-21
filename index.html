@@ -1198,20 +1198,21 @@ h1 { color: #2c2166; }
     var first = ov.querySelector("a,button"); if (first) first.focus();
   }
 
-  async function deliver(blob, doc, fn, saved) {
+  function markSent(wk) { if (wk) lsSet("wr2:sent:" + wk, "1"); }
+  async function deliver(blob, doc, fn, saved, wkSent) {
     var mobile = isMobile(), file = null;
     try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
     /* 1. Handy: Teilen-Menü (direkt nach dem Tippen, ohne vorheriges Warten) */
     if (mobile && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       try {
         await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") });
-        await saved; setStatus("Woche gespeichert. PDF geteilt: " + fn, "ok"); return;
+        markSent(wkSent); await saved; setStatus("Woche gespeichert. PDF geteilt: " + fn, "ok"); return;
       } catch (e) {
         if (e && e.name === "AbortError") { await saved; setStatus("Teilen abgebrochen. Die Woche ist gespeichert. Tippe nochmals auf den Knopf, um das PDF zu teilen.", ""); return; }
       }
     }
     /* 2. Vorschau mit Links zum manuellen Sichern */
-    showFallback(blob, doc, fn, file);
+    showFallback(blob, doc, fn, file); markSent(wkSent);
     await saved; setStatus("Woche gespeichert. Das PDF liegt in der Vorschau bereit.", "ok");
   }
 
@@ -1222,7 +1223,7 @@ h1 { color: #2c2166; }
     if (!doc) { saved.then(function () { setStatus("Das PDF konnte nicht erstellt werden. Seite neu laden und nochmals versuchen. Die Woche ist gespeichert.", "bad"); btn.disabled = false; }); return; }
     var iso = isoWeek(fromKey(state.week)), nm = (state.name || "").trim().replace(/[^\wäöüÄÖÜéèàÉ\- ]+/g, "").replace(/\s+/g, "_");
     var fn = "Wochenrapport_" + iso.y + "-KW" + pad(iso.w) + (nm ? "_" + nm : "") + ".pdf";
-    deliver(doc.output("blob"), doc, fn, saved).catch(function (e) {
+    deliver(doc.output("blob"), doc, fn, saved, state.week).catch(function (e) {
       setStatus("Das PDF konnte nicht abgelegt werden. Die Woche ist trotzdem gespeichert.", "bad");
     }).then(function () { btn.disabled = false; });
   });
@@ -3427,6 +3428,25 @@ function openReport(pre) {
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
     sb.auth.onAuthStateChange(function (ev, session) { setTimeout(function () { onSession(session && session.user); }, 0); });
   }
+  /* Dienstags beim ersten Öffnen: Erinnerung, wenn der Rapport der letzten Woche noch nicht als PDF verschickt wurde */
+  function dienstagCheck() {
+    var now = new Date(); if (now.getDay() !== 2) return;
+    var today = key(now), lm = key(addDays(mondayOf(now), -7));
+    if (lsGet("wr2:dienst") === today || lsGet("wr2:sent:" + lm) || $("dienst") || document.body.classList.contains("gated") || !user) return;
+    var o = localWeek(lm); if (!o || !hasData(deserialize(o.days))) return;
+    lsSet("wr2:dienst", today);
+    var kw = isoWeek(fromKey(lm)).w;
+    var go = el("button", { type: "button", "class": "btn primary", text: "Letzte Woche öffnen" }), done = el("button", { type: "button", "class": "btn", text: "Schon abgeschickt" }), later = el("button", { type: "button", "class": "btn", text: "Später" });
+    var sheet = el("div", { "class": "sheet bil" }, [el("div", { style: "font-size:2.2rem;text-align:center", text: "🔔" }), el("h2", { text: "Guten Morgen!", style: "text-align:center" }), el("p", { text: "Hast du deinen Rapport von letzter Woche (KW " + kw + ") schon abgeschickt?", style: "text-align:center;font-size:1.05rem" }), el("div", { "class": "actions", style: "justify-content:center" }, [go, done, later])]);
+    var ov = el("div", { "class": "overlay sites", id: "dienst", role: "dialog", "aria-modal": "true", "aria-label": "Erinnerung Wochenrapport" }, [sheet]);
+    function shut() { ov.remove(); }
+    go.addEventListener("click", function () { shut(); loadWeek(lm); window.scrollTo(0, 0); });
+    done.addEventListener("click", function () { markSent(lm); shut(); });
+    later.addEventListener("click", shut);
+    document.body.appendChild(ov); go.focus();
+  }
+  window.__dienstagCheck = dienstagCheck;
+  setTimeout(dienstagCheck, 2500);
   window.addEventListener("online", function () { setSync(); pullAll(); });
   window.addEventListener("offline", setSync);
   var curMon = key(mondayOf(new Date()));
@@ -3437,7 +3457,7 @@ function openReport(pre) {
     if (dirty) persist(true);
     loadWeek(k); setStatus("Neue Woche: " + dmy(fromKey(k)) + ".", "ok");
   }
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) { checkNewWeek(); if (user) pullAll(); } });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { checkNewWeek(); if (user) pullAll(); setTimeout(dienstagCheck, 1500); } });
   window.addEventListener("pageshow", checkNewWeek); window.addEventListener("focus", checkNewWeek);
   setInterval(checkNewWeek, 60000);
   setTimeout(function () { var s = document.getElementById("splash"); if (!s) return; s.classList.add("off"); setTimeout(function () { s.remove(); }, 700); }, 2300);
