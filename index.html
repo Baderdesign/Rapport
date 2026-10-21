@@ -1595,12 +1595,16 @@ h1 { color: #2c2166; }
         });
       }
       if (isOwner() && !rows.some(function (x) { return x.email === "davidbader@gmx.ch"; })) rows = [{ email: "davidbader@gmx.ch", rolle: "admin" }].concat(rows);
-      cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen");
+      cnt.textContent = rows.length + (rows.length === 1 ? " Person" : " Personen") + (isOwner() ? "" : " · Passwort vergessen? Die Person meldet sich mit ihrer E-Mail beim Entwickler (davidbader@gmx.ch), der setzt ein neues Passwort.");
       list.textContent = ""; list.hidden = !rows.length;
       rows.forEach(function (r) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.email }));
         var prot = r.email === "davidbader@gmx.ch";
         t.appendChild(el("small", { text: roleLbl(r.rolle) + (r.email === me ? " · du" : "") + (prot ? " · Entwickler · geschützt" : "") }));
+        if (r.pw_resets > 0) {
+          var pd = ""; try { pd = r.pw_reset_am ? " · zuletzt am " + (function (d) { return d.toLocaleDateString("de-CH") + ", " + d.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" }) + " Uhr"; })(new Date(r.pw_reset_am)) : ""; } catch (e) {}
+          t.appendChild(el("small", { text: "Passwort " + r.pw_resets + "× zurückgesetzt" + pd }));
+        }
         var kids = [t];
         if (r.email !== me && !prot) {
           var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
@@ -1611,14 +1615,17 @@ h1 { color: #2c2166; }
             tmp.addEventListener("click", function () { var nr = r.rolle === "temporaer" ? "mitarbeiter" : "temporaer"; run(function () { return call("member_set", { p_email: r.email, p_rolle: nr }); }, r.email + " ist jetzt " + roleLbl(nr) + "."); });
           }
           del.addEventListener("click", function () { if (confirm(r.email + " entfernen? Die Person sieht danach keine Baustellen mehr.")) run(function () { return call("member_remove", { p_email: r.email }); }, "Entfernt: " + r.email); });
-          var pwb = el("button", { type: "button", text: "Neues Passwort" });
-          pwb.addEventListener("click", function () {
-            var v = window.prompt("Neues Passwort für " + r.email + " (mindestens 6 Zeichen):", "");
-            if (v === null) return;
-            if (v.length < 6) { say("Das Passwort braucht mindestens 6 Zeichen.", "bad"); return; }
-            run(function () { return call("member_passwort", { p_email: r.email, p_pw: v }); }, "Neues Passwort für " + r.email + " gesetzt. Gib es der Person weiter. Sie kann es danach selbst ändern (Konto → Passwort ändern).");
-          });
-          kids.push(tog); if (tmp) kids.push(tmp); kids.push(pwb, del);
+          var pwb = null;
+          if (isOwner()) {
+            pwb = el("button", { type: "button", text: "Neues Passwort" });
+            pwb.addEventListener("click", function () {
+              var v = window.prompt("Neues Passwort für " + r.email + " (mindestens 6 Zeichen):", "");
+              if (v === null) return;
+              if (v.length < 6) { say("Das Passwort braucht mindestens 6 Zeichen.", "bad"); return; }
+              run(function () { return call("member_passwort", { p_email: r.email, p_pw: v }); }, "Neues Passwort für " + r.email + " gesetzt. Gib es der Person weiter. Sie kann es danach selbst ändern (Konto → Passwort ändern).");
+            });
+          }
+          kids.push(tog); if (tmp) kids.push(tmp); if (pwb) kids.push(pwb); kids.push(del);
         }
         list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, kids.length > 1 ? [kids[0], el("div", { "class": "acts" }, kids.slice(1))] : kids));
       });
