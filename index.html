@@ -622,10 +622,11 @@ h1 { color: #2c2166; }
     var s = { gross: 0, work: 0, pause: 0, hin: 0, zur: 0, reise: 0, abs: 0 };
     var ef = effs(rows); rows.forEach(function (e, i) { var c = calcRow(e, ef[i]); s.gross += c.gross; s.work += c.work; s.pause += c.pause; s.hin += c.hin; s.zur += c.zur; s.reise += c.reise; s.abs += c.abs; });
     s.tara = Math.min(s.reise, TARA, s.work); s.net = s.work - s.tara;
+    s.frei = typOf(rows) === "frei" ? Math.round(s.abs * 60) : 0; s.tot = s.net + s.frei; /* Frei / Üstd zählt als Tagestotal */
     return s;
   }
   function totals(days) {
-    var t = { gross: 0, work: 0, pause: 0, hin: 0, zur: 0, reise: 0, abs: 0, tara: 0, net: 0 };
+    var t = { gross: 0, work: 0, pause: 0, hin: 0, zur: 0, reise: 0, abs: 0, tara: 0, net: 0, frei: 0, tot: 0 };
     days.forEach(function (d) { var s = dayStats(d); Object.keys(t).forEach(function (k) { t[k] += s[k]; }); });
     return t;
   }
@@ -825,7 +826,7 @@ h1 { color: #2c2166; }
       delete remote[SITES_WEEK]; /* alter Eintrag aus einer früheren Version */
       Object.keys(remote).forEach(function (wk) {
         var l = localWeek(wk), rd = remote[wk];
-        if (!l || String(rd.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(rd)); index[wk] = totals(deserialize(rd.days)).net; if (wk === state.week) cur = true; }
+        if (!l || String(rd.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(rd)); index[wk] = totals(deserialize(rd.days)).tot; if (wk === state.week) cur = true; }
       });
       localKeys().forEach(function (wk) { var l = localWeek(wk), rd = remote[wk]; if (l && (!rd || String(l.updated || "") > String(rd.updated || ""))) qAdd(wk); });
       syncErr = ""; syncBusy = false; fillPicker();
@@ -841,7 +842,7 @@ h1 { color: #2c2166; }
     var run = function () {
       var wk = state.week, body = { days: serialize(), name: state.name, updated: new Date().toISOString() };
       lsSet(WK + wk, JSON.stringify(body)); lsSet("wr2:name", state.name);
-      index[wk] = totals(state.days).net; fillPicker();
+      index[wk] = totals(state.days).tot; fillPicker();
       setStatus("Gespeichert um " + nowHM() + (user ? (navigator.onLine ? "" : " · offline, wird später synchronisiert") : " · nur auf diesem Gerät"), "ok");
       if (user) { qAdd(wk); return flush(); }
       setSync(); return Promise.resolve();
@@ -1004,7 +1005,7 @@ h1 { color: #2c2166; }
   function recalc() {
     var t = totals(state.days);
     $("summary").innerHTML =
-      '<div class="total"><span class="lbl">Total Arbeitszeit (Reisezeit max. ' + TARA + ' Min./Tag abgezogen)</span><b>' + hm(t.net) + '<small>Std.Min</small></b></div>' +
+      '<div class="total"><span class="lbl">Total Arbeitszeit' + (t.frei ? ' inkl. Frei / Üstd' : '') + ' (Reisezeit max. ' + TARA + ' Min./Tag abgezogen)</span><b>' + hm(t.tot) + '<small>Std.Min</small></b></div>' +
       '<div><span class="lbl">Absenzen</span><b>' + (fmtAbs(t.abs) || "0") + '<small>Std.</small></b></div>';
     var secs = document.querySelectorAll(".day");
     state.days.forEach(function (rows, di) {
@@ -1023,7 +1024,7 @@ h1 { color: #2c2166; }
         row.querySelector('[data-k="bis"]').setAttribute("aria-invalid", ((e.bis && c.bis === null) || (c.von !== null && c.bis !== null && c.bis <= c.von)) ? "true" : "false");
         row.querySelector('[data-del]').hidden = rows.length < 2;
       });
-      secs[di].querySelector("[data-dt]").innerHTML = (ds.gross || ds.abs) ? (ds.gross ? "von–bis <b>" + hm(ds.gross) + "</b> − Pause <b>" + hm(ds.pause) + "</b>" + (ds.tara ? " − Reise <b>" + Math.round(ds.tara) + " Min.</b>" : "") + " = <b>" + hm(ds.net) + " Std.Min</b>" : "") + (ds.abs ? (ds.gross ? " · " : "") + "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : "") : "";
+      secs[di].querySelector("[data-dt]").innerHTML = (ds.gross || ds.abs) ? (ds.gross ? "von–bis <b>" + hm(ds.gross) + "</b> − Pause <b>" + hm(ds.pause) + "</b>" + (ds.tara ? " − Reise <b>" + Math.round(ds.tara) + " Min.</b>" : "") + " = <b>" + hm(ds.net) + " Std.Min</b>" : "") + (ds.frei ? (ds.gross ? " + " : "") + "Frei / Üstd <b>" + hm(ds.frei) + "</b>" + (ds.gross ? " = Tagestotal <b>" + hm(ds.tot) + " Std.Min</b>" : " = Tagestotal <b>" + hm(ds.tot) + " Std.Min</b>") : (ds.abs ? (ds.gross ? " · " : "") + "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : "")) : "";
     });
   }
 
@@ -1142,7 +1143,7 @@ h1 { color: #2c2166; }
       txt(0, y, DAYS[di], 8);
       if (!absDay(rows) && typOf(rows)) txt(2, y, ABS_T[typOf(rows)], 7.5);
       var ds = dayStats(rows), ry = startOf(rows);
-      txt(0, y + rh, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work) ktxt(y + rh, hm(ds.net), 8, false);
+      txt(0, y + rh, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work || ds.frei) ktxt(y + rh, hm(ds.tot), 8, false);
       var ef = effs(rows);
       rows.forEach(function (e, k) {
         var c = calcRow(e, ef[k]), y1 = y + ry * rh, y2 = y1 + rh;
@@ -1167,7 +1168,7 @@ h1 { color: #2c2166; }
     rh = th;
     txt(0, y, "Total", 8.5, true);
     if (t.abs) txt(9, y, fmtAbs(t.abs), 8, true, "c");
-    ktxt(y, hm(t.net), 8.5, true);
+    ktxt(y, hm(t.tot), 8.5, true);
     var vy = y + th + 12;
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text("Visum Mitarbeiter:", cx[3], vy); doc.line(cx[3] + 28, vy + 0.5, cx[6] - 4, vy + 0.5);
@@ -3542,7 +3543,7 @@ function openReport(pre) {
         Object.keys(o.weeks).forEach(function (wk) {
           var inc = o.weeks[wk]; if (!inc || !/^\d{4}-\d{2}-\d{2}$/.test(wk)) return;
           var l = localWeek(wk);
-          if (!l || String(inc.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(inc)); index[wk] = totals(deserialize(inc.days)).net; if (user) qAdd(wk); n++; }
+          if (!l || String(inc.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(inc)); index[wk] = totals(deserialize(inc.days)).tot; if (user) qAdd(wk); n++; }
         });
         if (o.name && !lsGet("wr2:name")) lsSet("wr2:name", o.name);
         if (o.sites && o.sites.s) { var l0 = sitesGet(), mg = sitesMerge(l0, o.sites); if (sitesNewer(mg, l0)) sitesPut(mg); renderSitesInfo(); }
@@ -3557,7 +3558,7 @@ function openReport(pre) {
   /* ---------- Start ---------- */
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { } /* Browser bittet, die Daten nicht automatisch zu löschen */
   try { if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(function () { }); } catch (e) { } /* App auch ohne Netz starten (braucht sw.js im selben Ordner) */
-  localKeys().forEach(function (wk) { var o = localWeek(wk); if (o) index[wk] = totals(deserialize(o.days)).net; });
+  localKeys().forEach(function (wk) { var o = localWeek(wk); if (o) index[wk] = totals(deserialize(o.days)).tot; });
   loadWeek(state.week);
 
   var ok = /^https?:\/\//.test(SUPABASE_URL) && SUPABASE_URL.indexOf("DEIN-") < 0 && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf("DEIN-") < 0;
