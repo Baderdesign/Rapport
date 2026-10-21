@@ -1024,7 +1024,7 @@ h1 { color: #2c2166; }
         row.querySelector('[data-k="bis"]').setAttribute("aria-invalid", ((e.bis && c.bis === null) || (c.von !== null && c.bis !== null && c.bis <= c.von)) ? "true" : "false");
         row.querySelector('[data-del]').hidden = rows.length < 2;
       });
-      secs[di].querySelector("[data-dt]").innerHTML = (ds.gross || ds.abs) ? (ds.gross ? "von–bis <b>" + hm(ds.gross) + "</b> − Pause <b>" + hm(ds.pause) + "</b>" + (ds.tara ? " − Reise <b>" + Math.round(ds.tara) + " Min.</b>" : "") + " = <b>" + hm(ds.net) + " Std.Min</b>" : "") + (ds.frei ? (ds.gross ? " + " : "") + "Frei / Üstd <b>" + hm(ds.frei) + "</b>" + (ds.gross ? " = Tagestotal <b>" + hm(ds.tot) + " Std.Min</b>" : " = Tagestotal <b>" + hm(ds.tot) + " Std.Min</b>") : (ds.abs ? (ds.gross ? " · " : "") + "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : "")) : "";
+      secs[di].querySelector("[data-dt]").innerHTML = (ds.gross || ds.abs) ? (ds.gross ? "von–bis <b>" + hm(ds.gross) + "</b> − Pause <b>" + hm(ds.pause) + "</b>" + (ds.tara ? " − Reise <b>" + Math.round(ds.tara) + " Min.</b>" : "") + " = <b>" + hm(ds.net) + " Std.Min</b>" : "") + (ds.abs ? (ds.gross ? " · " : "") + "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : ""): "";
     });
   }
 
@@ -1143,7 +1143,7 @@ h1 { color: #2c2166; }
       txt(0, y, DAYS[di], 8);
       if (!absDay(rows) && typOf(rows)) txt(2, y, ABS_T[typOf(rows)], 7.5);
       var ds = dayStats(rows), ry = startOf(rows);
-      txt(0, y + rh, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work || ds.frei) ktxt(y + rh, hm(ds.tot), 8, false);
+      txt(0, y + rh, dayLbl(mon, di), 8, false, "r"); if (ds.gross || ds.work) ktxt(y + rh, hm(ds.net), 8, false);
       var ef = effs(rows);
       rows.forEach(function (e, k) {
         var c = calcRow(e, ef[k]), y1 = y + ry * rh, y2 = y1 + rh;
