@@ -2318,10 +2318,10 @@ function openReport(pre) {
   /* ---------- Jahres- und Monatsübersicht (Test, nur Inhaber, nur eigene Stunden) ---------- */
   var JY = "wr2:jahr:", ZS = "wr2:zs", JMON = ["Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
   var MNAME = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"], WDS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-  /* Gesetzliche Feiertage Kanton Zürich (bezahlt, Tagessoll = 0). Feste Liste für 2026/2027, für andere Jahre aus dem Ostersonntag berechnet. Nicht enthalten: Halbe Feiertage (ab 12 Uhr): Sechseläuten, Knabenschiessen. */
+  /* Gesetzliche Feiertage Kanton Zürich (bezahlt, Tagessoll = 0). Feste Liste für 2026/2027, für andere Jahre aus dem Ostersonntag berechnet. Quelle: zh.ch (Ruhetags- und Ladenöffnungsgesetz): 9 gesetzliche Feiertage. Nicht gesetzlich und darum nicht enthalten: Berchtoldstag, Sechseläuten, Knabenschiessen, Fasnachtsmontag. */
   var FEIER = {
-    2026: [["01-01", "Neujahr"], ["01-02", "Berchtoldstag"], ["04-03", "Karfreitag"], ["04-06", "Ostermontag"], ["05-01", "Tag der Arbeit"], ["05-14", "Auffahrt"], ["05-25", "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]],
-    2027: [["01-01", "Neujahr"], ["01-02", "Berchtoldstag"], ["03-26", "Karfreitag"], ["03-29", "Ostermontag"], ["05-01", "Tag der Arbeit"], ["05-06", "Auffahrt"], ["05-17", "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]]
+    2026: [["01-01", "Neujahr"], ["04-03", "Karfreitag"], ["04-06", "Ostermontag"], ["05-01", "Tag der Arbeit"], ["05-14", "Auffahrt"], ["05-25", "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]],
+    2027: [["01-01", "Neujahr"], ["03-26", "Karfreitag"], ["03-29", "Ostermontag"], ["05-01", "Tag der Arbeit"], ["05-06", "Auffahrt"], ["05-17", "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]]
   };
   function easterSunday(y) { /* Gauss/Meeus */
     var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), dy = ((h + l - 7 * m + 114) % 31) + 1;
@@ -2330,10 +2330,12 @@ function openReport(pre) {
   function feierList(y) {
     if (FEIER[y]) return FEIER[y];
     var e = easterSunday(y), md = function (dt) { return pad(dt.getMonth() + 1) + "-" + pad(dt.getDate()); };
-    return [["01-01", "Neujahr"], ["01-02", "Berchtoldstag"], [md(addDays(e, -2)), "Karfreitag"], [md(addDays(e, 1)), "Ostermontag"], ["05-01", "Tag der Arbeit"], [md(addDays(e, 39)), "Auffahrt"], [md(addDays(e, 50)), "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]];
+    return [["01-01", "Neujahr"], [md(addDays(e, -2)), "Karfreitag"], [md(addDays(e, 1)), "Ostermontag"], ["05-01", "Tag der Arbeit"], [md(addDays(e, 39)), "Auffahrt"], [md(addDays(e, 50)), "Pfingstmontag"], ["08-01", "Bundesfeier"], ["12-25", "Weihnachten"], ["12-26", "Stephanstag"]];
   }
   var TAGSOLL = 480; /* wie im Original-Formular: 8.00 Std. pro Arbeitstag */
-  function halbtag(dt) { /* Sechseläuten: 3. Montag im April; Knabenschiessen: Montag nach dem 2. Sonntag im September */
+  var HALBTAGE = false; /* Sechseläuten / Knabenschiessen sind im Kanton Zürich nicht gesetzlich; nur auf true setzen, wenn der Betrieb sie bezahlt */
+  function halbtag(dt) {
+    if (!HALBTAGE) return ""; /* Sechseläuten: 3. Montag im April; Knabenschiessen: Montag nach dem 2. Sonntag im September */
     if (dt.getDay() !== 1) return "";
     var m = dt.getMonth(), d = dt.getDate();
     if (m === 3 && d >= 15 && d <= 21) return "Sechseläuten";
@@ -2536,7 +2538,7 @@ function openReport(pre) {
       last: last, days: days,
       rows: [
         { l: "Sollstunden", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), w = dt.getDay(); return w >= 1 && w <= 5 && R.fd && dt >= R.fd && sollDay(dt, R.pcts[m]) ? hm(sollDay(dt, R.pcts[m])) : ""; }) },
-        { l: "Feiertage ft (bezahlt, Sechseläuten/Knabenschiessen halb)", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), f = feierDay(dt, R.pcts[m]); return R.fd && dt >= R.fd && f ? hm(f) : ""; }), title: days.map(function (dd) { var q = new Date(R.y, m, dd); return feiertag(q) || halbtag(q); }) },
+        { l: "Feiertage ft (bezahlt)", v: days.map(function (dd) { var dt = new Date(R.y, m, dd), f = feierDay(dt, R.pcts[m]); return R.fd && dt >= R.fd && f ? hm(f) : ""; }), title: days.map(function (dd) { var q = new Date(R.y, m, dd); return feiertag(q) || halbtag(q); }) },
         { l: "Gutschrift von Hand (Std.)", key: "ft", man: 1 },
         { l: "Tagarbeit 06.00–20.00", v: dv("tag") },
         { l: "Nachtarbeit 20.00–06.00", v: dv("night") },
@@ -2682,6 +2684,26 @@ function openReport(pre) {
       o.ist = o.work + o.abs + o.zus + o.fth; o.saldo = o.ist - o.soll; o.kum = kist - ksoll;
       return o;
     }).sort(function (a, b) { return (a.name || a.em).localeCompare(b.name || b.em); });
+  }
+  function closeFeier() { var o = $("feier"); if (o) o.remove(); }
+  function openFeiertage(y) {
+    closeFeier(); y = y || new Date().getFullYear();
+    var WD = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+    var list = el("div", { "class": "slist", role: "list" }), foot = el("div", { "class": "status" }), h = el("h2", { text: "" });
+    var pv = el("button", { type: "button", "class": "btn", text: "‹ " + (y - 1) }), nx = el("button", { type: "button", "class": "btn", text: (y + 1) + " ›" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet bil" }, [h, el("p", { text: "Gesetzliche Feiertage (Ruhetags- und Ladenöffnungsgesetz). Sie sind bezahlt und werden im Soll nicht verlangt. Fällt ein Feiertag auf Samstag oder Sonntag, gibt es keinen Ausgleich." }), list, foot, el("div", { "class": "actions" }, [pv, nx, cl])]);
+    var ov = el("div", { "class": "overlay sites", id: "feier", role: "dialog", "aria-modal": "true", "aria-label": "Feiertage" }, [sheet]);
+    var n = 0; h.textContent = "Feiertage Kanton Zürich " + y;
+    feierList(y).forEach(function (f) {
+      var p = f[0].split("-"), dt = new Date(y, +p[0] - 1, +p[1]), we = dt.getDay() === 0 || dt.getDay() === 6; if (!we) n++;
+      var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: pad(dt.getDate()) + "." + pad(dt.getMonth() + 1) + "." + y + "  " + f[1] }));
+      t.appendChild(el("small", { text: WD[dt.getDay()] + (we ? " · fällt aufs Wochenende" : " · bezahlt, Soll 0") }));
+      list.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: we ? "–" : "8.00" })]));
+    });
+    foot.textContent = n + " Feiertage unter der Woche, " + feierList(y).length + " gesetzliche insgesamt.";
+    pv.addEventListener("click", function () { openFeiertage(y - 1); }); nx.addEventListener("click", function () { openFeiertage(y + 1); });
+    cl.addEventListener("click", closeFeier); ov.addEventListener("click", function (e) { if (e.target === ov) closeFeier(); });
+    document.body.appendChild(ov);
   }
   function closeGleit() { var o = $("gleit"); if (o) o.remove(); }
   function editKonten(o, y, K, again) {
@@ -2901,7 +2923,7 @@ function openReport(pre) {
     function mkRoom(i, h) { var w = []; for (var k = 0; k < 4; k++) w.push(mkWall()); return { n: "Zimmer " + i, dl: "", db: "", h: h, deck: true, walls: w }; }
     function auto(r, j) { return (j === 0 || j === 2) ? pn(r.dl) : ((j === 1 || j === 3) ? pn(r.db) : 0); }
     function norm(o) {
-      o.tuer = o.tuer || { b: "1,00", h: "2,10" }; o.fenster = o.fenster || { b: "1,20", h: "1,20" }; o.hoehe = o.hoehe || "2,50";
+      o.tuer = o.tuer || { b: "1,00", h: "2,10" }; o.fenster = o.fenster || { b: "1,20", h: "1,20" }; o.hoehe = o.hoehe || "2,50"; if (o.grenze === undefined) o.grenze = "3,00";
       o.rooms.forEach(function (r) {
         if (r.h !== undefined && r.walls) return;
         var old = r.walls || [], n = Math.max(4, old.length), w = [];
@@ -2917,13 +2939,15 @@ function openReport(pre) {
     }
     var S = null;
     try { var o = JSON.parse(lsGet(KEY) || "null"); if (o && o.rooms && o.rooms.length) S = norm(o); } catch (e) { }
-    if (!S) S = { rooms: [mkRoom(1, "2,50")], tuer: { b: "1,00", h: "2,10" }, fenster: { b: "1,20", h: "1,20" }, hoehe: "2,50" };
+    if (!S) S = { rooms: [mkRoom(1, "2,50")], tuer: { b: "1,00", h: "2,10" }, fenster: { b: "1,20", h: "1,20" }, hoehe: "2,50", grenze: "3,00" };
     function save() { lsSet(KEY, JSON.stringify(S)); }
     function tuerA() { return pn(S.tuer.b) * pn(S.tuer.h); }
     function fenA() { return pn(S.fenster.b) * pn(S.fenster.h); }
+    function ueG() { return pn(S.grenze); } /* Übermessung: Öffnungen kleiner als diese Fläche werden nicht abgezogen (0 = alle abziehen) */
+    function oeff(a) { return a > 0 && a < ueG() ? 0 : a; }
     function wc(r, j) {
-      var w = r.walls[j], l = pn(w.l) || auto(r, j), hh = pn(w.h) || pn(r.h), m2 = l * hh, ab = m2 ? Math.min(m2, (w.t || 0) * tuerA() + (w.f || 0) * fenA()) : 0;
-      return { on: w.on !== false, l: l, h: hh, m2: m2, ab: ab, net: m2 - ab, ch: !!(pn(w.l) || pn(w.h)) };
+      var w = r.walls[j], l = pn(w.l) || auto(r, j), hh = pn(w.h) || pn(r.h), m2 = l * hh, raw = (w.t || 0) * tuerA() + (w.f || 0) * fenA(), ded = (w.t || 0) * oeff(tuerA()) + (w.f || 0) * oeff(fenA()), ab = m2 ? Math.min(m2, ded) : 0;
+      return { on: w.on !== false, l: l, h: hh, m2: m2, ab: ab, net: m2 - ab, ch: !!(pn(w.l) || pn(w.h)), ue: !!(m2 && raw > ded) };
     }
     function rc(r) {
       var wm = 0, wa = 0, wn = 0; r.walls.forEach(function (w, j) { var c = wc(r, j); if (c.on) { wm += c.m2; wa += c.ab; wn += c.net; } });
@@ -2958,7 +2982,7 @@ function openReport(pre) {
         var r = S.rooms[i], t = rc(r);
         Object.keys(R.w).forEach(function (j) {
           var c = wc(r, +j), W = R.w[j];
-          W.ar.textContent = f2(c.m2) + " m²" + (c.ab ? " · Abzug −" + f2(c.ab) + " m²" : ""); W.tag.textContent = c.ch ? "geändert" : "";
+          W.ar.textContent = f2(c.m2) + " m²" + (c.ab ? " · Abzug −" + f2(c.ab) + " m²" : "") + (c.ue ? " · Öffnungen übermessen" : ""); W.tag.textContent = c.ch ? "geändert" : "";
           W.il.placeholder = auto(r, +j) ? f2(auto(r, +j)) : "Länge"; W.ih.placeholder = pn(r.h) ? f2(pn(r.h)) : "Höhe";
         });
         r.walls.forEach(function (w, j) { if (R.chip[j]) R.chip[j].textContent = "Wand " + (j + 1) + " · " + (wc(r, j).l ? f2(wc(r, j).l) : "–"); });
@@ -2975,6 +2999,7 @@ function openReport(pre) {
       var set = el("details", {}); set.appendChild(el("summary", { text: "Abzüge einstellen (Standardwerte)" }));
       set.appendChild(line([sp("Tür", "min-width:4.2em"), numIn(S.tuer, "b", "Breite"), sp("×"), numIn(S.tuer, "h", "Höhe"), sp("m")]));
       set.appendChild(line([sp("Fenster", "min-width:4.2em"), numIn(S.fenster, "b", "Breite"), sp("×"), numIn(S.fenster, "h", "Höhe"), sp("m")]));
+      set.appendChild(line([sp("Öffnungen unter", "min-width:4.2em"), numIn(S, "grenze", "3,00"), sp("m² nicht abziehen (übermessen). 0 = immer abziehen.")]));
       set.appendChild(line([sp("Wandhöhe", "min-width:4.2em"), numIn(S, "hoehe", "Höhe"), sp("m (für neue Zimmer)")]));
       wrap.appendChild(set);
       S.rooms.forEach(function (r, i) {
@@ -3097,7 +3122,7 @@ function openReport(pre) {
       });
       chk(22); doc.setLineWidth(0.5); doc.line(X, y, R, y); y += 6; doc.setFontSize(10); T("Alle Decken", X, y); T(f2(gD) + " m²", R, y, { align: "right" }); y += 5.5; T("Alle Wände (nach Abzug)", X, y); T(f2(gW) + " m²", R, y, { align: "right" }); y += 7;
       doc.setFont("helvetica", "bold"); doc.setFontSize(12); T("Gesamt", X, y); T(f2(gD + gW) + " m²", R, y, { align: "right" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8); T("Abzug Tür " + f2(pn(S.tuer.b)) + " × " + f2(pn(S.tuer.h)) + " m, Fenster " + f2(pn(S.fenster.b)) + " × " + f2(pn(S.fenster.h)) + " m", X, 290);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); T("Abzug Tür " + f2(pn(S.tuer.b)) + " × " + f2(pn(S.tuer.h)) + " m, Fenster " + f2(pn(S.fenster.b)) + " × " + f2(pn(S.fenster.h)) + " m" + (ueG() > 0 ? ". Öffnungen unter " + f2(ueG()) + " m² werden nicht abgezogen (übermessen)." : ""), X, 290);
       return doc;
     }
     cl.addEventListener("click", closeM2); ov.addEventListener("click", function (e) { if (e.target === ov) closeM2(); });
@@ -3368,7 +3393,7 @@ function openReport(pre) {
   }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }]];
+    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage Kanton Zürich", function () { openFeiertage(); }]];
     if (isAdmin()) { items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
