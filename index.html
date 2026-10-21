@@ -2935,6 +2935,11 @@ function openReport(pre) {
         }
         r.walls = w;
       });
+      o.rooms.forEach(function (r) { (r.walls || []).forEach(function (w) { /* alte Zähler (Fenster / Türen) in einzelne Öffnungen mit Standardmassen umwandeln */
+        if (Array.isArray(w.o)) return; w.o = [];
+        for (var q = 0; q < (w.f || 0); q++) w.o.push({ k: "f", b: o.fenster.b, h: o.fenster.h, lt: "" });
+        for (var q2 = 0; q2 < (w.t || 0); q2++) w.o.push({ k: "t", b: o.tuer.b, h: o.tuer.h, lt: "" });
+        w.f = 0; w.t = 0; }); });
       return o;
     }
     var S = null;
@@ -2944,14 +2949,18 @@ function openReport(pre) {
     function tuerA() { return pn(S.tuer.b) * pn(S.tuer.h); }
     function fenA() { return pn(S.fenster.b) * pn(S.fenster.h); }
     function ueG() { return pn(S.grenze); } /* Übermessung: Öffnungen kleiner als diese Fläche werden nicht abgezogen (0 = alle abziehen) */
-    function oeff(a) { return a > 0 && a < ueG() ? 0 : a; }
+    function oA(x) { return pn(x.b) * pn(x.h); }
+    function oBig(x) { var a = oA(x); return a > 0 && (ueG() <= 0 || a >= ueG()); } /* ab der Grenze: abziehen, Leibung dazu */
+    function oLb(x) { return ueG() > 0 ? (x.k === "t" ? pn(x.b) + 2 * pn(x.h) : 2 * (pn(x.b) + pn(x.h))) * pn(x.lt) : 0; }
     function wc(r, j) {
-      var w = r.walls[j], l = pn(w.l) || auto(r, j), hh = pn(w.h) || pn(r.h), m2 = l * hh, raw = (w.t || 0) * tuerA() + (w.f || 0) * fenA(), ded = (w.t || 0) * oeff(tuerA()) + (w.f || 0) * oeff(fenA()), ab = m2 ? Math.min(m2, ded) : 0;
-      return { on: w.on !== false, l: l, h: hh, m2: m2, ab: ab, net: m2 - ab, ch: !!(pn(w.l) || pn(w.h)), ue: !!(m2 && raw > ded) };
+      var w = r.walls[j], l = pn(w.l) || auto(r, j), hh = pn(w.h) || pn(r.h), m2 = l * hh, raw = 0, ded = 0, lb = 0, ue = false;
+      (w.o || []).forEach(function (x) { var a = oA(x); raw += a; if (oBig(x)) { ded += a; lb += oLb(x); } else if (a > 0) ue = true; });
+      var ab = m2 ? Math.min(m2, ded) : 0, lbn = m2 ? lb : 0;
+      return { on: w.on !== false, l: l, h: hh, m2: m2, ab: ab, lb: lbn, net: m2 - ab + lbn, ch: !!(pn(w.l) || pn(w.h)), ue: !!(m2 && ue) };
     }
     function rc(r) {
-      var wm = 0, wa = 0, wn = 0; r.walls.forEach(function (w, j) { var c = wc(r, j); if (c.on) { wm += c.m2; wa += c.ab; wn += c.net; } });
-      var dk = r.deck ? pn(r.dl) * pn(r.db) : 0; return { wm: wm, wa: wa, wn: wn, dk: dk, tot: wn + dk };
+      var wm = 0, wa = 0, wn = 0, wl = 0; r.walls.forEach(function (w, j) { var c = wc(r, j); if (c.on) { wm += c.m2; wa += c.ab; wn += c.net; wl += c.lb; } });
+      var dk = r.deck ? pn(r.dl) * pn(r.db) : 0; return { wm: wm, wa: wa, wl: wl, wn: wn, dk: dk, tot: wn + dk };
     }
     var wrap = el("div", {}), refs = null;
     var cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
@@ -2976,18 +2985,44 @@ function openReport(pre) {
       p.addEventListener("click", function () { obj[key] = (obj[key] || 0) + 1; c.textContent = obj[key]; save(); calc(); });
       return el("div", { "class": "st" }, [el("span", { text: label }), m, c, p]);
     }
+    function openOeff(r, j, w, k) {
+      var old = $("oeff"); if (old) old.remove();
+      var dflt = k === "t" ? S.tuer : S.fenster, nm = k === "t" ? "Tür" : "Fenster";
+      var ib = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": nm + " Breite" }), ih = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": nm + " Höhe" }), il = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 0,20", "aria-label": "Tiefe der Leibung in Metern" });
+      ib.value = dflt.b; ih.value = dflt.h;
+      [ib, ih, il].forEach(function (i) { i.style.cssText = "min-height:0;height:2.4em;width:4.6em;text-align:center;flex:none"; });
+      var ar = el("span", { style: "font-weight:700" }), hint = el("div", { style: "padding:10px 12px;border-radius:10px;font-weight:600;margin:8px 0" }), info = el("div", { "class": "status" });
+      var lbBox = el("div", {}, [el("div", { "class": "fl", text: "Leibung (Pflichtfeld)" }), el("div", { style: "display:flex;align-items:center;gap:6px;margin:6px 0" }, [sp("Tiefe"), il, sp("m  ·  " + (k === "t" ? "3" : "4") + " Seiten")])]);
+      var ok = el("button", { type: "button", "class": "btn primary", text: "Übernehmen" }), no = el("button", { type: "button", "class": "btn", text: "Abbrechen" });
+      function upd() {
+        var x = { k: k, b: ib.value, h: ih.value, lt: il.value }, a = oA(x), big = oBig(x), g = ueG();
+        ar.textContent = "m = " + f2(a) + " m²"; lbBox.hidden = !big;
+        if (!a) { hint.textContent = "Bitte Breite und Höhe eingeben."; hint.style.cssText = "padding:10px 12px;border-radius:10px;font-weight:600;margin:8px 0;background:#eceff2;color:#444"; info.textContent = ""; ok.disabled = true; ok.style.opacity = ".45"; return; }
+        if (!big) { hint.textContent = "Fläche unter " + f2(g) + " m² – wird nach SIA automatisch übermessen."; hint.style.cssText = "padding:10px 12px;border-radius:10px;font-weight:600;margin:8px 0;background:#e7f4ea;color:#1d5c2e"; info.textContent = "Kein Abzug, keine Leibung nötig."; ok.disabled = false; ok.style.opacity = ""; return; }
+        hint.textContent = "Fläche ab " + f2(g) + " m² – wird abgezogen: −" + f2(a) + " m². Leibung ist Pflicht."; hint.style.cssText = "padding:10px 12px;border-radius:10px;font-weight:600;margin:8px 0;background:#fdf1d8;color:#6b4f12";
+        var lb = oLb(x); info.textContent = pn(il.value) > 0 ? "Leibungsfläche: " + (k === "t" ? "(" + f2(pn(ib.value)) + " + 2 × " + f2(pn(ih.value)) + ")" : "2 × (" + f2(pn(ib.value)) + " + " + f2(pn(ih.value)) + ")") + " × " + f2(pn(il.value)) + " = " + f2(lb) + " m² (wird zur Malerfläche addiert)." : "Bitte die Tiefe der Leibung eintragen.";
+        var good = pn(il.value) > 0; ok.disabled = !good; ok.style.opacity = good ? "" : ".45";
+      }
+      [ib, ih, il].forEach(function (i) { i.addEventListener("input", upd); });
+      var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: nm + " hinzufügen · Wand " + (j + 1) }), el("div", { style: "display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0" }, [sp("Breite"), ib, sp("×"), sp("Höhe"), ih, ar]), hint, lbBox, info, el("div", { "class": "actions" }, [ok, no])]);
+      var ov2 = el("div", { "class": "overlay sites", id: "oeff", role: "dialog", "aria-modal": "true", "aria-label": nm + " hinzufügen" }, [sheet]); ov2.style.zIndex = "70";
+      function shut() { ov2.remove(); }
+      no.addEventListener("click", shut); ov2.addEventListener("click", function (e) { if (e.target === ov2) shut(); });
+      ok.addEventListener("click", function () { var x = { k: k, b: ib.value, h: ih.value, lt: oBig({ k: k, b: ib.value, h: ih.value }) ? il.value : "" }; if (!oA(x)) return; if (oBig(x) && !(pn(il.value) > 0)) return; (w.o = w.o || []).push(x); save(); shut(); draw(); calc(); });
+      document.body.appendChild(ov2); upd(); ib.focus(); ib.select();
+    }
     function calc() {
       var gD = 0, gW = 0;
       refs.rooms.forEach(function (R, i) {
         var r = S.rooms[i], t = rc(r);
         Object.keys(R.w).forEach(function (j) {
           var c = wc(r, +j), W = R.w[j];
-          W.ar.textContent = f2(c.m2) + " m²" + (c.ab ? " · Abzug −" + f2(c.ab) + " m²" : "") + (c.ue ? " · Öffnungen übermessen" : ""); W.tag.textContent = c.ch ? "geändert" : "";
+          W.ar.textContent = f2(c.m2) + " m²" + (c.ab ? " · Abzug −" + f2(c.ab) + " m²" : "") + (c.lb ? " · Leibung +" + f2(c.lb) + " m²" : "") + (c.ue ? " · Öffnungen übermessen" : ""); W.tag.textContent = c.ch ? "geändert" : "";
           W.il.placeholder = auto(r, +j) ? f2(auto(r, +j)) : "Länge"; W.ih.placeholder = pn(r.h) ? f2(pn(r.h)) : "Höhe";
         });
         r.walls.forEach(function (w, j) { if (R.chip[j]) R.chip[j].textContent = "Wand " + (j + 1) + " · " + (wc(r, j).l ? f2(wc(r, j).l) : "–"); });
         R.dk.textContent = "Decke streichen (" + f2(pn(r.dl) * pn(r.db)) + " m²)";
-        R.a.textContent = f2(t.wm) + " m²"; R.b.textContent = "−" + f2(t.wa) + " m²"; R.c.textContent = f2(t.wn) + " m²";
+        R.a.textContent = f2(t.wm) + " m²"; R.b.textContent = "−" + f2(t.wa) + " m²" + (t.wl ? " +" + f2(t.wl) : ""); R.c.textContent = f2(t.wn) + " m²";
         refs.tn[i].textContent = r.n || "Zimmer"; refs.tv[i].textContent = f2(t.tot) + " m²"; gD += t.dk; gW += t.wn;
       });
       refs.gD.textContent = f2(gD) + " m²"; refs.gW.textContent = f2(gW) + " m²"; refs.gT.textContent = f2(gD + gW) + " m²";
@@ -3028,7 +3063,15 @@ function openReport(pre) {
           var key = i + "-" + j, W = {}, box = el("div", { "class": "wb" });
           W.ar = el("span", { "class": "wa" }); W.tag = el("span", { "class": "tg" });
           var left = el("button", { type: "button", "class": "wl", "aria-label": "Wand " + (j + 1) + " Masse ändern" }, [el("b", { text: "Wand " + (j + 1) }), W.ar, W.tag]);
-          var row = el("div", { "class": "wr" }, [left, el("div", { "class": "sts" }, [stepper("Fenster", "Fenster", w, "f"), stepper("Tür", "Türen", w, "t")])]);
+          var bf = el("button", { type: "button", "class": "btn", text: "+ Fenster" }), bt = el("button", { type: "button", "class": "btn", text: "+ Tür" });
+          bf.addEventListener("click", function () { openOeff(r, j, w, "f"); }); bt.addEventListener("click", function () { openOeff(r, j, w, "t"); });
+          var row = el("div", { "class": "wr" }, [left, el("div", { "class": "sts" }, [bf, bt])]);
+          var ol = el("div", { "class": "ol" });
+          (w.o || []).forEach(function (x, q) {
+            var a = oA(x), big = oBig(x), rm2 = el("button", { type: "button", "class": "lk", text: "Entfernen", "aria-label": "Öffnung entfernen" });
+            rm2.addEventListener("click", function () { w.o.splice(q, 1); save(); draw(); calc(); });
+            ol.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.85rem;margin:3px 0" }, [el("span", { text: (x.k === "t" ? "Tür " : "Fenster ") + f2(pn(x.b)) + " × " + f2(pn(x.h)) + " = " + f2(a) + " m² · " + (big ? "abgezogen, Leibung +" + f2(oLb(x)) + " m²" : "übermessen") }), rm2]));
+          });
           var ep = el("div", { "class": "ep" }); ep.hidden = !ed[key];
           W.il = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Wandlänge" }); W.il.value = w.l || "";
           W.ih = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", "aria-label": "Wandhöhe" }); W.ih.value = w.h || "";
@@ -3038,7 +3081,7 @@ function openReport(pre) {
           if (j >= 4) { var dw = el("button", { type: "button", "class": "btn", text: "Wand entfernen" }); dw.addEventListener("click", function () { r.walls.splice(j, 1); ed = {}; save(); draw(); calc(); }); er.appendChild(dw); }
           ep.appendChild(er);
           left.addEventListener("click", function () { ed[key] = !ed[key]; ep.hidden = !ed[key]; if (!ep.hidden) W.il.focus(); });
-          box.appendChild(row); box.appendChild(ep); card.appendChild(box); R.w[j] = W;
+          box.appendChild(row); if ((w.o || []).length) box.appendChild(ol); box.appendChild(ep); card.appendChild(box); R.w[j] = W;
         });
         card.appendChild(el("div", { "class": "std", text: "Standard: Fenster " + f2(pn(S.fenster.b)) + " × " + f2(pn(S.fenster.h)) + " m · Tür " + f2(pn(S.tuer.b)) + " × " + f2(pn(S.tuer.h)) + " m (änderbar oben)" }));
         var cb = el("input", { type: "checkbox", id: "m2d" + i }); cb.checked = !!r.deck; R.dk = el("span", {});
@@ -3115,14 +3158,19 @@ function openReport(pre) {
         r.walls.forEach(function (w, j) {
           var c = wc(r, j); if (!c.on) return; chk(12);
           T("Wand " + (j + 1) + "  " + f2(c.l) + " × " + f2(c.h), X + 3, y); T(f2(c.m2) + " m²", R, y, { align: "right" }); y += 5;
-          if (c.ab) { doc.setFontSize(8.5); T("Abzug: " + ((w.t || 0) ? w.t + " Tür(en) " : "") + ((w.f || 0) ? w.f + " Fenster " : "") + " −" + f2(c.ab) + " m²  →  " + f2(c.net) + " m²", X + 8, y); doc.setFontSize(9.5); y += 5; }
+          if ((w.o || []).length) {
+            doc.setFontSize(8.5);
+            w.o.forEach(function (x) { chk(10); var a = oA(x); if (oBig(x)) { T((x.k === "t" ? "Tür " : "Fenster ") + f2(pn(x.b)) + " × " + f2(pn(x.h)) + " = " + f2(a) + " m²  →  Abzug −" + f2(a) + " m²" + (pn(x.lt) > 0 ? ", Leibung " + f2(pn(x.lt)) + " m tief +" + f2(oLb(x)) + " m²" : ""), X + 8, y); } else { T((x.k === "t" ? "Tür " : "Fenster ") + f2(pn(x.b)) + " × " + f2(pn(x.h)) + " = " + f2(a) + " m²  →  übermessen", X + 8, y); } y += 4.5; });
+            if (c.ab || c.lb) { T("Netto Wand " + f2(c.net) + " m²", X + 8, y); y += 4.5; }
+            doc.setFontSize(9.5); y += 0.5;
+          }
         });
         chk(14); doc.setLineWidth(0.2); doc.line(X, y - 1.5, R, y - 1.5); y += 2;
         T((r.deck ? "Decke " + f2(t.dk) + " m²  ·  " : "") + "Wände nach Abzug " + f2(t.wn) + " m²", X + 3, y); doc.setFont("helvetica", "bold"); T((r.n || "Zimmer") + ": " + f2(t.tot) + " m²", R, y, { align: "right" }); doc.setFont("helvetica", "normal"); y += 9; gD += t.dk; gW += t.wn;
       });
       chk(22); doc.setLineWidth(0.5); doc.line(X, y, R, y); y += 6; doc.setFontSize(10); T("Alle Decken", X, y); T(f2(gD) + " m²", R, y, { align: "right" }); y += 5.5; T("Alle Wände (nach Abzug)", X, y); T(f2(gW) + " m²", R, y, { align: "right" }); y += 7;
       doc.setFont("helvetica", "bold"); doc.setFontSize(12); T("Gesamt", X, y); T(f2(gD + gW) + " m²", R, y, { align: "right" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8); T("Abzug Tür " + f2(pn(S.tuer.b)) + " × " + f2(pn(S.tuer.h)) + " m, Fenster " + f2(pn(S.fenster.b)) + " × " + f2(pn(S.fenster.h)) + " m" + (ueG() > 0 ? ". Öffnungen unter " + f2(ueG()) + " m² werden nicht abgezogen (übermessen)." : ""), X, 290);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); T("Abzug Tür " + f2(pn(S.tuer.b)) + " × " + f2(pn(S.tuer.h)) + " m, Fenster " + f2(pn(S.fenster.b)) + " × " + f2(pn(S.fenster.h)) + " m" + (ueG() > 0 ? ". Öffnungen unter " + f2(ueG()) + " m² werden nicht abgezogen (übermessen). Ab " + f2(ueG()) + " m²: Abzug, Leibung wird addiert." : ""), X, 290);
       return doc;
     }
     cl.addEventListener("click", closeM2); ov.addEventListener("click", function (e) { if (e.target === ov) closeM2(); });
