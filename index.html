@@ -1734,6 +1734,9 @@ h1 { color: #2c2166; }
   var RP = "wr2:reports", RO = "wr2:rout";
   function rpGet() { try { var o = JSON.parse(lsGet(RP) || "null"); if (o && o.s) return o; } catch (e) { } return { s: {} }; }
   function rpSet(o) { lsSet(RP, JSON.stringify(o)); }
+  var RSEP = "\u2063"; /* Regie-Markierung im gespeicherten Text: SEP R SEP Std SEP Regietext SEP SEP normaler Text */
+  function rpPack(on, std, rtext, text) { std = String(std || "").replace(/[^\d.,]/g, "").slice(0, 6); rtext = String(rtext || "").split(RSEP).join("").trim(); text = String(text || "").split(RSEP).join("").trim(); if (!on || !(rtext || std)) return text; return RSEP + "R" + RSEP + std + RSEP + rtext + RSEP + RSEP + text; }
+  function rpParse(b) { b = String(b == null ? "" : b); if (b.indexOf(RSEP + "R" + RSEP) !== 0) return { r: false, std: "", rtext: "", text: b.trim() }; var q = b.split(RSEP); return { r: true, std: q[2] || "", rtext: (q[3] || "").trim(), text: q.slice(5).join(RSEP).trim() }; }
   function roGet() { try { var a = JSON.parse(lsGet(RO) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function rpMsg(er) {
     var m = String((er && er.message) || er || "");
@@ -1811,6 +1814,13 @@ function openReport(pre) {
     var dt = el("input", { type: "date", "aria-label": "Datum" }); dt.value = pre.day || key(new Date());
     var hrs = el("div", { "class": "editbox" });
     var ta = el("textarea", { "class": "bulk", placeholder: "z. B. Bodenplatte betoniert, Schalung gestellt …", "aria-label": "Art der ausgeführten Arbeiten", maxlength: "5000" });
+    var rOn = false, rBtn = el("button", { type: "button", "class": "btn", "aria-pressed": "false", text: "Regie" });
+    var rTa = el("textarea", { "class": "bulk", placeholder: "Regie: was wurde in Regie gearbeitet …", "aria-label": "Regie-Arbeiten", maxlength: "2500" });
+    var rStd = el("input", { type: "text", inputmode: "decimal", placeholder: "Regie-Stunden (z. B. 1.5)", autocomplete: "off", "aria-label": "Regie-Stunden", style: "max-width:12em" });
+    var rBox = el("div", { "class": "editbox", style: "border:2px solid var(--accent,#272062)" }, [el("div", { "class": "lbl", text: "Regie (wird im Rapport mit R markiert)" }), rTa, rStd]); rBox.hidden = true;
+    var lblN = el("div", { "class": "lbl", text: "Baustellenrapport (ohne Regie)" }); lblN.hidden = true;
+    function setR(on) { rOn = !!on; rBtn.setAttribute("aria-pressed", String(rOn)); rBtn.textContent = (rOn ? "✓ " : "") + "Regie"; rBtn.className = "btn" + (rOn ? " primary" : ""); rBox.hidden = !rOn; lblN.hidden = !rOn; }
+    rBtn.addEventListener("click", function () { setR(!rOn); if (rOn) rTa.focus(); });
     var save = el("button", { type: "button", "class": "btn primary", text: "Rapport speichern" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var msg = el("div", { "class": "status", role: "status" });
@@ -1829,7 +1839,7 @@ function openReport(pre) {
         hrs.appendChild(el("div", { "class": "big", text: v ? hm(v) : "–" }));
         if (!v) hrs.appendChild(el("div", { "class": "status", text: "Für diese Baustelle und diesen Tag stehen noch keine Zeiten im Wochenrapport." }));
       }
-      var cur = rpGet().s[nr + "|" + dt.value]; ta.value = cur || "";
+      var cur = rpParse(rpGet().s[nr + "|" + dt.value]); ta.value = cur.text || ""; rTa.value = cur.rtext || ""; rStd.value = cur.std || ""; setR(cur.r);
       dateienLoad(nr, "rapport", dbox);
     }
     function drawMine() {
@@ -1838,21 +1848,21 @@ function openReport(pre) {
       ks.forEach(function (k) {
         var p = k.split("|"), info = siteByNr(p[0]);
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: p[0] })); t.appendChild(document.createTextNode((info && info.n) || ""));
-        t.appendChild(el("small", { text: dmy(fromKey(p[1])) + " · " + s[k].slice(0, 70) }));
+        var pr = rpParse(s[k]); t.appendChild(el("small", { text: dmy(fromKey(p[1])) + " · " + (pr.r ? "R · " : "") + (pr.text || pr.rtext).slice(0, 70) }));
         mine.appendChild(tapRow(t, function () { inp.value = p[0]; dt.value = p[1]; refresh(); window.scrollTo(0, 0); }));
       });
     }
     var sheet = el("div", { "class": "sheet bil" }, [
       el("h2", { text: "Baustellenrapport" }),
       el("p", { text: "Wähle die Baustelle und den Tag. Deine Stunden kommen automatisch aus deinem Wochenrapport. Du schreibst nur, was gearbeitet wurde. Es reicht, wenn einer von euch schreibt." }),
-      inp, dl, nm, dt, hrs, ta, el("div", { "class": "actions" }, [save]), msg, dbox,
+      inp, dl, nm, dt, el("div", { "class": "actions" }, [rBtn]), hrs, rBox, lblN, ta, el("div", { "class": "actions" }, [save]), msg, dbox,
       el("div", { "class": "lbl", text: "Meine letzten Rapporte" }), mine, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "report", role: "dialog", "aria-modal": "true", "aria-label": "Baustellenrapport" }, [sheet]);
     inp.addEventListener("input", function () { suggest(); if (siteByNr(curNr())) refresh(); else { nm.textContent = ""; hrs.textContent = ""; } });
     inp.addEventListener("focus", function () { dl._f = 0; suggest(); });
     dt.addEventListener("change", refresh);
     save.addEventListener("click", async function () {
-      var nr = curNr(), day = dt.value, body = ta.value.trim();
+      var nr = curNr(), day = dt.value, body = rpPack(rOn, rStd.value, rTa.value, ta.value);
       if (isDemo()) { say(DEMO_MSG, "bad"); return; }
       if (!nr) { say("Bitte die Baustelle wählen.", "bad"); return; }
       if (!day) { say("Bitte das Datum wählen.", "bad"); return; }
@@ -1863,14 +1873,14 @@ function openReport(pre) {
         var r = await sb.rpc("report_save", { p_nr: nr, p_day: day, p_body: body });
         if (r.error) { say(rpMsg(r.error) + " Der Rapport bleibt auf dem Handy gespeichert.", "bad"); return; }
         lsSet(RO, JSON.stringify(roGet().filter(function (x) { return !(x.nr === nr && x.day === day); })));
-        closeReport(); toast(body ? "Rapport gespeichert ✓" : "Rapport gelöscht ✓");
+        closeReport(); toast(body ? (rpParse(body).r ? "Rapport mit Regie gespeichert ✓" : "Rapport gespeichert ✓") : "Rapport gelöscht ✓");
       } catch (e) { say(rpMsg(e) + " Der Rapport bleibt auf dem Handy gespeichert.", "bad"); }
     });
     close.addEventListener("click", closeReport);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeReport(); });
     document.body.appendChild(ov);
     if (pre.nr) inp.value = pre.nr;
-    refresh(); drawMine(); rpPull().then(function () { if ($("report")) { drawMine(); if (!ta.value) refresh(); } });
+    refresh(); drawMine(); rpPull().then(function () { if ($("report")) { drawMine(); if (!ta.value && !rTa.value) refresh(); } });
   }
 
   /* Admin: Rapport einer Baustelle mit allen Stunden und Texten */
@@ -1880,26 +1890,29 @@ function openReport(pre) {
     reps.forEach(function (r) {
       if (String(r.site_nr) !== nr || r.day < a || r.day > b) return;
       var em = String(r.email || "").toLowerCase(); if (!(em in people)) people[em] = "";
-      days[r.day] = 1; (texts[r.day] = texts[r.day] || []).push({ em: em, body: String(r.body || "").trim() });
+      days[r.day] = 1; var pb = rpParse(r.body);
+      if (pb.r) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.rtext, regie: true, std: pb.std });
+      if (pb.text) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.text });
     });
     var who = {}; Object.keys(h.days).forEach(function (dk) { Object.keys(h.days[dk]).forEach(function (e) { who[e] = 1; }); });
     var cols = Object.keys(who).sort(function (p, q) { return (people[p] || p).localeCompare(people[q] || q, "de"); });
     var tot = {}, sum = 0; cols.forEach(function (e) { tot[e] = 0; });
     var list = Object.keys(days).sort().map(function (dk) {
       var hd = h.days[dk] || {}, tt = 0; cols.forEach(function (e) { tt += hd[e] || 0; tot[e] += hd[e] || 0; }); sum += tt;
-      var seen = {}, tx = (texts[dk] || []).filter(function (x) { if (!x.body || seen[x.body]) return false; seen[x.body] = 1; return true; });
-      return { day: dk, hours: hd, sum: tt, texts: tx };
+      var seen = {}, tx = (texts[dk] || []).filter(function (x) { var kk = (x.regie ? "R|" : "") + x.body; if ((!x.body && !x.std) || seen[kk]) return false; seen[kk] = 1; return true; });
+      return { day: dk, hours: hd, sum: tt, texts: tx, regie: tx.some(function (x) { return x.regie; }) };
     });
-    return { rows: list, cols: cols, people: people, tot: tot, sum: sum };
+    return { rows: list, cols: cols, people: people, tot: tot, sum: sum, hasR: list.some(function (d) { return d.regie; }) };
   }
   function rpName(res, em) { return res.people[em] || em; }
-  function rpTextOf(res, d) { return d.texts.map(function (x) { return d.texts.length > 1 ? x.body + " (" + rpName(res, x.em) + ")" : x.body; }).join("\n"); }
+  function rpItemText(res, d, x) { var t = x.body + (x.regie && x.std ? (x.body ? " – " : "") + String(x.std).replace(",", ".") + " Std." : ""); var ems = {}; d.texts.forEach(function (y) { ems[y.em] = 1; }); return Object.keys(ems).length > 1 ? t + " (" + rpName(res, x.em) + ")" : t; }
+  function rpTextOf(res, d) { return d.texts.map(function (x) { return (x.regie ? "R: " : "") + rpItemText(res, d, x); }).join("\n"); }
   function buildRapportPdf(nr, a, b, res) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
     var doc = new J({ orientation: "landscape", unit: "mm", format: "a4" });
     var info = siteByNr(nr), m = memberGet(), firma = (m && m.firma) || "", mx = 10, tw = 277, top = 12, bottom = 196, y = 0;
-    var nc = res.cols.length, cwP = Math.max(10, Math.min(16, 110 / Math.max(1, nc))), cwD = 20, cwG = 14, cwT = tw - cwD - cwG - cwP * nc;
-    var x0 = [mx, mx + cwD, mx + cwD + cwT]; var xs = []; for (var i = 0; i < nc; i++) xs.push(x0[2] + i * cwP); var xg = x0[2] + nc * cwP;
+    var nc = res.cols.length, cwP = Math.max(10, Math.min(16, 110 / Math.max(1, nc))), cwD = 20, cwG = 14, cwR = res.hasR ? 6 : 0, cwT = tw - cwD - cwR - cwG - cwP * nc;
+    var x0 = [mx, mx + cwD + cwR, mx + cwD + cwR + cwT], xR = mx + cwD; var xs = []; for (var i = 0; i < nc; i++) xs.push(x0[2] + i * cwP); var xg = x0[2] + nc * cwP;
     function head(first) {
       y = top;
       if (first) {
@@ -1919,25 +1932,35 @@ function openReport(pre) {
       doc.setFillColor(230, 230, 230); doc.setLineWidth(0.15); doc.rect(mx, y, tw, hh, "F"); doc.rect(mx, y, tw, hh);
       doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
       doc.text("Datum", x0[0] + 2, y + hh - 2.6); doc.text("Art der ausgeführten Arbeiten", x0[1] + 2, y + hh - 2.6);
+      if (cwR) { doc.text("R", xR + cwR / 2, y + hh - 2.6, { align: "center" }); doc.line(xR, y, xR, y + hh); }
       nms.forEach(function (t, k) { doc.text(t, xs[k] + cwP / 2 + 1.5, y + hh - 2, { angle: 90 }); doc.line(xs[k], y, xs[k], y + hh); });
       doc.text("Gesamt", xg + cwG / 2 + 1.5, y + hh - 2, { angle: 90 }); doc.line(x0[1], y, x0[1], y + hh); doc.line(x0[2], y, x0[2], y + hh); doc.line(xg, y, xg, y + hh);
       y += hh;
     }
     function cell(h, vals) {
-      doc.setLineWidth(0.15); doc.rect(mx, y, tw, h); doc.line(x0[1], y, x0[1], y + h); doc.line(x0[2], y, x0[2], y + h);
+      doc.setLineWidth(0.15); doc.rect(mx, y, tw, h); doc.line(x0[1], y, x0[1], y + h); doc.line(x0[2], y, x0[2], y + h); if (cwR) doc.line(xR, y, xR, y + h);
       xs.forEach(function (x) { doc.line(x, y, x, y + h); }); doc.line(xg, y, xg, y + h);
     }
     head(true);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     res.rows.forEach(function (d) {
-      var lines = doc.splitTextToSize(rpTextOf(res, d) || "", cwT - 4), h = Math.max(7, 2.6 + lines.length * 4 + 1.2);
-      if (y + h > bottom) { doc.addPage(); head(false); doc.setFont("helvetica", "normal"); doc.setFontSize(9); }
-      cell(h);
-      doc.text(dm(fromKey(d.day)) + String(fromKey(d.day).getFullYear()).slice(2), x0[0] + 2, y + 4.8);
-      lines.forEach(function (t, k) { doc.text(t, x0[1] + 2, y + 4.8 + k * 4); });
-      res.cols.forEach(function (e, k) { if (d.hours[e]) doc.text(hm(d.hours[e]), xs[k] + cwP / 2, y + 4.8, { align: "center" }); });
-      doc.text(d.sum ? hm(d.sum) : "", xg + cwG / 2, y + 4.8, { align: "center" });
-      y += h;
+      var blocks = [], rg = d.texts.filter(function (x) { return x.regie; }), nl = d.texts.filter(function (x) { return !x.regie; });
+      rg.forEach(function (x) { blocks.push({ r: true, text: rpItemText(res, d, x) }); });
+      if (nl.length || !rg.length) blocks.push({ r: false, text: nl.map(function (x) { return rpItemText(res, d, x); }).join("\n") });
+      blocks.forEach(function (bk, bi) {
+        var lines = doc.splitTextToSize(bk.text || "", cwT - 4), h = Math.max(7, 2.6 + lines.length * 4 + 1.2);
+        if (y + h > bottom) { doc.addPage(); head(false); doc.setFont("helvetica", "normal"); doc.setFontSize(9); }
+        cell(h);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+        doc.text(dm(fromKey(d.day)) + String(fromKey(d.day).getFullYear()).slice(2), x0[0] + 2, y + 4.8);
+        if (bk.r && cwR) { doc.setFont("helvetica", "bold"); doc.text("R", xR + cwR / 2, y + 4.8, { align: "center" }); doc.setFont("helvetica", "normal"); }
+        lines.forEach(function (t, k) { doc.text(t, x0[1] + 2, y + 4.8 + k * 4); });
+        if (bi === 0) {
+          res.cols.forEach(function (e, k) { if (d.hours[e]) doc.text(hm(d.hours[e]), xs[k] + cwP / 2, y + 4.8, { align: "center" }); });
+          doc.text(d.sum ? hm(d.sum) : "", xg + cwG / 2, y + 4.8, { align: "center" });
+        }
+        y += h;
+      });
     });
     if (y + 8 > bottom) { doc.addPage(); head(false); }
     doc.setFillColor(240, 240, 240); doc.rect(mx, y, tw, 8, "F"); cell(8);
@@ -2980,8 +3003,8 @@ function openReport(pre) {
       var n = 0;
       res.rows.forEach(function (d) {
         if (days.indexOf(d.day) < 0) return;
-        rpTextOf(res, d).split("\n").map(function (z) { return z.trim(); }).filter(Boolean).forEach(function (z) {
-          var cb = box(true, function () { }), x = fromKey(d.day), t = el("div", { style: "flex:1;min-width:0" }, [el("small", { text: x.getDate() + "." + (x.getMonth() + 1) + "  ", style: "color:var(--muted)" }), el("span", { text: z, style: "overflow-wrap:anywhere" })]);
+        d.texts.map(function (it) { return { z: rpItemText(res, d, it).trim(), reg: !!it.regie }; }).filter(function (o) { return o.z; }).sort(function (a2, b2) { return (b2.reg ? 1 : 0) - (a2.reg ? 1 : 0); }).forEach(function (o) {
+          var z = o.z, cb = box(true, function () { }), x = fromKey(d.day), t = el("div", { style: "flex:1;min-width:0" }, [el("small", { text: x.getDate() + "." + (x.getMonth() + 1) + "  ", style: "color:var(--muted)" }), el("b", { text: o.reg ? "R " : "", style: "color:var(--accent-text)" }), el("span", { text: z, style: "overflow-wrap:anywhere" })]);
           lbox.appendChild(el("div", { style: "display:flex;gap:8px;align-items:flex-start;margin:6px 0" }, [cb, t])); lines.push({ cb: cb, z: z }); n++;
         });
       });
