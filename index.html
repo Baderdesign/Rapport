@@ -1747,7 +1747,8 @@ h1 { color: #2c2166; }
   function rpSet(o) { lsSet(RP, JSON.stringify(o)); }
   var RSEP = "\u2063"; /* Regie-Markierung im gespeicherten Text: SEP R SEP Std SEP Regietext SEP SEP normaler Text */
   function rpPack(on, std, rtext, text, who) { std = String(std || "").replace(/[^\d.,]/g, "").slice(0, 6); rtext = String(rtext || "").split(RSEP).join("").trim(); text = String(text || "").split(RSEP).join("").trim(); if (!on || !(rtext || std)) return text; who = (who || []).map(function (e) { return String(e).toLowerCase().replace(/[,\u2063\s]/g, ""); }).filter(Boolean).join(","); return RSEP + "R" + RSEP + std + RSEP + rtext + RSEP + who + RSEP + text; }
-  function rpParse(b) { b = String(b == null ? "" : b); if (b.indexOf(RSEP + "R" + RSEP) !== 0) return { r: false, std: "", rtext: "", who: [], text: b.trim() }; var q = b.split(RSEP); return { r: true, std: q[2] || "", rtext: (q[3] || "").trim(), who: q[4] ? q[4].split(",") : [], text: q.slice(5).join(RSEP).trim() }; }
+  function rpParse(b) { b = String(b == null ? "" : b); if (b.indexOf(RSEP + "R" + RSEP) !== 0) return { r: false, std: "", rtext: "", who: [], whs: {}, whS: {}, text: b.trim() }; var q = b.split(RSEP); var who = [], whs = {}, whS = {}; (q[4] ? q[4].split(",") : []).forEach(function (it) { var c = it.indexOf(":"), em = c < 0 ? it : it.slice(0, c), sv = c < 0 ? "" : it.slice(c + 1); if (!em) return; who.push(em); whS[em] = sv; var t = tmin(sv); if (t) whs[em] = t; });
+    return { r: true, std: q[2] || "", rtext: (q[3] || "").trim(), who: who, whs: whs, whS: whS, text: q.slice(5).join(RSEP).trim() }; }
   function roGet() { try { var a = JSON.parse(lsGet(RO) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function rpMsg(er) {
     var m = String((er && er.message) || er || "");
@@ -1828,19 +1829,22 @@ function openReport(pre) {
     var rOn = false, rBtn = el("button", { type: "button", "class": "btn", "aria-pressed": "false", text: "Regie" });
     var rTa = el("textarea", { "class": "bulk", placeholder: "Regie: was wurde in Regie gearbeitet …", "aria-label": "Regie-Arbeiten", maxlength: "2500" });
     var rStd = el("input", { type: "text", inputmode: "decimal", placeholder: "Regie-Stunden (z. B. 1.5)", autocomplete: "off", "aria-label": "Regie-Stunden", style: "max-width:12em" });
-    var rWho = el("div", { "class": "slist", role: "group", "aria-label": "Wer hat in Regie gearbeitet" }), rWhoL = el("div", { "class": "lbl", text: "Wer hat in Regie gearbeitet? (alle, die an diesem Tag auf der Baustelle waren)" }), rPers = null, rSel = {}, rPre = false;
+    var rWho = el("div", { "class": "slist", role: "group", "aria-label": "Wer hat in Regie gearbeitet" }), rWhoL = el("div", { "class": "lbl", text: "Wer hat in Regie gearbeitet und wie viele Stunden? (Std.Min, leer = ganzer Tag)" }), rPers = null, rSel = {}, rPre = false;
     rWho.style.maxHeight = "190px"; rWho.style.overflow = "auto"; rWho.hidden = true; rWhoL.hidden = true;
     var rBox = el("div", { "class": "editbox", style: "border:2px solid var(--accent,#272062)" }, [el("div", { "class": "lbl", text: "Regie (wird im Rapport mit R markiert)" }), rTa, rStd, rWhoL, rWho]); rBox.hidden = true;
     var meMail = String((user && user.email) || "").toLowerCase();
     function drawWho() {
       rWho.textContent = ""; var list = (rPers || []).slice();
       Object.keys(rSel).forEach(function (e) { if (!list.some(function (p) { return p.email === e; })) list.push({ email: e, name: "" }); });
-      rWho.hidden = rWhoL.hidden = !list.length;
+      rWho.hidden = rWhoL.hidden = !list.length; rStd.hidden = !!(rPers && rPers.length);
       list.sort(function (p, q) { return (p.email === meMail ? -1 : 0) - (q.email === meMail ? -1 : 0) || (p.name || p.email).localeCompare(q.name || q.email, "de"); });
       list.forEach(function (p) {
         var cb = el("input", { type: "checkbox" }); cb.checked = !!rSel[p.email];
-        cb.addEventListener("change", function () { if (cb.checked) rSel[p.email] = 1; else delete rSel[p.email]; });
-        rWho.appendChild(el("label", { "class": "srow", style: "display:flex;align-items:center;gap:10px;cursor:pointer" }, [cb, el("span", { text: (p.name || p.email) + (p.email === meMail ? " (ich)" : "") })]));
+        var hi = el("input", { type: "text", inputmode: "decimal", placeholder: "Std. z. B. 3.30", autocomplete: "off", "aria-label": "Regie-Stunden von " + (p.name || p.email), style: "width:8.5em;margin-left:auto" });
+        hi.value = rSel[p.email] ? rSel[p.email].s : ""; hi.hidden = !cb.checked;
+        hi.addEventListener("input", function () { if (rSel[p.email]) rSel[p.email].s = hi.value; });
+        cb.addEventListener("change", function () { if (cb.checked) rSel[p.email] = { s: hi.value }; else delete rSel[p.email]; hi.hidden = !cb.checked; if (cb.checked) hi.focus(); });
+        rWho.appendChild(el("div", { "class": "srow", style: "display:flex;align-items:center;gap:10px" }, [el("label", { style: "display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;min-width:0" }, [cb, el("span", { text: (p.name || p.email) + (p.email === meMail ? " (ich)" : "") })]), hi]));
       });
     }
     async function loadWho() {
@@ -1850,7 +1854,7 @@ function openReport(pre) {
       try { var r = await sb.rpc("firma_personen_tag", { p_nr: nr0, p_day: day0 }); got = r.error ? [] : (r.data || []).map(function (x) { return { email: String(x.email || "").toLowerCase(), name: String(x.name || "").trim() }; }); } catch (e) { got = []; }
       if (nr0 !== curNr() || day0 !== dt.value) return;
       rPers = got;
-      if (rPre && got.some(function (p) { return p.email === meMail; })) { rSel[meMail] = 1; rPre = false; }
+      if (rPre && got.some(function (p) { return p.email === meMail; })) { rSel[meMail] = { s: "" }; rPre = false; }
       drawWho();
     }
     var lblN = el("div", { "class": "lbl", text: "Baustellenrapport (ohne Regie)" }); lblN.hidden = true;
@@ -1874,7 +1878,7 @@ function openReport(pre) {
         hrs.appendChild(el("div", { "class": "big", text: v ? hm(v) : "–" }));
         if (!v) hrs.appendChild(el("div", { "class": "status", text: "Für diese Baustelle und diesen Tag stehen noch keine Zeiten im Wochenrapport." }));
       }
-      var cur = rpParse(rpGet().s[nr + "|" + dt.value]); ta.value = cur.text || ""; rTa.value = cur.rtext || ""; rStd.value = cur.std || ""; rSel = {}; rPers = null; rPre = !cur.r; if (cur.r) cur.who.forEach(function (e) { if (e) rSel[e] = 1; }); setR(cur.r); drawWho();
+      var cur = rpParse(rpGet().s[nr + "|" + dt.value]); ta.value = cur.text || ""; rTa.value = cur.rtext || ""; rStd.value = cur.std || ""; rSel = {}; rPers = null; rPre = !cur.r; if (cur.r) cur.who.forEach(function (e) { if (e) rSel[e] = { s: (cur.whS && cur.whS[e]) || "" }; }); setR(cur.r); drawWho();
       dateienLoad(nr, "rapport", dbox);
     }
     function drawMine() {
@@ -1897,7 +1901,10 @@ function openReport(pre) {
     inp.addEventListener("focus", function () { dl._f = 0; suggest(); });
     dt.addEventListener("change", refresh);
     save.addEventListener("click", async function () {
-      var nr = curNr(), day = dt.value, body = rpPack(rOn, rStd.value, rTa.value, ta.value, (rPers && rPers.length) ? Object.keys(rSel) : []);
+      var nr = curNr(), day = dt.value, who = [], badH = "";
+      if (rOn && rPers && rPers.length) Object.keys(rSel).forEach(function (e) { var sv = String(rSel[e].s || "").trim().replace(",", "."); if (sv && !tmin(sv)) badH = e; who.push(sv ? e + ":" + sv : e); });
+      if (badH) { say("Bitte die Regie-Stunden als Std.Min eingeben, z. B. 3.30 für 3 Std. 30 Min.", "bad"); return; }
+      var body = rpPack(rOn, rStd.hidden ? "" : rStd.value, rTa.value, ta.value, who);
       if (isDemo()) { say(DEMO_MSG, "bad"); return; }
       if (!nr) { say("Bitte die Baustelle wählen.", "bad"); return; }
       if (!day) { say("Bitte das Datum wählen.", "bad"); return; }
@@ -1926,7 +1933,7 @@ function openReport(pre) {
       if (String(r.site_nr) !== nr || r.day < a || r.day > b) return;
       var em = String(r.email || "").toLowerCase(); if (!(em in people)) people[em] = "";
       days[r.day] = 1; var pb = rpParse(r.body);
-      if (pb.r) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.rtext, regie: true, std: pb.std, who: pb.who });
+      if (pb.r) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.rtext, regie: true, std: pb.std, who: pb.who, whs: pb.whs });
       if (pb.text) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.text });
     });
     var who = {}; Object.keys(h.days).forEach(function (dk) { Object.keys(h.days[dk]).forEach(function (e) { who[e] = 1; }); });
@@ -1936,7 +1943,8 @@ function openReport(pre) {
       var hd = h.days[dk] || {}, tt = 0; cols.forEach(function (e) { tt += hd[e] || 0; tot[e] += hd[e] || 0; }); sum += tt;
       var seen = {}, tx = (texts[dk] || []).filter(function (x) { var kk = (x.regie ? "R|" : "") + x.body; if ((!x.body && !x.std) || seen[kk]) return false; seen[kk] = 1; return true; });
       var rg = tx.filter(function (x) { return x.regie; }), nl = tx.filter(function (x) { return !x.regie; }), taken = {}, blocks = [], rset = {};
-      function mk(items, r, sel) { var hh = {}, ss = 0; cols.forEach(function (e) { if (hd[e] && !taken[e] && sel(e)) { hh[e] = hd[e]; ss += hd[e]; taken[e] = 1; if (r) rset[e] = 1; } }); return { r: r, items: items, hours: hh, sum: ss }; }
+      var rem = {}; cols.forEach(function (e) { rem[e] = hd[e] || 0; });
+      function mk(items, r, sel) { var hh = {}, ss = 0; cols.forEach(function (e) { if (rem[e] > 0.5 && sel(e)) { var v = (r && items[0].whs && items[0].whs[e] > 0) ? Math.min(items[0].whs[e], rem[e]) : rem[e]; hh[e] = v; ss += v; rem[e] -= v; if (r) rset[e] = 1; } }); return { r: r, items: items, hours: hh, sum: ss }; }
       var rb = rg.map(function (x) { return x.who && x.who.length ? mk([x], true, function (e) { return x.who.indexOf(e) >= 0; }) : null; });
       rg.forEach(function (x, i) { if (!rb[i]) rb[i] = mk([x], true, function () { return true; }); });
       blocks = rb;
