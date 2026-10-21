@@ -605,6 +605,9 @@ h1 { color: #2c2166; }
     var hin = num(e.hin), zur = num(e.zur);
     return { gross: gross, work: work, pause: num(e.pause), hin: hin, zur: zur, reise: hin + zur, abs: num(e.abs), invalid: invalid, hasTime: a !== null && b !== null && !invalid, von: a, bis: b };
   }
+  function rowTara(ds, c) { /* Reisezeit-Abzug gehört zur Baustelle, bei der die Reisezeit eingetragen ist (insgesamt höchstens der Tagesabzug) */
+    return ds.reise > 0 ? Math.min(c.work, ds.tara * c.reise / ds.reise) : 0;
+  }
   function dayStats(rows) {
     var s = { gross: 0, work: 0, pause: 0, hin: 0, zur: 0, reise: 0, abs: 0 };
     var ef = effs(rows); rows.forEach(function (e, i) { var c = calcRow(e, ef[i]); s.gross += c.gross; s.work += c.work; s.pause += c.pause; s.hin += c.hin; s.zur += c.zur; s.reise += c.reise; s.abs += c.abs; });
@@ -1665,7 +1668,7 @@ h1 { color: #2c2166; }
           var nr = String(e.nr == null ? "" : e.nr).trim(), k = nr || "";
           var st = sites[k] || (sites[k] = { nr: nr, name: "", net: 0, work: 0, reise: 0, days: {}, who: {} });
           if (!st.name && e.obj) st.name = String(e.obj).trim();
-          var share = ds.work > 0 ? ds.tara * c.work / ds.work : 0, net = c.work - share;
+          var share = rowTara(ds, c), net = c.work - share;
           st.net += net; st.work += c.work; st.reise += c.reise; st.days[em + "|" + dk] = 1;
           st.who[em] = (st.who[em] || 0) + net;
           tot.net += net; tot.work += c.work; tot.reise += c.reise;
@@ -1767,7 +1770,7 @@ h1 { color: #2c2166; }
         var ef = effs(list);
         list.forEach(function (e, ei) {
           var c = calcRow(e, ef[ei]); if (c.work <= 0 || String(e.nr == null ? "" : e.nr).trim() !== nr) return;
-          var share = ds.work > 0 ? ds.tara * c.work / ds.work : 0;
+          var share = rowTara(ds, c);
           var o = days[dk] || (days[dk] = {}); o[em] = (o[em] || 0) + c.work - share;
         });
       });
