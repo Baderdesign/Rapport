@@ -1160,7 +1160,7 @@ h1 { color: #2c2166; }
     doc.text("Visum Vorgesetzter", cx[6], vy); doc.line(cx[6] + 29, vy + 0.5, mx + W, vy + 0.5);
     return doc;
   }
-  window.__buildPdf = buildPdf; window.__state = state; window.__jahrCalc = jahrCalc; window.__buildMonatPdf = function () { return buildMonatPdf.apply(null, arguments); }; window.__buildJahrPdf = function () { return buildJahrPdf.apply(null, arguments); };
+  window.__buildPdf = buildPdf; window.__state = state; window.__jahrCalc = jahrCalc; window.__buildMonatPdf = function () { return buildMonatPdf.apply(null, arguments); }; window.__buildJahrPdf = function () { return buildJahrPdf.apply(null, arguments); }; window.__rpBuild = rpBuild; window.__buildRapportPdf = buildRapportPdf;
 
   /* ---------- PDF ausliefern: Teilen-Menü (Handy), Download der Claude-Ansicht, sonst Vorschau ---------- */
   function isMobile() {
@@ -1746,8 +1746,8 @@ h1 { color: #2c2166; }
   function rpGet() { try { var o = JSON.parse(lsGet(RP) || "null"); if (o && o.s) return o; } catch (e) { } return { s: {} }; }
   function rpSet(o) { lsSet(RP, JSON.stringify(o)); }
   var RSEP = "\u2063"; /* Regie-Markierung im gespeicherten Text: SEP R SEP Std SEP Regietext SEP SEP normaler Text */
-  function rpPack(on, std, rtext, text) { std = String(std || "").replace(/[^\d.,]/g, "").slice(0, 6); rtext = String(rtext || "").split(RSEP).join("").trim(); text = String(text || "").split(RSEP).join("").trim(); if (!on || !(rtext || std)) return text; return RSEP + "R" + RSEP + std + RSEP + rtext + RSEP + RSEP + text; }
-  function rpParse(b) { b = String(b == null ? "" : b); if (b.indexOf(RSEP + "R" + RSEP) !== 0) return { r: false, std: "", rtext: "", text: b.trim() }; var q = b.split(RSEP); return { r: true, std: q[2] || "", rtext: (q[3] || "").trim(), text: q.slice(5).join(RSEP).trim() }; }
+  function rpPack(on, std, rtext, text, who) { std = String(std || "").replace(/[^\d.,]/g, "").slice(0, 6); rtext = String(rtext || "").split(RSEP).join("").trim(); text = String(text || "").split(RSEP).join("").trim(); if (!on || !(rtext || std)) return text; who = (who || []).map(function (e) { return String(e).toLowerCase().replace(/[,\u2063\s]/g, ""); }).filter(Boolean).join(","); return RSEP + "R" + RSEP + std + RSEP + rtext + RSEP + who + RSEP + text; }
+  function rpParse(b) { b = String(b == null ? "" : b); if (b.indexOf(RSEP + "R" + RSEP) !== 0) return { r: false, std: "", rtext: "", who: [], text: b.trim() }; var q = b.split(RSEP); return { r: true, std: q[2] || "", rtext: (q[3] || "").trim(), who: q[4] ? q[4].split(",") : [], text: q.slice(5).join(RSEP).trim() }; }
   function roGet() { try { var a = JSON.parse(lsGet(RO) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function rpMsg(er) {
     var m = String((er && er.message) || er || "");
@@ -1828,9 +1828,33 @@ function openReport(pre) {
     var rOn = false, rBtn = el("button", { type: "button", "class": "btn", "aria-pressed": "false", text: "Regie" });
     var rTa = el("textarea", { "class": "bulk", placeholder: "Regie: was wurde in Regie gearbeitet …", "aria-label": "Regie-Arbeiten", maxlength: "2500" });
     var rStd = el("input", { type: "text", inputmode: "decimal", placeholder: "Regie-Stunden (z. B. 1.5)", autocomplete: "off", "aria-label": "Regie-Stunden", style: "max-width:12em" });
-    var rBox = el("div", { "class": "editbox", style: "border:2px solid var(--accent,#272062)" }, [el("div", { "class": "lbl", text: "Regie (wird im Rapport mit R markiert)" }), rTa, rStd]); rBox.hidden = true;
+    var rWho = el("div", { "class": "slist", role: "group", "aria-label": "Wer hat in Regie gearbeitet" }), rWhoL = el("div", { "class": "lbl", text: "Wer hat in Regie gearbeitet? (alle, die an diesem Tag auf der Baustelle waren)" }), rPers = null, rSel = {}, rPre = false;
+    rWho.style.maxHeight = "190px"; rWho.style.overflow = "auto"; rWho.hidden = true; rWhoL.hidden = true;
+    var rBox = el("div", { "class": "editbox", style: "border:2px solid var(--accent,#272062)" }, [el("div", { "class": "lbl", text: "Regie (wird im Rapport mit R markiert)" }), rTa, rStd, rWhoL, rWho]); rBox.hidden = true;
+    var meMail = String((user && user.email) || "").toLowerCase();
+    function drawWho() {
+      rWho.textContent = ""; var list = (rPers || []).slice();
+      Object.keys(rSel).forEach(function (e) { if (!list.some(function (p) { return p.email === e; })) list.push({ email: e, name: "" }); });
+      rWho.hidden = rWhoL.hidden = !list.length;
+      list.sort(function (p, q) { return (p.email === meMail ? -1 : 0) - (q.email === meMail ? -1 : 0) || (p.name || p.email).localeCompare(q.name || q.email, "de"); });
+      list.forEach(function (p) {
+        var cb = el("input", { type: "checkbox" }); cb.checked = !!rSel[p.email];
+        cb.addEventListener("change", function () { if (cb.checked) rSel[p.email] = 1; else delete rSel[p.email]; });
+        rWho.appendChild(el("label", { "class": "srow", style: "display:flex;align-items:center;gap:10px;cursor:pointer" }, [cb, el("span", { text: (p.name || p.email) + (p.email === meMail ? " (ich)" : "") })]));
+      });
+    }
+    async function loadWho() {
+      var nr0 = curNr(), day0 = dt.value;
+      if (rPers || !nr0 || !day0 || !sb || !user || !navigator.onLine) { drawWho(); return; }
+      var got = [];
+      try { var r = await sb.rpc("firma_personen_tag", { p_nr: nr0, p_day: day0 }); got = r.error ? [] : (r.data || []).map(function (x) { return { email: String(x.email || "").toLowerCase(), name: String(x.name || "").trim() }; }); } catch (e) { got = []; }
+      if (nr0 !== curNr() || day0 !== dt.value) return;
+      rPers = got;
+      if (rPre && got.some(function (p) { return p.email === meMail; })) { rSel[meMail] = 1; rPre = false; }
+      drawWho();
+    }
     var lblN = el("div", { "class": "lbl", text: "Baustellenrapport (ohne Regie)" }); lblN.hidden = true;
-    function setR(on) { rOn = !!on; rBtn.setAttribute("aria-pressed", String(rOn)); rBtn.textContent = (rOn ? "✓ " : "") + "Regie"; rBtn.className = "btn" + (rOn ? " primary" : ""); rBox.hidden = !rOn; lblN.hidden = !rOn; }
+    function setR(on) { rOn = !!on; rBtn.setAttribute("aria-pressed", String(rOn)); rBtn.textContent = (rOn ? "✓ " : "") + "Regie"; rBtn.className = "btn" + (rOn ? " primary" : ""); rBox.hidden = !rOn; lblN.hidden = !rOn; if (rOn) loadWho(); }
     rBtn.addEventListener("click", function () { setR(!rOn); if (rOn) rTa.focus(); });
     var save = el("button", { type: "button", "class": "btn primary", text: "Rapport speichern" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
@@ -1850,7 +1874,7 @@ function openReport(pre) {
         hrs.appendChild(el("div", { "class": "big", text: v ? hm(v) : "–" }));
         if (!v) hrs.appendChild(el("div", { "class": "status", text: "Für diese Baustelle und diesen Tag stehen noch keine Zeiten im Wochenrapport." }));
       }
-      var cur = rpParse(rpGet().s[nr + "|" + dt.value]); ta.value = cur.text || ""; rTa.value = cur.rtext || ""; rStd.value = cur.std || ""; setR(cur.r);
+      var cur = rpParse(rpGet().s[nr + "|" + dt.value]); ta.value = cur.text || ""; rTa.value = cur.rtext || ""; rStd.value = cur.std || ""; rSel = {}; rPers = null; rPre = !cur.r; if (cur.r) cur.who.forEach(function (e) { if (e) rSel[e] = 1; }); setR(cur.r); drawWho();
       dateienLoad(nr, "rapport", dbox);
     }
     function drawMine() {
@@ -1873,7 +1897,7 @@ function openReport(pre) {
     inp.addEventListener("focus", function () { dl._f = 0; suggest(); });
     dt.addEventListener("change", refresh);
     save.addEventListener("click", async function () {
-      var nr = curNr(), day = dt.value, body = rpPack(rOn, rStd.value, rTa.value, ta.value);
+      var nr = curNr(), day = dt.value, body = rpPack(rOn, rStd.value, rTa.value, ta.value, (rPers && rPers.length) ? Object.keys(rSel) : []);
       if (isDemo()) { say(DEMO_MSG, "bad"); return; }
       if (!nr) { say("Bitte die Baustelle wählen.", "bad"); return; }
       if (!day) { say("Bitte das Datum wählen.", "bad"); return; }
@@ -1902,7 +1926,7 @@ function openReport(pre) {
       if (String(r.site_nr) !== nr || r.day < a || r.day > b) return;
       var em = String(r.email || "").toLowerCase(); if (!(em in people)) people[em] = "";
       days[r.day] = 1; var pb = rpParse(r.body);
-      if (pb.r) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.rtext, regie: true, std: pb.std });
+      if (pb.r) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.rtext, regie: true, std: pb.std, who: pb.who });
       if (pb.text) (texts[r.day] = texts[r.day] || []).push({ em: em, body: pb.text });
     });
     var who = {}; Object.keys(h.days).forEach(function (dk) { Object.keys(h.days[dk]).forEach(function (e) { who[e] = 1; }); });
@@ -1911,7 +1935,14 @@ function openReport(pre) {
     var list = Object.keys(days).sort().map(function (dk) {
       var hd = h.days[dk] || {}, tt = 0; cols.forEach(function (e) { tt += hd[e] || 0; tot[e] += hd[e] || 0; }); sum += tt;
       var seen = {}, tx = (texts[dk] || []).filter(function (x) { var kk = (x.regie ? "R|" : "") + x.body; if ((!x.body && !x.std) || seen[kk]) return false; seen[kk] = 1; return true; });
-      return { day: dk, hours: hd, sum: tt, texts: tx, regie: tx.some(function (x) { return x.regie; }) };
+      var rg = tx.filter(function (x) { return x.regie; }), nl = tx.filter(function (x) { return !x.regie; }), taken = {}, blocks = [], rset = {};
+      function mk(items, r, sel) { var hh = {}, ss = 0; cols.forEach(function (e) { if (hd[e] && !taken[e] && sel(e)) { hh[e] = hd[e]; ss += hd[e]; taken[e] = 1; if (r) rset[e] = 1; } }); return { r: r, items: items, hours: hh, sum: ss }; }
+      var rb = rg.map(function (x) { return x.who && x.who.length ? mk([x], true, function (e) { return x.who.indexOf(e) >= 0; }) : null; });
+      rg.forEach(function (x, i) { if (!rb[i]) rb[i] = mk([x], true, function () { return true; }); });
+      blocks = rb;
+      var rest = mk(nl, false, function () { return true; });
+      if (nl.length || rest.sum > 0 || !rg.length) blocks.push(rest);
+      return { day: dk, hours: hd, sum: tt, texts: tx, blocks: blocks, rset: rset, regie: tx.some(function (x) { return x.regie; }) };
     });
     return { rows: list, cols: cols, people: people, tot: tot, sum: sum, hasR: list.some(function (d) { return d.regie; }) };
   }
@@ -1955,10 +1986,8 @@ function openReport(pre) {
     head(true);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     res.rows.forEach(function (d) {
-      var blocks = [], rg = d.texts.filter(function (x) { return x.regie; }), nl = d.texts.filter(function (x) { return !x.regie; });
-      rg.forEach(function (x) { blocks.push({ r: true, text: rpItemText(res, d, x) }); });
-      if (nl.length || !rg.length) blocks.push({ r: false, text: nl.map(function (x) { return rpItemText(res, d, x); }).join("\n") });
-      blocks.forEach(function (bk, bi) {
+      d.blocks.forEach(function (bk, bi) {
+        bk.text = bk.items.map(function (x) { return rpItemText(res, d, x); }).join("\n");
         var lines = doc.splitTextToSize(bk.text || "", cwT - 4), h = Math.max(7, 2.6 + lines.length * 4 + 1.2);
         if (y + h > bottom) { doc.addPage(); head(false); doc.setFont("helvetica", "normal"); doc.setFontSize(9); }
         cell(h);
@@ -1966,10 +1995,8 @@ function openReport(pre) {
         doc.text(dm(fromKey(d.day)) + String(fromKey(d.day).getFullYear()).slice(2), x0[0] + 2, y + 4.8);
         if (bk.r && cwR) { doc.setFont("helvetica", "bold"); doc.text("R", xR + cwR / 2, y + 4.8, { align: "center" }); doc.setFont("helvetica", "normal"); }
         lines.forEach(function (t, k) { doc.text(t, x0[1] + 2, y + 4.8 + k * 4); });
-        if (bi === 0) {
-          res.cols.forEach(function (e, k) { if (d.hours[e]) doc.text(hm(d.hours[e]), xs[k] + cwP / 2, y + 4.8, { align: "center" }); });
-          doc.text(d.sum ? hm(d.sum) : "", xg + cwG / 2, y + 4.8, { align: "center" });
-        }
+        res.cols.forEach(function (e, k) { if (bk.hours[e]) doc.text(hm(bk.hours[e]), xs[k] + cwP / 2, y + 4.8, { align: "center" }); });
+        doc.text(bk.sum ? hm(bk.sum) : "", xg + cwG / 2, y + 4.8, { align: "center" });
         y += h;
       });
     });
@@ -2018,7 +2045,7 @@ function openReport(pre) {
         var tx = rpTextOf(res, d);
         t.appendChild(tx ? el("div", { style: "white-space:pre-wrap", text: tx }) : el("small", { text: "Kein Rapporttext geschrieben" }));
         var sub = el("div", { "class": "sub" });
-        res.cols.forEach(function (e) { if (d.hours[e]) sub.appendChild(el("div", {}, [el("span", { text: rpName(res, e) }), el("b", { text: hm(d.hours[e]) })])); });
+        res.cols.forEach(function (e) { if (d.hours[e]) sub.appendChild(el("div", {}, [el("span", { text: rpName(res, e) + (d.rset && d.rset[e] ? " (R)" : "") }), el("b", { text: hm(d.hours[e]) })])); });
         t.appendChild(sub);
         body.appendChild(el("div", { "class": "srow", role: "listitem" }, [t, el("div", { "class": "h", text: hm(d.sum) })]));
       });
