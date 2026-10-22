@@ -2909,10 +2909,11 @@ function openReport(pre) {
   }
 
   /* ---------- Quadratmeter-Rechner (Ausmass) ---------- */
+  var FV_UG = [["Bereits gestrichene, glatte Wand", 1], ["Neuer Putz / Gipskarton / Raufaser (saugend)", 1.3], ["Rauputz / Strukturputz", 1.4], ["Glatte Tapete / Vlies (gestrichen)", 1], ["Holz (grundiert)", 0.9], ["Fassade (mineralisch)", 1.4]];
   function closeFV() { var o = $("fv"); if (o) o.remove(); }
   function openFV() {
     closeFV(); closeMenu();
-    var KEY = "wr2:fv", UG = [["Bereits gestrichene, glatte Wand", 1], ["Neuer Putz / Gipskarton / Raufaser (saugend)", 1.3], ["Rauputz / Strukturputz", 1.4], ["Holz (grundiert)", 0.9], ["Fassade (mineralisch)", 1.4]], GB = [1, 2.5, 5, 10, 12.5, 15, 20];
+    var KEY = "wr2:fv", UG = FV_UG, GB = [1, 2.5, 5, 10, 12.5, 15, 20];
     var st = { fl: "", ug: 0, an: 2, er: "7", rs: "10", gb: [5, 10, 15] };
     try { var sv = JSON.parse(lsGet(KEY) || "null"); if (sv && typeof sv === "object") { st.fl = String(sv.fl || ""); st.ug = sv.ug >= 0 && sv.ug < UG.length ? sv.ug : 0; st.an = sv.an >= 1 && sv.an <= 4 ? sv.an : 2; st.er = String(sv.er || "7"); st.rs = String(sv.rs == null ? "10" : sv.rs); if (Array.isArray(sv.gb) && sv.gb.length) st.gb = sv.gb.filter(function (g) { return GB.indexOf(g) >= 0; }); } } catch (e) {}
     function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; }
@@ -3028,6 +3029,7 @@ function openReport(pre) {
     var S = null;
     try { var o = JSON.parse(lsGet(KEY) || "null"); if (o && o.rooms && o.rooms.length) S = norm(o); } catch (e) { }
     if (!S) S = { rooms: [mkRoom(1, "2,50")], tuer: { b: "1,00", h: "2,10" }, fenster: { b: "1,20", h: "1,20" }, hoehe: "2,50", grenze: "3,00" };
+    if (S.fw === undefined) S.fw = 0; if (S.fd === undefined) S.fd = 0; if (!S.fan) S.fan = 2; if (S.fer === undefined) S.fer = "7";
     function save() { lsSet(KEY, JSON.stringify(S)); }
     function tuerA() { return pn(S.tuer.b) * pn(S.tuer.h); }
     function fenA() { return pn(S.fenster.b) * pn(S.fenster.h); }
@@ -3109,6 +3111,10 @@ function openReport(pre) {
         refs.tn[i].textContent = r.n || "Zimmer"; refs.tv[i].textContent = f2(t.tot) + " m²"; gD += t.dk; gW += t.wn;
       });
       refs.gD.textContent = f2(gD) + " m²"; refs.gW.textContent = f2(gW) + " m²"; refs.gT.textContent = f2(gD + gW) + " m²";
+      var er = pn(S.fer), an = S.fan || 2;
+      if (refs.fW) { if (!er) { refs.fW.textContent = refs.fD.textContent = refs.fT.textContent = "–"; } else {
+        var lw = gW * FV_UG[S.fw || 0][1] / er * an * 1.1, ld = gD * FV_UG[S.fd || 0][1] / er * an * 1.1, fl1 = function (x) { return (Math.round(x * 10) / 10).toFixed(1).replace(".", ","); };
+        refs.fW.textContent = fl1(lw) + " l"; refs.fD.textContent = fl1(ld) + " l"; refs.fT.textContent = fl1(lw + ld) + " Liter"; } }
     }
     function draw() {
       wrap.textContent = ""; refs = { rooms: [], tn: [], tv: [] };
@@ -3120,6 +3126,14 @@ function openReport(pre) {
       set.appendChild(line([sp("Öffnungen unter", "min-width:4.2em"), numIn(S, "grenze", "3,00"), sp("m² nicht abziehen (übermessen). 0 = immer abziehen.")]));
       set.appendChild(line([sp("Wandhöhe", "min-width:4.2em"), numIn(S, "hoehe", "Höhe"), sp("m (für neue Zimmer)")]));
       wrap.appendChild(set);
+      function ugSel(key, label) { var sl = el("select", { "aria-label": label, style: "width:100%;height:46px;border-radius:14px;padding:0 14px;font-size:1rem" }); FV_UG.forEach(function (u, i) { sl.appendChild(el("option", { value: String(i), text: u[0] })); }); sl.value = String(S[key] || 0); sl.addEventListener("change", function () { S[key] = +sl.value; save(); calc(); }); return el("div", {}, [el("div", { "class": "fl", text: label }), sl]); }
+      var fb = el("div", { "class": "fc", style: "border:1.5px solid #cdae6a" }); fb.appendChild(el("div", { "class": "fh" }, [el("b", { text: "Farbe (ca.)", style: "font-size:1.1rem" })]));
+      fb.appendChild(ugSel("fw", "Untergrund Wände")); fb.appendChild(ugSel("fd", "Untergrund Decke"));
+      var anR = el("div", { "class": "chips", style: "grid-template-columns:repeat(3,minmax(0,1fr));max-width:none" }); [1, 2, 3].forEach(function (n) { var b = el("button", { type: "button", "class": "chip" + ((S.fan || 2) === n ? " on" : ""), text: n + "×" }); b.addEventListener("click", function () { S.fan = n; save(); Array.prototype.forEach.call(anR.children, function (c, k) { c.classList.toggle("on", k + 1 === n); }); calc(); }); anR.appendChild(b); });
+      fb.appendChild(el("div", { "class": "fl", text: "Anzahl Anstriche" })); fb.appendChild(anR);
+      var ei = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 7", "aria-label": "Ergiebigkeit in m² pro Liter" }); ei.value = S.fer || ""; ei.addEventListener("input", function () { S.fer = ei.value; save(); calc(); });
+      fb.appendChild(el("div", { "class": "fl", text: "Ergiebigkeit (m²/l), steht auf dem Gebinde" })); fb.appendChild(ei);
+      wrap.appendChild(fb);
       S.rooms.forEach(function (r, i) {
         var R = { w: {}, chip: {} }, card = el("div", { "class": "fc" });
         var hn = el("b", { text: r.n || "Zimmer" }), rm = el("button", { type: "button", "class": "lk", text: "Entfernen" });
@@ -3182,6 +3196,7 @@ function openReport(pre) {
       S.rooms.forEach(function (r, i) { var n = el("span", {}), v = el("span", {}); refs.tn.push(n); refs.tv.push(v); tot.appendChild(el("div", { "class": "tl" }, [n, v])); });
       function big(label, cls) { var v = el("div", { "class": cls }); tot.appendChild(el("div", { "class": "tk", text: label })); tot.appendChild(v); return v; }
       refs.gW = big("Wandfläche netto (gesamt)", "tv"); refs.gD = big("Deckenfläche (gesamt)", "tv"); refs.gT = big("Gesamtfläche", "tg2");
+      refs.fW = big("Farbe Wände ca. (inkl. 10 % Reserve)", "tv"); refs.fD = big("Farbe Decke ca. (inkl. 10 % Reserve)", "tv"); refs.fT = big("Farbe total ca.", "tg2");
       wrap.appendChild(tot);
       var pdfB = el("button", { type: "button", "class": "btn primary", text: "PDF erstellen (A4)" }), saveB = el("button", { type: "button", "class": "btn", text: "Speichern" }), newB = el("button", { type: "button", "class": "btn", text: "Neues Ausmass" });
       pdfB.addEventListener("click", async function () {
