@@ -363,12 +363,6 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 .titlebar .sync { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
 .titlebar #acctBtn { grid-column: 1 / -1; grid-row: 3; justify-self: center; }
 .acol { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.thsw { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.thsw .lb { display: flex; justify-content: space-between; width: 118px; font-size: 13px; color: var(--muted); padding: 0 2px; }
-.thsw .lb button { all: unset; cursor: pointer; padding: 2px 4px; }
-.thsw .lb button[aria-pressed="true"] { color: var(--ink); font-weight: 700; }
-.thsw .tr { all: unset; cursor: pointer; position: relative; width: 118px; height: 28px; border-radius: 15px; background: var(--line); border: 2px solid #cdae6a; box-sizing: border-box; }
-.thsw .tr i { position: absolute; top: 2px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 1px solid #cdae6a; box-shadow: 0 1px 3px #0004; transition: left .18s; }
 .acct { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sync { font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .sync::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -481,6 +475,13 @@ h1 { color: #2c2166; }
 .sheet.logo .btn { display: inline-flex; align-items: center; gap: 7px; height: 46px; padding: 0 10px; border-radius: 10px; font-size: .92rem; white-space: nowrap; background: #12151f; color: #fff; border: 1.5px solid #d4af5a !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important; font-weight: 600; }
 .sheet.logo .btn.primary { background: linear-gradient(180deg, #1f2a66, #0c1238); text-shadow: none; color: #fff; }
 .sheet.logo .btn svg { width: 20px; height: 20px; flex: none; }
+.thbtn { all: unset; cursor: pointer; box-sizing: border-box; flex: 0 0 auto; position: relative; width: 48px; height: 48px; border-radius: 15px; background: var(--surface); border: 1.5px solid #cdae6a; display: grid; place-items: center; color: var(--ink); box-shadow: 0 6px 14px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.35); }
+.thbtn svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+.thbtn em { position: absolute; right: 6px; bottom: 3px; font: 800 12px/1 Arial, sans-serif; font-style: normal; }
+.thbtn:active { transform: translateY(1px); box-shadow: 0 3px 8px rgba(0,0,0,.25); }
+.thbtn:focus-visible { outline: 2px solid #cdae6a; outline-offset: 2px; }
+:root[data-theme="dark"] .thbtn { color: #e9cd82; box-shadow: 0 6px 16px rgba(0,0,0,.6), 0 0 12px rgba(205,174,106,.25), inset 0 1px 0 rgba(255,255,255,.1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .thbtn { color: #e9cd82; box-shadow: 0 6px 16px rgba(0,0,0,.6), 0 0 12px rgba(205,174,106,.25), inset 0 1px 0 rgba(255,255,255,.1); } }
 </style>
 </head><body>
 <div id="splash" aria-hidden="true"><img id="splashImg" alt=""></div>
@@ -3460,13 +3461,13 @@ function openReport(pre) {
     load();
   }
   function themeSwitch() {
-    var pos = { light: 3, auto: 46, dark: 89 }, w = el("div", { "class": "thsw" }), lb = el("div", { "class": "lb" }), tr = el("button", { type: "button", "class": "tr", "aria-label": "Darstellung Hell, Auto oder Dunkel" }, [el("i")]), bs = [];
+    var SUN = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>', MOON = '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>', NM = { light: "Hell", auto: "Auto", dark: "Dunkel" };
+    var bt = el("button", { type: "button", "class": "thbtn" });
     function cur() { var t = lsGet("wr_theme"); return t === "light" || t === "dark" ? t : "auto"; }
-    function draw() { var t = cur(); tr.firstChild.style.left = pos[t] + "px"; bs.forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-t") === t)); }); }
+    function draw() { var t = cur(); bt.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"' + (t === "auto" ? ' style="transform:translate(-2px,-2px)"' : "") + ">" + (t === "dark" ? MOON : SUN) + "</svg>" + (t === "auto" ? "<em>A</em>" : ""); bt.setAttribute("aria-label", "Darstellung: " + NM[t] + ". Tippen zum Wechseln"); bt.setAttribute("data-t", t); }
     function setT(t) { lsSet("wr_theme", t); if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); draw(); }
-    [["light", "Hell"], ["auto", "Auto."], ["dark", "Dunkel"]].forEach(function (o) { var b = el("button", { type: "button", "data-t": o[0], text: o[1] }); b.addEventListener("click", function () { setT(o[0]); }); bs.push(b); lb.appendChild(b); });
-    tr.addEventListener("click", function () { setT({ auto: "dark", dark: "light", light: "auto" }[cur()]); });
-    w.appendChild(lb); w.appendChild(tr); draw(); return w;
+    bt.addEventListener("click", function () { setT({ light: "auto", auto: "dark", dark: "light" }[cur()]); });
+    draw(); return bt;
   }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
