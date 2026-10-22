@@ -2909,6 +2909,59 @@ function openReport(pre) {
   }
 
   /* ---------- Quadratmeter-Rechner (Ausmass) ---------- */
+  function closeFV() { var o = $("fv"); if (o) o.remove(); }
+  function openFV() {
+    closeFV(); closeMenu();
+    var KEY = "wr2:fv", UG = [["Bereits gestrichene, glatte Wand", 1], ["Neuer Putz / Gipskarton / Raufaser (saugend)", 1.3], ["Rauputz / Strukturputz", 1.4], ["Holz (grundiert)", 0.9], ["Fassade (mineralisch)", 1.4]], GB = [1, 2.5, 5, 10, 12.5, 15, 20];
+    var st = { fl: "", ug: 0, an: 2, er: "7", rs: "10", gb: [5, 10, 15] };
+    try { var sv = JSON.parse(lsGet(KEY) || "null"); if (sv && typeof sv === "object") { st.fl = String(sv.fl || ""); st.ug = sv.ug >= 0 && sv.ug < UG.length ? sv.ug : 0; st.an = sv.an >= 1 && sv.an <= 4 ? sv.an : 2; st.er = String(sv.er || "7"); st.rs = String(sv.rs == null ? "10" : sv.rs); if (Array.isArray(sv.gb) && sv.gb.length) st.gb = sv.gb.filter(function (g) { return GB.indexOf(g) >= 0; }); } } catch (e) {}
+    function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; }
+    function nf(x, d) { return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d).replace(".", ",").replace(/,0+$/, "").replace(/(,\d)0$/, "$1"); }
+    if (!document.getElementById("fvcss")) { var cs = document.createElement("style"); cs.id = "fvcss";
+      cs.textContent = "#fv .fc{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:16px;margin:12px 0}#fv .fl{font-size:.8rem;font-weight:700;color:var(--muted);margin:12px 0 5px}#fv .fl:first-child{margin-top:0}" +
+        "#fv input[type=text],#fv select{width:100%;height:46px;border-radius:14px;padding:0 14px;font-size:1.05rem}#fv .row{display:flex;gap:8px;flex-wrap:wrap}" +
+        "#fv .chip{flex:1 1 0;min-width:52px;border:1.5px solid var(--line);border-radius:999px;padding:10px 8px;font-weight:700;font-size:.92rem;background:var(--surface);color:var(--muted);cursor:pointer;text-align:center}#fv .chip.on{background:#2c2166;border-color:#2c2166;color:#fff}" +
+        "#fv .res{border:1.5px solid #cdae6a;box-shadow:0 6px 16px rgba(0,0,0,.18)}#fv .big{font-size:2.2rem;font-weight:800;line-height:1.1}#fv .kv{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid var(--line);font-size:.95rem}#fv .kv:first-of-type{border-top:0}#fv .hint{font-size:.78rem;color:var(--muted);margin-top:4px}"; document.head.appendChild(cs); }
+    var out = el("div", { "class": "fc res" });
+    function save() { try { lsSet(KEY, JSON.stringify(st)); } catch (e) {} }
+    function best(need) { /* kleinste Menge, die reicht; bei Gleichstand weniger Gebinde */
+      var g = st.gb.slice().sort(function (a, b) { return b - a; }); if (!g.length || !need) return null;
+      var big = g[0], cap = Math.ceil(need / big) + 1, res = null;
+      (function rec(i, left, cur, tot, cnt) {
+        if (i === g.length) { if (tot >= need - 1e-9) { if (!res || tot < res.tot - 1e-9 || (Math.abs(tot - res.tot) < 1e-9 && cnt < res.cnt)) res = { tot: tot, cnt: cnt, c: cur.slice() }; } return; }
+        var mx = i === 0 ? cap : Math.ceil(need / g[i]);
+        for (var n = 0; n <= mx; n++) { if (tot + n * g[i] > need + big) break; cur.push(n); rec(i + 1, left, cur, tot + n * g[i], cnt + n); cur.pop(); }
+      })(0, need, [], 0, 0);
+      return res ? res.c.map(function (n, i) { return [n, g[i]]; }).filter(function (x) { return x[0] > 0; }) : null;
+    }
+    function draw() {
+      var fl = pn(st.fl), er = pn(st.er), rs = Math.max(0, parseFloat(String(st.rs).replace(",", ".")) || 0), f = UG[st.ug][1];
+      out.innerHTML = "";
+      if (!fl || !er) { out.appendChild(el("div", { "class": "hint", text: "Fläche und Ergiebigkeit eintragen, dann erscheint das Ergebnis." })); return; }
+      var pro = fl * f / er, tot = pro * st.an, mit = tot * (1 + rs / 100), bst = best(mit);
+      out.appendChild(el("div", { "class": "fl", text: "Benötigte Farbe (inkl. Reserve)" })); out.appendChild(el("div", { "class": "big", text: nf(mit, 1) + " Liter" }));
+      [["Fläche", nf(fl, 1) + " m²"], ["Untergrund-Faktor", "× " + nf(f, 1)], ["Pro Anstrich", nf(pro, 1) + " Liter"], ["Gesamt (" + st.an + " Anstrich" + (st.an > 1 ? "e" : "") + ")", nf(tot, 1) + " Liter"], ["Reserve " + nf(rs, 0) + " %", "+ " + nf(mit - tot, 1) + " Liter"]].forEach(function (r) { out.appendChild(el("div", { "class": "kv" }, [el("span", { text: r[0] }), el("b", { text: r[1] })])); });
+      out.appendChild(el("div", { "class": "fl", text: "Gebinde-Empfehlung" }));
+      if (!bst) out.appendChild(el("div", { "class": "hint", text: "Bitte mindestens eine Gebindegrösse wählen." }));
+      else { var sum = 0; bst.forEach(function (x) { sum += x[0] * x[1]; out.appendChild(el("div", { "class": "kv" }, [el("span", { text: x[0] + " × " + nf(x[1], 1) + " l" }), el("b", { text: nf(x[0] * x[1], 1) + " l" })])); }); out.appendChild(el("div", { "class": "hint", text: "Zusammen " + nf(sum, 1) + " Liter" + (sum - mit >= 0.05 ? " (" + nf(sum - mit, 1) + " l mehr als berechnet)" : "") + "." })); }
+      out.appendChild(el("div", { "class": "hint", text: "Richtwerte. Massgebend sind die Angaben des Herstellers auf dem Gebinde." }));
+    }
+    function inp(key, mode, ph, label) { var i = el("input", { type: "text", inputmode: mode, autocomplete: "off", placeholder: ph, "aria-label": label }); i.value = st[key]; i.addEventListener("input", function () { st[key] = i.value; save(); draw(); }); return i; }
+    var sel = el("select", { "aria-label": "Untergrund" }); UG.forEach(function (u, i) { sel.appendChild(el("option", { value: String(i), text: u[0] })); }); sel.value = String(st.ug); sel.addEventListener("change", function () { st.ug = +sel.value; save(); draw(); });
+    var anR = el("div", { "class": "row" }), gbR = el("div", { "class": "row" });
+    function chips() {
+      anR.innerHTML = ""; [1, 2, 3].forEach(function (n) { var b = el("button", { type: "button", "class": "chip" + (st.an === n ? " on" : ""), text: n + "×" }); b.addEventListener("click", function () { st.an = n; save(); chips(); draw(); }); anR.appendChild(b); });
+      gbR.innerHTML = ""; GB.forEach(function (g) { var on = st.gb.indexOf(g) >= 0, b = el("button", { type: "button", "class": "chip" + (on ? " on" : ""), "aria-pressed": String(on), text: nf(g, 1) + " l" }); b.addEventListener("click", function () { var k = st.gb.indexOf(g); if (k >= 0) st.gb.splice(k, 1); else st.gb.push(g); save(); chips(); draw(); }); gbR.appendChild(b); });
+    }
+    var form = el("div", { "class": "fc" }, [el("div", { "class": "fl", text: "Zu streichende Fläche (m²)" }), inp("fl", "decimal", "z. B. 85", "Fläche in m²"), el("div", { "class": "fl", text: "Untergrund" }), sel, el("div", { "class": "fl", text: "Anzahl Anstriche" }), anR,
+      el("div", { "class": "fl", text: "Ergiebigkeit pro Liter (m²/l), steht auf dem Gebinde" }), inp("er", "decimal", "z. B. 7", "Ergiebigkeit in m² pro Liter"), el("div", { "class": "fl", text: "Reserve für Ausbesserungen (%)" }), inp("rs", "decimal", "10", "Reserve in Prozent"), el("div", { "class": "fl", text: "Verfügbare Gebindegrössen" }), gbR]);
+    chips(); draw();
+    var cl = el("button", { type: "button", "class": "btn", text: "Schliessen" }); cl.addEventListener("click", closeFV);
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Farbverbrauch-Rechner" }), form, out, el("div", { "class": "actions" }, [cl])]);
+    var ov = el("div", { "class": "overlay sites", id: "fv", role: "dialog", "aria-modal": "true", "aria-label": "Farbverbrauch-Rechner" }, [sheet]);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeFV(); });
+    document.body.appendChild(ov);
+  }
   function closeM2() { var o = $("m2"); if (o) o.remove(); }
   function openM2() {
     closeM2(); closeMenu();
@@ -3471,7 +3524,7 @@ function openReport(pre) {
   }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }]];
+    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
     if (isAdmin()) { items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
