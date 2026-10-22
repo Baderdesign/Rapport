@@ -2687,10 +2687,10 @@ function openReport(pre) {
     return Object.keys(P).map(function (em) {
       var p = P[em], o = { em: em, name: p.name, work: 0, abs: 0, zus: 0, soll: 0, kum: 0, fth: 0, fer: 0, frj: 0, has: !!p.fd };
       if (!p.fd) return o;
-      var dd = new Date(Math.max(p.fd.getTime(), new Date(y, 0, 1).getTime())), ksoll = 0, kist = 0, now0 = new Date(), tdy = new Date(now0.getFullYear(), now0.getMonth(), now0.getDate()); /* Soll nur bis heute, nicht bis Monatsende */
+      var dd = new Date(Math.max(p.fd.getTime(), new Date(y, 0, 1).getTime())), ksoll = 0, kist = 0, now0 = new Date(), t0 = new Date(now0.getFullYear(), now0.getMonth(), now0.getDate()), tdy = addDays(t0, -(((t0.getDay() + 2) % 7) || 7)); /* Überstunden nur wochenweise: gezählt wird bis und mit dem letzten Freitag einer abgeschlossenen Woche (ab Samstag) */
+      o.lim = tdy;
       while (dd <= end && dd <= tdy) {
         var c = p.D[key(dd)], so = sollDay(dd, 100), ist = 0;
-        if (!c && dd.getTime() === tdy.getTime()) so = 0; /* heute ohne Eintrag: noch kein Soll */
         if (c) ist = c.net + c.ferien + c.krank + c.unfall + c.frei + c.z1 + c.z2;
         ksoll += so; kist += ist + feierDay(dd, 100);
         if (dd.getMonth() === mo) { o.soll += so; o.fth += feierDay(dd, 100); if (c) { o.work += c.net; o.abs += c.ferien + c.krank + c.unfall + c.frei; o.zus += c.z1 + c.z2; } }
@@ -2734,19 +2734,19 @@ function openReport(pre) {
   function closeGleit() { var o = $("gleit"); if (o) o.remove(); }
   function editKonten(o, y, K, again) {
     var old = $("konten"); if (old) old.remove();
-    var iu = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 12.30 oder -5.00", "aria-label": "Überstunden letztes Jahr" }), ia = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 25", "aria-label": "Ferienanspruch in Tagen" }), iv = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 3", "aria-label": "Ferien-Übertrag in Tagen" });
-    iu.value = K.ue_vorjahr || ""; ia.value = K.f_anspruch || ""; iv.value = K.f_vortrag || "";
+    var iu = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 12.30 oder -5.00", "aria-label": "Überstunden letztes Jahr" }), ia = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 25", "aria-label": "Ferienanspruch in Tagen" }), iv = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 3", "aria-label": "Ferien-Übertrag in Tagen" }), is = el("input", { type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "z. B. 45.30 oder -5.00", "aria-label": "Überstunden dieses Jahr vor dem Start der App" });
+    iu.value = K.ue_vorjahr || ""; is.value = K.ue_start || ""; ia.value = K.f_anspruch || ""; iv.value = K.f_vortrag || "";
     var msg = el("div", { "class": "status", role: "status" }), sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), cl = el("button", { type: "button", "class": "btn", text: "Abbrechen" });
     function lb(t, i) { return el("label", {}, [el("span", { "class": "lbl", text: t }), i]); }
-    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Konten " + y }), el("p", { text: (o.name || o.em) + ". Überstunden in Std.Min (Minus mit «-»), Ferien in Tagen (1 Tag = 8 Std.)." }), lb("Überstunden letztes Jahr", iu), lb("Ferienanspruch " + y + " (Tage)", ia), lb("Ferien-Übertrag aus dem Vorjahr (Tage)", iv), el("div", { "class": "actions" }, [sv, cl]), msg]);
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Konten " + y }), el("p", { text: (o.name || o.em) + ". Überstunden in Std.Min (Minus mit «-»), Ferien in Tagen (1 Tag = 8 Std.)." }), lb("Überstunden letztes Jahr", iu), lb("Überstunden dieses Jahr vor dem Start der App (Stand z. B. Ende September)", is), lb("Ferienanspruch " + y + " (Tage)", ia), lb("Ferien-Übertrag aus dem Vorjahr (Tage)", iv), el("div", { "class": "actions" }, [sv, cl]), msg]);
     var ov = el("div", { "class": "overlay sites", id: "konten", role: "dialog", "aria-modal": "true", "aria-label": "Konten bearbeiten" }, [sheet]); ov.style.zIndex = "60";
     function shut() { ov.remove(); }
     cl.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
     sv.addEventListener("click", async function () {
       if (isDemo()) { msg.textContent = DEMO_MSG; msg.className = "status bad"; return; }
-      var u = iu.value.trim().replace(",", "."), a = ia.value.trim().replace(",", "."), v = iv.value.trim().replace(",", ".");
-      if ((u && !/^[-+]?\d{1,4}([.:]\d{1,2})?$/.test(u)) || (a && !(rate(a) > 0 || a === "0")) || (v && !(rate(v) > 0 || v === "0"))) { msg.textContent = "Bitte nur Zahlen eingeben. Überstunden z. B. 12.30, Ferien in Tagen z. B. 25."; msg.className = "status bad"; return; }
-      try { var r = await sb.rpc("konten_set", { p_email: o.em, p_jahr: y, p_ue: u, p_fa: a, p_fv: v }); if (r.error) { msg.textContent = sharedMsg(r.error); msg.className = "status bad"; return; } shut(); toast("Konten gespeichert ✓"); again(); }
+      var u = iu.value.trim().replace(",", "."), a = ia.value.trim().replace(",", "."), v = iv.value.trim().replace(",", "."), us = is.value.trim().replace(",", ".");
+      if ((us && !/^[-+]?\d{1,4}([.:]\d{1,2})?$/.test(us)) || (u && !/^[-+]?\d{1,4}([.:]\d{1,2})?$/.test(u)) || (a && !(rate(a) > 0 || a === "0")) || (v && !(rate(v) > 0 || v === "0"))) { msg.textContent = "Bitte nur Zahlen eingeben. Überstunden z. B. 12.30, Ferien in Tagen z. B. 25."; msg.className = "status bad"; return; }
+      try { var r = await sb.rpc("konten_set", { p_email: o.em, p_jahr: y, p_ue: u, p_fa: a, p_fv: v, p_us: us }); if (r.error && /schema cache|could not find|does not exist/i.test(String(r.error.message || ""))) { if (us) { msg.textContent = "In Supabase fehlt noch das Zusatz-SQL «konten_start». Bitte zuerst ausführen."; msg.className = "status bad"; return; } r = await sb.rpc("konten_set", { p_email: o.em, p_jahr: y, p_ue: u, p_fa: a, p_fv: v }); } if (r.error) { msg.textContent = sharedMsg(r.error); msg.className = "status bad"; return; } shut(); toast("Konten gespeichert ✓"); again(); }
       catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
     });
     document.body.appendChild(ov); iu.focus();
@@ -2782,14 +2782,15 @@ function openReport(pre) {
         if (!res.length && !tmps.length) list.appendChild(el("div", { "class": "status", text: "Keine Daten." }));
         res.forEach(function (o) {
           var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
+          if (o.has && o.lim) c.appendChild(el("div", { "class": "status", text: "Gerechnet bis und mit KW " + isoWeek(o.lim).w + " (nur ganze Wochen, die laufende Woche zählt ab Samstag)." }));
           if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." }));
           else [["Gearbeitet", hm(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hm(o.abs)], ["Zuschläge", hm(o.zus)], ["Feiertage bezahlt", hm(o.fth)], ["Ist-Konto", hm(o.ist), 1], ["Soll-Konto", hm(o.soll), 1], ["Saldo Monat +/−", hmS(o.saldo), 1], ["Saldo Jahr kumuliert", hmS(o.kum), 1]].forEach(function (x) { c.appendChild(line(x[0], x[1], x[2])); });
-          var K = kx[o.em] || {}, ue0 = pmin(K.ue_vorjahr), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480), fer = o.fer || 0;
+          var K = kx[o.em] || {}, ue0 = pmin(K.ue_vorjahr), us0 = pmin(K.ue_start), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480), fer = o.fer || 0;
           function tg(m) { return " (" + String(Math.round(m / 480 * 10) / 10).replace(".", ",") + " Tage)"; }
-          if (o.has || ue0 || fa || fv0) {
+          if (o.has || ue0 || us0 || fa || fv0) {
             c.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Überstunden-Konto" }));
-            var frj = o.frj || 0, vjAb = Math.min(frj, Math.max(ue0, 0)); /* Frei / Üstd wird zuerst von den Überstunden des letzten Jahres abgezogen */
-            c.appendChild(line("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1)); c.appendChild(line("Überstunden aktuelles Jahr", hmS((o.kum || 0) - frj + vjAb), 1));
+            var frj = o.frj || 0, vjAb = Math.min(frj, Math.max(ue0, 0)); /* Frei / Üstd wird zuerst von den Überstunden des letzten Jahres abgezogen, der Rest von denen dieses Jahres */
+            c.appendChild(line("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1)); c.appendChild(line("Überstunden aktuelles Jahr", hmS(us0 + (o.kum || 0) - frj + vjAb), 1));
             if (frj) c.appendChild(line("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hmS(frj)));
             c.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Ferien-Konto" }));
             c.appendChild(line("Anspruch " + y, hmS(fa) + tg(fa))); c.appendChild(line("Übertrag letztes Jahr", hmS(fv0) + tg(fv0))); c.appendChild(line("Bezogen", hmS(fer) + tg(fer)));
