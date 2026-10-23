@@ -1980,7 +1980,7 @@ h1 { color: #2c2166; }
   return r;
 }
 function openReport(pre) {
-    closeReport(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); hideSug();
+    closeReport(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); hideSug(); fotoReset("rapport");
     pre = pre || {};
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
     var dl = el("div", { "class": "slist pick", role: "list" }); dl.hidden = true;
@@ -2035,7 +2035,7 @@ function openReport(pre) {
     var save = el("button", { type: "button", "class": "btn primary", text: "Rapport speichern" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var msg = el("div", { "class": "status", role: "status" });
-    var mine = el("div", { "class": "slist", role: "list" }), dbox = el("div", {});
+    var mine = el("div", { "class": "slist", role: "list" }), dbox = el("div", {}), fbox = el("div", {});
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     function curNr() { var v = inp.value.trim(); var m = /^(\S+)/.exec(v); return m ? m[1] : ""; }
     function refresh() {
@@ -2052,6 +2052,7 @@ function openReport(pre) {
       }
       var cur = rpParse(rpGet().s[nr + "|" + dt.value]); ta.value = cur.text || ""; rTa.value = cur.rtext || ""; rStd.value = cur.std || ""; rSel = {}; rPers = null; rPre = !cur.r; if (cur.r) cur.who.forEach(function (e) { if (e) rSel[e] = { s: (cur.whS && cur.whS[e]) || "" }; }); setR(cur.r); drawWho();
       dateienLoad(nr, "rapport", dbox);
+      fbox.textContent = ""; if (nr && dt.value && user) { var fcr = fotoGet("rapport", String(user.email || "").toLowerCase() + "|" + nr + "|" + dt.value, { head: "Fotos zum Rapport", btn: "📷 Foto hinzufügen" }); fbox.appendChild(fcr.node); fcr.load(); }
     }
     function drawMine() {
       mine.textContent = ""; var s = rpGet().s, ks = Object.keys(s).sort(function (a, b) { return a.split("|")[1] < b.split("|")[1] ? 1 : -1; }).slice(0, 15);
@@ -2066,7 +2067,7 @@ function openReport(pre) {
     var sheet = el("div", { "class": "sheet bil" }, [
       el("h2", { text: "Baustellenrapport" }),
       el("p", { text: "Wähle die Baustelle und den Tag. Deine Stunden kommen automatisch aus deinem Wochenrapport. Du schreibst nur, was gearbeitet wurde. Es reicht, wenn einer von euch schreibt." }),
-      inp, dl, nm, dt, el("div", { "class": "actions" }, [rBtn]), hrs, rBox, lblN, ta, el("div", { "class": "actions" }, [save]), msg, dbox,
+      inp, dl, nm, dt, el("div", { "class": "actions" }, [rBtn]), hrs, rBox, lblN, ta, fbox, el("div", { "class": "actions" }, [save]), msg, dbox,
       el("div", { "class": "lbl", text: "Meine letzten Rapporte" }), mine, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "report", role: "dialog", "aria-modal": "true", "aria-label": "Baustellenrapport" }, [sheet]);
     inp.addEventListener("input", function () { suggest(); if (siteByNr(curNr())) refresh(); else { nm.textContent = ""; hrs.textContent = ""; } });
@@ -2196,13 +2197,14 @@ function openReport(pre) {
     var msg = el("div", { "class": "status", role: "status", text: "Einen Moment …" }), body = el("div", { "class": "slist", role: "list" });
     body.style.maxHeight = "58vh"; body.hidden = true;
     var pdf = el("button", { type: "button", "class": "btn primary", text: "Rapport als PDF" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
-    var info = siteByNr(nr), res = null;
+    var info = siteByNr(nr), res = null, rFotos = [], rFotosOk = false;
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Rapport " + nr }), el("p", { text: ((info && info.n) || "") + " · " + dmy(fromKey(a)) + " – " + dmy(fromKey(b)) }), (info && info.f) ? el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Farbtöne und Hersteller" }), el("div", { style: "white-space:pre-wrap;line-height:1.5", text: info.f })]) : el("span"), msg, body, el("div", { "class": "actions" }, [pdf, close])]);
     var ov = el("div", { "class": "overlay sites", id: "rapport", role: "dialog", "aria-modal": "true", "aria-label": "Rapport " + nr }, [sheet]);
     close.addEventListener("click", closeRapport); ov.addEventListener("click", function (ev) { if (ev.target === ov) closeRapport(); });
     pdf.addEventListener("click", async function () {
       if (!res) return;
-      var doc = null; try { doc = buildRapportPdf(nr, a, b, res); } catch (e) { }
+      if (!rFotosOk && navigator.onLine) { msg.textContent = "Die Fotos werden noch geladen. Bitte kurz warten und nochmals tippen."; msg.className = "status warn"; return; }
+      var doc = null; try { doc = buildRapportPdf(nr, a, b, res); if (doc && rFotos.length) fotoPdf(doc, rFotos, "Rapport " + nr + " · " + ((info && info.n) || "") + " · " + dmy(fromKey(a)) + " – " + dmy(fromKey(b))); } catch (e) { }
       if (!doc) { msg.textContent = "Das PDF konnte nicht erstellt werden."; msg.className = "status bad"; return; }
       if (isDemo()) { demoPdf(doc, "Baustellenrapport"); return; }
       var fn = "Baustellenrapport_" + nr + "_" + a + "_" + b + ".pdf", blob = doc.output("blob"), file = null;
@@ -2218,6 +2220,7 @@ function openReport(pre) {
       var r = await sb.rpc("firma_reports", { p_von: a, p_bis: b });
       if (r.error) { msg.textContent = rpMsg(r.error); msg.className = "status bad"; return; }
       res = rpBuild(nr, a, b, wochen, r.data || []); msg.textContent = "";
+      (async function () { try { var fl = await sb.rpc("foto_list_site", { p_kind: "rapport", p_site: nr }); if (!fl.error && Array.isArray(fl.data)) { for (var q = 0; q < fl.data.length; q++) { var x = fl.data[q], pr = String(x.ref).split("|"); if (pr[2] < a || pr[2] > b) continue; try { var g = await sb.rpc("foto_get", { p_id: x.id }); if (!g.error && g.data && g.data[0]) rFotos.push({ day: pr[2], data: g.data[0].data, w: g.data[0].w, h: g.data[0].h, created: null, note: dmy(fromKey(pr[2])) + " · " + (res.people && res.people[pr[0]] ? res.people[pr[0]] : pr[0]) + (x.note ? " · " + x.note : "") }); } catch (e) { } } rFotos.sort(function (p1, p2) { return p1.day < p2.day ? -1 : p1.day > p2.day ? 1 : 0; }); } } catch (e) { } rFotosOk = true; })();
       body.hidden = !res.rows.length;
       if (!res.rows.length) { msg.textContent = "Für diese Baustelle gibt es im Zeitraum keine Stunden und keine Rapporte."; return; }
       res.rows.forEach(function (d) {
@@ -3095,6 +3098,7 @@ function openReport(pre) {
     if (!sb || !user || !navigator.onLine || isDemo()) return;
     try { var r = await sb.rpc("foto_list", { p_kind: kind, p_ref: ref }); if (r.error || !r.data) return; for (var i = 0; i < r.data.length; i++) { try { await sb.rpc("foto_delete", { p_id: r.data[i].id }); } catch (e) { } } } catch (e) { }
   }
+  function fotoReset(kind) { Object.keys(FOTOC).forEach(function (k) { if (k.indexOf(kind + "|") === 0) delete FOTOC[k]; }); }
   function fotoGet(kind, ref, opt) { var k = kind + "|" + ref; return FOTOC[k] || (FOTOC[k] = fotoCtl(kind, ref, opt)); }
   function fotoCtl(kind, ref0, opt) {
     opt = opt || {};
@@ -3192,7 +3196,7 @@ function openReport(pre) {
       if (h > 100) { h = 100; w = h * ar; }
       try { doc.addImage(f.data, "JPEG", bx, by, w, h); doc.setDrawColor(200); doc.setLineWidth(0.2); doc.rect(bx, by, w, h); } catch (e) { }
       doc.setFontSize(8.5); doc.setTextColor(60);
-      var cap = (f.note ? f.note + " · " : "") + (f.created ? dmy(new Date(f.created)) : "");
+      var cap = [f.note, f.created ? dmy(new Date(f.created)) : ""].filter(Boolean).join(" · ");
       doc.text(doc.splitTextToSize(cap, cw).slice(0, 3), bx, by + h + 4.5); doc.setTextColor(0);
     });
     if (footer) { doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0); doc.text(footer, X, 286); doc.setFont("helvetica", "normal"); }
@@ -3334,7 +3338,7 @@ function openReport(pre) {
     return { w: W, d: D, l: lit, t: S.titel || "" };
   }
   function openOffer() {
-    closeOF(); closeMenu(); FOTOC = {};
+    closeOF(); closeMenu(); fotoReset("offerte");
     var SK = "wr2:ofset", DK = "wr2:of", LK = "wr2:oflist", NK = "wr2:ofnr", mb = memberGet();
     function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) ? x : 0; }
     function chf(x) { var s = (Math.round(x * 100) / 100).toFixed(2), p = s.split("."); return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, "’") + "." + p[1]; }
@@ -3490,7 +3494,7 @@ function openReport(pre) {
   }
   function closeM2() { var o = $("m2"); if (o) o.remove(); }
   function openM2() {
-    closeM2(); closeMenu(); FOTOC = {};
+    closeM2(); closeMenu(); fotoReset("ausmass");
     var KEY = "wr2:m2", LK = "wr2:m2list", saved = null;
     function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; }
     function f2(x) { return (Math.round(x * 100) / 100).toFixed(2).replace(".", ","); }
