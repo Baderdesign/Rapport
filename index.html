@@ -2271,6 +2271,7 @@ function openReport(pre) {
       d.mat.forEach(addMat); if (!d.mat.length) addMat();
       var addM = el("button", { type: "button", "class": "btn", text: "+ Material-Zeile" }); addM.addEventListener("click", function () { addMat(); });
       var ft = tx(d.total, "Total (Text)", "Total");
+      var fcR = fotoCtl("regie", site + "|" + (editing.nr || "n" + fotoRid())); if (editing.nr) fcR.load();
       var emsg = el("div", { "class": "status", role: "status" });
       var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), pf = el("button", { type: "button", "class": "btn", text: "Als PDF" });
       var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.hidden = !(isAdmin() && nr);
@@ -2286,6 +2287,7 @@ function openReport(pre) {
       ed.appendChild(field("Montag der Woche (füllt die Datumszeile)", fm));
       ed.appendChild(field("Ausgeführte Arbeiten", fw)); ed.appendChild(field("Stunden", grid)); ed.appendChild(field("Transporte", ftr));
       ed.appendChild(field("Material (Bezeichnung · Einheit · Total)", matBox)); ed.appendChild(addM); ed.appendChild(field("Total", ft));
+      ed.appendChild(fcR.node);
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
       sv.addEventListener("click", async function () {
@@ -2295,12 +2297,14 @@ function openReport(pre) {
         try {
           var r = await sb.rpc("regie_save", { p_site: site, p_nr: editing.nr, p_data: collect() });
           if (r.error) { es(regieMsg(r.error), "bad"); return; }
+          if (!editing.nr) await fcR.move(site + "|" + r.data);
           editing.nr = r.data; title.textContent = "Regie-Rapport Nr. " + r.data + " · Baustelle " + site; closeRegie(); toast("Regie-Rapport Nr. " + r.data + " gespeichert ✓");
         } catch (e) { es(regieMsg(e), "bad"); }
       });
       pf.addEventListener("click", async function () {
         var doc = null; try { doc = buildRegiePdf(editing.nr || "", collect()); } catch (e) { }
         if (!doc) { es("Das PDF konnte nicht erstellt werden.", "bad"); return; }
+        try { fotoPdf(doc, await fcR.all(), "Regie-Rapport " + (editing.nr ? "Nr. " + editing.nr : "") + " · " + site); } catch (e) { }
         if (isDemo()) { demoPdf(doc, "Regie-Rapport"); return; }
         var fn = "Regie-Rapport_" + site + "_Nr" + (editing.nr || "neu") + ".pdf", blob = doc.output("blob"), file = null;
         try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
@@ -2311,7 +2315,7 @@ function openReport(pre) {
       });
       del.addEventListener("click", async function () {
         if (!editing.nr || !confirm("Regie-Rapport Nr. " + editing.nr + " löschen?")) return;
-        try { var r = await sb.rpc("regie_delete", { p_site: site, p_nr: editing.nr }); if (r.error) { es(regieMsg(r.error), "bad"); return; } back.click(); } catch (e) { es(regieMsg(e), "bad"); }
+        try { var r = await sb.rpc("regie_delete", { p_site: site, p_nr: editing.nr }); if (r.error) { es(regieMsg(r.error), "bad"); return; } await fcR.removeAll(); back.click(); } catch (e) { es(regieMsg(e), "bad"); }
       });
       back.addEventListener("click", function () { ed.hidden = true; main.hidden = false; $("regclose").hidden = false; editing = null; loadList(); window.scrollTo(0, 0); });
     }
@@ -2910,6 +2914,249 @@ function openReport(pre) {
 
   /* ---------- Quadratmeter-Rechner (Ausmass) ---------- */
   var FV_UG = [["Bereits gestrichene, glatte Wand", 1], ["Neuer Putz / Gipskarton / Raufaser (saugend)", 1.3], ["Rauputz / Strukturputz", 1.4], ["Glatte Tapete / Vlies (gestrichen)", 1], ["Holz (grundiert)", 0.9], ["Fassade (mineralisch)", 1.4]];
+  /* ---------- Fotos (Regie-Rapport, Ausmass, Offerte) ---------- */
+  var FOTOC = {};
+  function fotoRid() { return Math.random().toString(36).slice(2, 10); }
+  function fotoScale(file, maxPx, q) {
+    return new Promise(function (ok, no) {
+      var u = URL.createObjectURL(file), im = new Image();
+      im.onload = function () {
+        var w = im.naturalWidth || 1, h = im.naturalHeight || 1, s = Math.min(1, maxPx / Math.max(w, h)), cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+        var c = document.createElement("canvas"); c.width = cw; c.height = ch; var x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, cw, ch); x.drawImage(im, 0, 0, cw, ch);
+        URL.revokeObjectURL(u); ok({ url: c.toDataURL("image/jpeg", q), w: cw, h: ch });
+      };
+      im.onerror = function () { URL.revokeObjectURL(u); no(new Error("Das Bild konnte nicht gelesen werden.")); };
+      im.src = u;
+    });
+  }
+  function fotoMsg(e) {
+    var m = String((e && e.message) || e || "Fehler");
+    if (/foto_/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Fotos sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
+    return m.slice(0, 160);
+  }
+  /* Alle Fotos eines Eintrags löschen (Ausmass/Offerte gelöscht oder verworfen) */
+  async function fotoPurge(kind, ref) {
+    if (!ref) return; delete FOTOC[kind + "|" + ref];
+    if (!sb || !user || !navigator.onLine || isDemo()) return;
+    try { var r = await sb.rpc("foto_list", { p_kind: kind, p_ref: ref }); if (r.error || !r.data) return; for (var i = 0; i < r.data.length; i++) { try { await sb.rpc("foto_delete", { p_id: r.data[i].id }); } catch (e) { } } } catch (e) { }
+  }
+  function fotoGet(kind, ref) { var k = kind + "|" + ref; return FOTOC[k] || (FOTOC[k] = fotoCtl(kind, ref)); }
+  function fotoCtl(kind, ref0) {
+    var c = { kind: kind, ref: ref0, items: [], loaded: false };
+    if (!document.getElementById("fotocss")) {
+      var cs = document.createElement("style"); cs.id = "fotocss";
+      cs.textContent = ".fotobox{margin:14px 0}.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}" +
+        ".fc1{border:1px solid var(--line);border-radius:14px;padding:8px;background:var(--surface);display:flex;flex-direction:column;gap:6px}" +
+        ".fc1 img{width:100%;height:120px;object-fit:cover;border-radius:10px;cursor:pointer;display:block}" +
+        ".fc1 input[type=text]{width:100%;height:38px;border-radius:10px;padding:0 10px;font-size:.9rem}" +
+        ".fc1 .fx{background:none;border:0;color:var(--muted);font-size:.8rem;text-decoration:underline;cursor:pointer;padding:2px}" +
+        "#fotobig{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}" +
+        "#fotobig img{max-width:100%;max-height:78vh;border-radius:8px}#fotobig .status{color:#fff}";
+      document.head.appendChild(cs);
+    }
+    var box = el("div", { "class": "fotobox" }), head = el("div", { "class": "lbl", text: "Fotos" }), grid = el("div", { "class": "fgrid" }), msg = el("div", { "class": "status", role: "status" });
+    var inp = el("input", { type: "file", accept: "image/*", multiple: "multiple" }); inp.style.display = "none";
+    var add = el("button", { type: "button", "class": "btn", text: "📷 Foto hinzufügen" });
+    box.appendChild(head); box.appendChild(grid); box.appendChild(el("div", { "class": "actions" }, [add])); box.appendChild(inp); box.appendChild(msg);
+    c.node = box;
+    function say(t, bad) { msg.textContent = t || ""; msg.className = "status" + (bad ? " bad" : ""); }
+    function ready() {
+      if (isDemo()) { say(DEMO_MSG, 1); return false; }
+      if (!sb || !user) { say("Bitte zuerst anmelden.", 1); return false; }
+      if (!navigator.onLine) { say("Keine Verbindung. Fotos brauchen Internet.", 1); return false; }
+      return true;
+    }
+    function big(f) {
+      var o = el("div", { id: "fotobig", role: "dialog", "aria-modal": "true", "aria-label": "Foto" }), st = el("div", { "class": "status", text: "Einen Moment …" }), cl = el("button", { type: "button", "class": "btn primary", text: "Schliessen" });
+      o.appendChild(st); o.appendChild(cl); document.body.appendChild(o);
+      cl.addEventListener("click", function () { o.remove(); }); o.addEventListener("click", function (ev) { if (ev.target === o) o.remove(); });
+      sb.rpc("foto_get", { p_id: f.id }).then(function (r) {
+        if (r.error || !r.data || !r.data[0]) { st.textContent = r.error ? fotoMsg(r.error) : "Foto nicht gefunden."; return; }
+        var im = el("img", { src: r.data[0].data, alt: f.note || "Foto" }); o.replaceChild(im, st);
+      }).catch(function (e) { st.textContent = fotoMsg(e); });
+    }
+    function draw() {
+      grid.textContent = ""; head.textContent = "Fotos" + (c.items.length ? " (" + c.items.length + ")" : "");
+      c.items.forEach(function (f) {
+        var im = el("img", { src: f.thumb, alt: f.note || "Foto" });
+        var ni = el("input", { type: "text", placeholder: "Notiz zum Foto", maxlength: "300", "aria-label": "Notiz zum Foto" }); ni.value = f.note || "";
+        ni.addEventListener("change", async function () { f.note = ni.value; try { var r = await sb.rpc("foto_note", { p_id: f.id, p_note: f.note }); if (r.error) say(fotoMsg(r.error), 1); } catch (e) { say(fotoMsg(e), 1); } });
+        var dl = el("button", { type: "button", "class": "fx", text: "Foto entfernen" });
+        dl.addEventListener("click", async function () {
+          if (!confirm("Foto entfernen?")) return;
+          try { var r = await sb.rpc("foto_delete", { p_id: f.id }); if (r.error) { say(fotoMsg(r.error), 1); return; } } catch (e) { say(fotoMsg(e), 1); return; }
+          c.items = c.items.filter(function (x) { return x !== f; }); draw();
+        });
+        im.addEventListener("click", function () { big(f); });
+        grid.appendChild(el("div", { "class": "fc1" }, [im, ni, dl]));
+      });
+    }
+    c.load = async function () {
+      if (c.loaded || !sb || !user || !navigator.onLine || isDemo()) return; c.loaded = true;
+      try { var r = await sb.rpc("foto_list", { p_kind: c.kind, p_ref: c.ref }); if (r.error) { say(fotoMsg(r.error), 1); c.loaded = false; return; } c.items = (r.data || []).map(function (x) { return { id: x.id, note: x.note || "", thumb: x.thumb }; }); draw(); }
+      catch (e) { c.loaded = false; }
+    };
+    add.addEventListener("click", function () { if (ready()) inp.click(); });
+    inp.addEventListener("change", async function () {
+      var fl = Array.prototype.slice.call(inp.files || []); inp.value = ""; if (!fl.length || !ready()) return;
+      for (var i = 0; i < fl.length; i++) {
+        say("Foto " + (i + 1) + " von " + fl.length + " wird gespeichert …");
+        try {
+          var full = await fotoScale(fl[i], 1600, 0.72), th = await fotoScale(fl[i], 280, 0.6);
+          var r = await sb.rpc("foto_save", { p_kind: c.kind, p_ref: c.ref, p_note: "", p_thumb: th.url, p_data: full.url, p_w: full.w, p_h: full.h });
+          if (r.error) throw r.error;
+          c.items.push({ id: r.data, note: "", thumb: th.url }); draw();
+        } catch (e) { say(fotoMsg(e), 1); return; }
+      }
+      say("");
+    });
+    c.all = async function () {
+      var out = [];
+      for (var i = 0; i < c.items.length; i++) {
+        try { var r = await sb.rpc("foto_get", { p_id: c.items[i].id }); if (!r.error && r.data && r.data[0]) { var d = r.data[0]; out.push({ note: c.items[i].note || "", created: d.created, data: d.data, w: d.w, h: d.h }); } } catch (e) { }
+      }
+      return out;
+    };
+    c.move = async function (newRef) { var old = c.ref; c.ref = newRef; if (c.items.length && old !== newRef) { try { await sb.rpc("foto_move", { p_kind: c.kind, p_old: old, p_new: newRef }); } catch (e) { } } };
+    c.removeAll = async function () { for (var i = 0; i < c.items.length; i++) { try { await sb.rpc("foto_delete", { p_id: c.items[i].id }); } catch (e) { } } c.items = []; draw(); };
+    draw();
+    return c;
+  }
+  /* Fotoseiten ans Ende eines PDF hängen (2 × 2 pro Seite) */
+  function fotoPdf(doc, fotos, titel) {
+    if (!doc || !fotos || !fotos.length) return;
+    var X = 15, cw = 87, gap = 6;
+    fotos.forEach(function (f, i) {
+      var pos = i % 4;
+      if (pos === 0) { doc.addPage(); doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0); doc.text("Fotos – " + (titel || ""), X, 16); doc.setFont("helvetica", "normal"); }
+      var bx = X + (pos % 2) * (cw + gap), by = 24 + (pos >> 1) * 128, ar = (f.w && f.h) ? f.w / f.h : 4 / 3, w = cw, h = w / ar;
+      if (h > 100) { h = 100; w = h * ar; }
+      try { doc.addImage(f.data, "JPEG", bx, by, w, h); doc.setDrawColor(200); doc.setLineWidth(0.2); doc.rect(bx, by, w, h); } catch (e) { }
+      doc.setFontSize(8.5); doc.setTextColor(60);
+      var cap = (f.note ? f.note + " · " : "") + (f.created ? dmy(new Date(f.created)) : "");
+      doc.text(doc.splitTextToSize(cap, cw).slice(0, 3), bx, by + h + 4.5); doc.setTextColor(0);
+    });
+  }
+  function closeOF() { var o = $("of"); if (o) o.remove(); }
+  function m2Sum() { /* Flächen aus dem gespeicherten Ausmass (gleiche Regeln wie im Flächen-Rechner) */
+    var S = null; try { S = JSON.parse(lsGet("wr2:m2") || "null"); } catch (e) { } if (!S || !S.rooms) return null;
+    function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; }
+    var gr = pn(S.grenze === undefined ? "3,00" : S.grenze), W = 0, D = 0;
+    S.rooms.forEach(function (r) {
+      (r.walls || []).forEach(function (w, j) {
+        if (w.on === false) return;
+        var auto = (j === 0 || j === 2) ? pn(r.dl) : ((j === 1 || j === 3) ? pn(r.db) : 0), l = pn(w.l) || auto, hh = pn(w.h) || pn(r.h || S.hoehe || "2,50"), m2 = l * hh, ded = 0, lb = 0;
+        (w.o || []).forEach(function (x) { var a = pn(x.b) * pn(x.h); if (a > 0 && (gr <= 0 || a >= gr)) { ded += a; if (gr > 0) lb += (x.k === "t" ? pn(x.b) + 2 * pn(x.h) : 2 * (pn(x.b) + pn(x.h))) * pn(x.lt); } });
+        W += m2 ? m2 - Math.min(m2, ded) + lb : 0;
+      });
+      if (r.deck) D += pn(r.dl) * pn(r.db);
+    });
+    var er = pn(S.fer === undefined ? "7" : S.fer), an = S.fan || 2, UGF = [1, 1.3, 1.4, 1, 0.9, 1.4], lit = 0;
+    if (er) lit = (W * UGF[S.fw || 0] + D * UGF[S.fd || 0]) / er * an * 1.1;
+    return { w: W, d: D, l: lit, t: S.titel || "" };
+  }
+  function openOffer() {
+    closeOF(); closeMenu(); FOTOC = {};
+    var SK = "wr2:ofset", DK = "wr2:of", LK = "wr2:oflist", NK = "wr2:ofnr", mb = memberGet();
+    function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) ? x : 0; }
+    function chf(x) { var s = (Math.round(x * 100) / 100).toFixed(2), p = s.split("."); return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, "’") + "." + p[1]; }
+    function f2(x) { return (Math.round(x * 100) / 100).toFixed(2).replace(".", ","); }
+    function ld(k, d) { try { var o = JSON.parse(lsGet(k) || "null"); return o && typeof o === "object" ? o : d; } catch (e) { return d; } }
+    var set = ld(SK, null) || { firma: (mb && mb.firma) || "", adr: "", tel: "", mail: "", mwstnr: "", pw: "", pd: "", zahl: "30 Tage netto", mwst: false, rate: "8.1" };
+    function plus30() { var d = new Date(); d.setDate(d.getDate() + 30); return dmy(d); }
+    function fresh() { var n = (parseInt(lsGet(NK) || "0", 10) || 0) + 1; return { nr: new Date().getFullYear() + "-" + String(n).padStart(3, "0"), kunde: "", objekt: "", bis: plus30(), pos: [], rab: "", fid: fotoRid() }; }
+    var D = ld(DK, null) || fresh(); if (!Array.isArray(D.pos)) D.pos = []; if (!D.fid) D.fid = fotoRid(); if (!lsGet(DK) || !(ld(DK, {}).fid)) lsSet(DK, JSON.stringify(D));
+    function sv() { lsSet(SK, JSON.stringify(set)); lsSet(DK, JSON.stringify(D)); }
+    function calc() { var z = 0; D.pos.forEach(function (p) { z += pn(p.m) * pn(p.p); }); var rab = z * pn(D.rab) / 100, net = z - rab, mw = set.mwst ? net * pn(set.rate) / 100 : 0; return { z: z, rab: rab, net: net, mw: mw, tot: net + mw }; }
+    if (!document.getElementById("ofcss")) { var cs = document.createElement("style"); cs.id = "ofcss";
+      cs.textContent = "#of .fc{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:14px;margin:12px 0}#of .fl{font-size:.8rem;font-weight:700;color:var(--muted);margin:10px 0 4px}#of .fl:first-child{margin-top:0}" +
+        "#of input[type=text],#of textarea{width:100%;border-radius:12px;padding:0 12px;font-size:1rem;min-height:42px;height:42px}#of textarea{padding:10px 12px;height:auto;min-height:70px;font-family:inherit}" +
+        "#of .pr{border-top:1px solid var(--line);padding:10px 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}#of .pr:first-of-type{border-top:0}#of .pr .d{grid-column:1/-1}#of .pr .x{grid-column:1/-1;justify-self:end;background:none;border:0;color:var(--bad);font-size:.85rem;text-decoration:underline;cursor:pointer}" +
+        "#of .pr small{display:block;font-size:.7rem;color:var(--muted)}#of .ad{display:block;width:100%;border:1.5px dashed var(--line);border-radius:14px;background:transparent;padding:12px;font-weight:700;color:var(--ink);cursor:pointer;margin-top:8px}" +
+        "#of .gb{border:1.5px solid #cdae6a;border-radius:999px;padding:11px;font-weight:700;background:linear-gradient(180deg,#fff,#f3efe2);color:#1a212a;box-shadow:0 4px 8px rgba(26,18,68,.2);cursor:pointer;width:100%;margin:6px 0}" +
+        "#of .tot{background:linear-gradient(135deg,#2c2166,#1d1450);border-radius:22px;padding:16px;color:#fff;box-shadow:inset 0 -4px 0 #d4af5a;margin:12px 0}#of .tl{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #ffffff2e}#of .tl:last-child{border:0}#of .tg{font-size:1.7rem;font-weight:800;color:#f1d98f}";
+      document.head.appendChild(cs); }
+    var wrap = el("div", {}), tot = el("div", { "class": "tot" });
+    function drawTot() { var c = calc(); tot.textContent = "";
+      function row(a, b, big) { tot.appendChild(el("div", { "class": "tl" }, [el("span", { text: a }), el("b", { text: b, "class": big ? "tg" : "" })])); }
+      row("Zwischentotal", chf(c.z)); if (c.rab) row("Rabatt " + pn(D.rab) + " %", "− " + chf(c.rab)); if (set.mwst) row("MWST " + pn(set.rate) + " %", chf(c.mw)); row("Total CHF", chf(c.tot), 1); }
+    function inp(obj, key, label, ph, save) { var i = el("input", { type: "text", autocomplete: "off", placeholder: ph || "", "aria-label": label }); i.value = obj[key] == null ? "" : obj[key]; i.addEventListener("input", function () { obj[key] = i.value; sv(); if (save) save(); drawTot(); }); return i; }
+    function area(obj, key, label, ph) { var i = el("textarea", { placeholder: ph || "", "aria-label": label }); i.value = obj[key] || ""; i.addEventListener("input", function () { obj[key] = i.value; sv(); }); return i; }
+    function L(t) { return el("div", { "class": "fl", text: t }); }
+    function draw() {
+      wrap.textContent = "";
+      var sd = el("details", { "class": "fc" }); sd.appendChild(el("summary", { text: "Firmenangaben und Standardpreise", style: "font-weight:700;cursor:pointer" }));
+      sd.appendChild(L("Firmenname")); sd.appendChild(inp(set, "firma", "Firmenname")); sd.appendChild(L("Adresse (Strasse, PLZ Ort)")); sd.appendChild(area(set, "adr", "Adresse", "Hauptstrasse 1\n8000 Zürich"));
+      sd.appendChild(L("Telefon")); sd.appendChild(inp(set, "tel", "Telefon")); sd.appendChild(L("E-Mail")); sd.appendChild(inp(set, "mail", "E-Mail"));
+      sd.appendChild(L("Preis Wände pro m² (CHF)")); sd.appendChild(inp(set, "pw", "Preis Wände", "z. B. 14.50")); sd.appendChild(L("Preis Decke pro m² (CHF)")); sd.appendChild(inp(set, "pd", "Preis Decke", "z. B. 16.00"));
+      sd.appendChild(L("Zahlungsbedingungen")); sd.appendChild(inp(set, "zahl", "Zahlungsbedingungen"));
+      var mc = el("label", { style: "display:flex;align-items:center;gap:10px;margin-top:12px" }, [el("input", { type: "checkbox", style: "width:22px;height:22px" }), el("span", { text: "Ich bin MWST-pflichtig" })]); mc.firstChild.checked = !!set.mwst; mc.firstChild.addEventListener("change", function () { set.mwst = mc.firstChild.checked; sv(); draw(); drawTot(); }); sd.appendChild(mc);
+      if (set.mwst) { sd.appendChild(L("MWST-Satz (%)")); sd.appendChild(inp(set, "rate", "MWST-Satz")); sd.appendChild(L("MWST-Nummer")); sd.appendChild(inp(set, "mwstnr", "MWST-Nummer", "CHE-000.000.000 MWST")); }
+      wrap.appendChild(sd);
+      var f = el("div", { "class": "fc" }); f.appendChild(L("Offerte-Nr.")); f.appendChild(inp(D, "nr", "Offerte-Nummer")); f.appendChild(L("Kunde (Name, Adresse)")); f.appendChild(area(D, "kunde", "Kunde", "Familie Muster\nDorfstrasse 4\n8000 Zürich"));
+      f.appendChild(L("Objekt / Baustelle")); f.appendChild(inp(D, "objekt", "Objekt")); f.appendChild(L("Gültig bis")); f.appendChild(inp(D, "bis", "Gültig bis")); wrap.appendChild(f);
+      var ab = el("button", { type: "button", "class": "gb", text: "Aus Ausmass übernehmen" }), am = el("div", { "class": "status", style: "text-align:center" });
+      ab.addEventListener("click", function () {
+        var s = m2Sum(); if (!s || (!s.w && !s.d)) { am.textContent = "Kein Ausmass gefunden. Zuerst im Flächen-Rechner Zimmer erfassen."; return; }
+        if (s.w) D.pos.push({ t: "Wände streichen" + (s.t ? " (" + s.t + ")" : ""), m: f2(s.w).replace(",", "."), e: "m²", p: set.pw || "" });
+        if (s.d) D.pos.push({ t: "Decke streichen", m: f2(s.d).replace(",", "."), e: "m²", p: set.pd || "" });
+        if (s.l) D.pos.push({ t: "Farbmaterial (ca. " + f2(s.l).replace(",", ",") + " l)", m: "1", e: "pausch.", p: "" });
+        sv(); am.textContent = "Übernommen. Bitte Preise prüfen."; draw(); drawTot();
+      });
+      wrap.appendChild(ab); wrap.appendChild(am);
+      var pc = el("div", { "class": "fc" }); pc.appendChild(el("div", { text: "Positionen", style: "font-weight:700;margin-bottom:6px" }));
+      D.pos.forEach(function (p, i) {
+        var r = el("div", { "class": "pr" }), d = el("div", { "class": "d" }), mm = el("div", {}), ee = el("div", {}), pp = el("div", {});
+        d.appendChild(inp(p, "t", "Beschreibung", "Beschreibung")); mm.appendChild(inp(p, "m", "Menge", "Menge")); mm.appendChild(el("small", { text: "Menge" })); ee.appendChild(inp(p, "e", "Einheit", "m²")); ee.appendChild(el("small", { text: "Einheit" })); pp.appendChild(inp(p, "p", "Preis", "CHF")); pp.appendChild(el("small", { text: "Preis (CHF)" }));
+        var x = el("button", { type: "button", "class": "x", text: "Position entfernen" }); x.addEventListener("click", function () { D.pos.splice(i, 1); sv(); draw(); drawTot(); });
+        r.appendChild(d); r.appendChild(mm); r.appendChild(ee); r.appendChild(pp); r.appendChild(x); pc.appendChild(r);
+      });
+      var ad = el("button", { type: "button", "class": "ad", text: "+ Position" }); ad.addEventListener("click", function () { D.pos.push({ t: "", m: "1", e: "pausch.", p: "" }); sv(); draw(); drawTot(); }); pc.appendChild(ad);
+      pc.appendChild(L("Rabatt (%)")); pc.appendChild(inp(D, "rab", "Rabatt in Prozent", "0")); wrap.appendChild(pc); wrap.appendChild(tot);
+      if (!D.fid) { D.fid = fotoRid(); sv(); } var fcO = fotoGet("offerte", D.fid); wrap.appendChild(fcO.node); fcO.load();
+    }
+    function buildPdf() {
+      var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+      var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" }), X = 18, R = 192, y = 20, c = calc();
+      function T(t, x, yy, o) { doc.text(String(t), x, yy, o); }
+      function chk(h) { if (y + h > 275) { doc.addPage(); y = 20; } }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(15); T(set.firma || "", X, y); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); y += 5.5;
+      String(set.adr || "").split("\n").forEach(function (l) { if (l.trim()) { T(l, X, y); y += 4.5; } }); if (set.tel) { T("Tel. " + set.tel, X, y); y += 4.5; } if (set.mail) { T(set.mail, X, y); y += 4.5; } if (set.mwst && set.mwstnr) { T("MWST-Nr. " + set.mwstnr, X, y); y += 4.5; }
+      doc.setDrawColor(212, 175, 90); doc.setLineWidth(0.9); doc.line(X, y + 1, R, y + 1); y += 10;
+      var ky = y; doc.setFontSize(10.5); String(D.kunde || "").split("\n").forEach(function (l) { if (l.trim()) { T(l, X, ky); ky += 5; } });
+      doc.setFontSize(9.5); T("Offerte Nr. " + (D.nr || ""), R, y, { align: "right" }); T("Datum " + dmy(new Date()), R, y + 5, { align: "right" }); if (D.bis) T("Gültig bis " + D.bis, R, y + 10, { align: "right" });
+      y = Math.max(ky, y + 14) + 8; doc.setFont("helvetica", "bold"); doc.setFontSize(18); T("Offerte", X, y); y += 7; doc.setFont("helvetica", "normal"); doc.setFontSize(10); if (D.objekt) { T("Objekt: " + D.objekt, X, y); y += 6; } y += 2;
+      doc.setFillColor(44, 33, 102); doc.rect(X, y, R - X, 7, "F"); doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      T("Pos.", X + 2, y + 4.8); T("Beschreibung", X + 14, y + 4.8); T("Menge", 128, y + 4.8, { align: "right" }); T("Einh.", 131, y + 4.8); T("Preis", 160, y + 4.8, { align: "right" }); T("Total", R - 2, y + 4.8, { align: "right" }); doc.setTextColor(0); doc.setFont("helvetica", "normal"); y += 12;
+      D.pos.forEach(function (p, i) {
+        var lines = doc.splitTextToSize(String(p.t || ""), 74); chk(lines.length * 4.6 + 4); T(i + 1, X + 2, y); doc.text(lines, X + 14, y);
+        T(f2(pn(p.m)), 128, y, { align: "right" }); T(p.e || "", 131, y); T(chf(pn(p.p)), 160, y, { align: "right" }); T(chf(pn(p.m) * pn(p.p)), R - 2, y, { align: "right" });
+        y += lines.length * 4.6 + 1.5; doc.setDrawColor(225, 229, 234); doc.setLineWidth(0.2); doc.line(X, y - 2.5, R, y - 2.5);
+      });
+      chk(40); y += 4; doc.setFontSize(10); function S2(a, b, bold) { if (bold) { doc.setLineWidth(0.5); doc.setDrawColor(44, 33, 102); doc.line(125, y - 4.5, R, y - 4.5); doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); } T(a, 125, y); T(b, R - 2, y, { align: "right" }); doc.setFont("helvetica", "normal"); doc.setFontSize(10); y += 6; }
+      S2("Zwischentotal", chf(c.z)); if (c.rab) S2("Rabatt " + pn(D.rab) + " %", "− " + chf(c.rab)); if (set.mwst) S2("MWST " + pn(set.rate) + " %", chf(c.mw)); S2("Total CHF", chf(c.tot), 1);
+      y += 6; chk(45); doc.setFontSize(9.5); if (set.zahl) { T("Zahlungsbedingungen: " + set.zahl, X, y); y += 5; } T("Diese Offerte ist unverbindlich" + (D.bis ? " und gültig bis " + D.bis : "") + ".", X, y); y += 22;
+      doc.setDrawColor(0); doc.setLineWidth(0.3); doc.line(X, y, X + 75, y); doc.line(R - 75, y, R, y); y += 4.5; doc.setFontSize(8.5); T("Ort, Datum, Unterschrift Kunde", X, y); T(set.firma || "", R - 75, y);
+      return doc;
+    }
+    var pdfB = el("button", { type: "button", "class": "btn primary", text: "PDF erstellen (A4)" }), saveB = el("button", { type: "button", "class": "btn", text: "Speichern" }), newB = el("button", { type: "button", "class": "btn", text: "Neue Offerte" }), lstB = el("button", { type: "button", "class": "btn", text: "Gespeicherte Offerten" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var msg = el("div", { "class": "status" });
+    pdfB.addEventListener("click", async function () { var doc = buildPdf(); if (!doc) { msg.textContent = "PDF-Bibliothek nicht geladen. Bitte Internet prüfen."; return; } try { fotoPdf(doc, await fotoGet("offerte", D.fid).all(), "Offerte " + (D.nr || "")); } catch (e) { } await sharePdf(doc, "Offerte_" + (D.nr || "neu").replace(/[^\w\-]+/g, "_") + ".pdf", "Offerte"); });
+    function lst() { var l = ld(LK, []); return Array.isArray(l) ? l : []; }
+    saveB.addEventListener("click", function () { var l = lst().filter(function (x) { return x.d && x.d.nr !== D.nr; }); l.unshift({ d: JSON.parse(JSON.stringify(D)), t: new Date().toISOString() }); lsSet(LK, JSON.stringify(l.slice(0, 50))); var n = parseInt((D.nr || "").split("-")[1], 10) || 0; if (n > (parseInt(lsGet(NK) || "0", 10) || 0)) lsSet(NK, String(n)); msg.textContent = "Gespeichert ✓"; });
+    newB.addEventListener("click", function () { if (D.pos.length && !confirm("Aktuelle Offerte verwerfen und neu beginnen? (Nicht gespeicherte Angaben und die Fotos gehen verloren.)")) return; var of0 = D.fid; D = fresh(); sv(); if (of0 && !lst().some(function (y) { return y.d && y.d.fid === of0; })) fotoPurge("offerte", of0); draw(); drawTot(); msg.textContent = ""; });
+    lstB.addEventListener("click", function () {
+      var l = lst(), box = el("div", { "class": "fc" }); if (!l.length) box.appendChild(el("div", { "class": "status", text: "Noch keine gespeicherten Offerten." }));
+      l.forEach(function (x, i) { var n = el("button", { type: "button", "class": "btn", text: (x.d.nr || "") + " · " + (String(x.d.kunde || "").split("\n")[0] || "ohne Kunde") }); n.addEventListener("click", function () { D = x.d; sv(); wrap.removeChild(box); draw(); drawTot(); }); var rm = el("button", { type: "button", "class": "btn", text: "Löschen", style: "color:var(--bad)" }); rm.addEventListener("click", function () { if (!confirm("Offerte löschen? Die zugehörigen Fotos werden auch gelöscht.")) return; var fid = x.d.fid; l.splice(i, 1); lsSet(LK, JSON.stringify(l)); n.remove(); rm.remove(); if (fid) { fotoPurge("offerte", fid); if (D.fid === fid) { D.fid = fotoRid(); sv(); draw(); drawTot(); } } }); box.appendChild(n); box.appendChild(rm); });
+      var old = wrap.querySelector(".of-list"); if (old) old.remove(); box.className += " of-list"; wrap.insertBefore(box, wrap.firstChild);
+    });
+    cl.addEventListener("click", closeOF);
+    draw(); drawTot();
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Offerte" }), wrap, msg, el("div", { "class": "actions", style: "flex-wrap:wrap" }, [pdfB, saveB, newB, lstB, cl])]);
+    var ov = el("div", { "class": "overlay sites", id: "of", role: "dialog", "aria-modal": "true", "aria-label": "Offerte" }, [sheet]);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeOF(); });
+    document.body.appendChild(ov);
+  }
   function closeFV() { var o = $("fv"); if (o) o.remove(); }
   function openFV() {
     closeFV(); closeMenu();
@@ -2965,7 +3212,7 @@ function openReport(pre) {
   }
   function closeM2() { var o = $("m2"); if (o) o.remove(); }
   function openM2() {
-    closeM2(); closeMenu();
+    closeM2(); closeMenu(); FOTOC = {};
     var KEY = "wr2:m2", LK = "wr2:m2list", saved = null;
     function pn(v) { var x = parseFloat(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x > 0 ? x : 0; }
     function f2(x) { return (Math.round(x * 100) / 100).toFixed(2).replace(".", ","); }
@@ -3198,10 +3445,12 @@ function openReport(pre) {
       refs.gW = big("Wandfläche netto (gesamt)", "tv"); refs.gD = big("Deckenfläche (gesamt)", "tv"); refs.gT = big("Gesamtfläche", "tg2");
       refs.fW = big("Farbe Wände ca. (inkl. 10 % Reserve)", "tv"); refs.fD = big("Farbe Decke ca. (inkl. 10 % Reserve)", "tv"); refs.fT = big("Farbe total ca.", "tg2");
       wrap.appendChild(tot);
+      if (!S.fid) { S.fid = fotoRid(); save(); } var fcM = fotoGet("ausmass", S.fid); wrap.appendChild(fcM.node); fcM.load();
       var pdfB = el("button", { type: "button", "class": "btn primary", text: "PDF erstellen (A4)" }), saveB = el("button", { type: "button", "class": "btn", text: "Speichern" }), newB = el("button", { type: "button", "class": "btn", text: "Neues Ausmass" });
       pdfB.addEventListener("click", async function () {
         var doc = null; try { doc = buildM2Pdf(); } catch (e) { }
         if (!doc) { toast("Das PDF konnte nicht erstellt werden."); return; }
+        try { fotoPdf(doc, await fotoGet("ausmass", S.fid).all(), "Ausmass " + (S.titel || "")); } catch (e) { }
         await sharePdf(doc, "Ausmass_" + ((S.titel || "").replace(/[^\w\-äöüÄÖÜ]+/g, "_").slice(0, 30) || key(new Date())) + ".pdf", "Ausmass");
       });
       saveB.addEventListener("click", function () {
@@ -3211,7 +3460,7 @@ function openReport(pre) {
         lsSet(LK, JSON.stringify(l.slice(0, 50))); drawSaved();
         remote("ausmass_save", { p_titel: t, p_data: rec.data }).then(function (m) { toast(m === "" ? "Gespeichert: " + t + " (auf allen Geräten)" : "Gespeichert: " + t + " (nur auf diesem Gerät)"); });
       });
-      newB.addEventListener("click", function () { if (!confirm("Neues, leeres Ausmass beginnen? Das aktuelle bleibt nur erhalten, wenn du es vorher gespeichert hast.")) return; S = { rooms: [mkRoom(1, S.hoehe || "2,50")], tuer: S.tuer, fenster: S.fenster, hoehe: S.hoehe, titel: "" }; ed = {}; save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
+      newB.addEventListener("click", function () { if (!confirm("Neues, leeres Ausmass beginnen? Das aktuelle bleibt nur erhalten, wenn du es vorher gespeichert hast (sonst werden auch die Fotos gelöscht).")) return; var am0 = S.fid; S = { rooms: [mkRoom(1, S.hoehe || "2,50")], tuer: S.tuer, fenster: S.fenster, hoehe: S.hoehe, titel: "" }; ed = {}; save(); if (am0 && !listGet().some(function (y) { return y.data && y.data.fid === am0; })) fotoPurge("ausmass", am0); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
       wrap.appendChild(el("div", { "class": "actions" }, [pdfB, saveB, newB]));
       saved = el("div", {}); wrap.appendChild(saved); drawSaved();
     }
@@ -3236,7 +3485,7 @@ function openReport(pre) {
         var tx = el("span", { text: x.t + " · " + dmy(new Date(x.d)) }); tx.style.cssText = "flex:1;min-width:0;overflow-wrap:anywhere";
         var row = el("div", { "class": "srow tap", role: "listitem" }, [tx, d]);
         rowTap(row, function () { S = norm(JSON.parse(JSON.stringify(x.data))); ed = {}; save(); draw(); calc(); window.scrollTo(0, 0); sheet.scrollTop = 0; });
-        d.addEventListener("click", function (e) { e.stopPropagation(); if (!confirm("«" + x.t + "» löschen?")) return; var q = listGet(); q.splice(i, 1); lsSet(LK, JSON.stringify(q)); drawSaved(); remote("ausmass_delete", { p_titel: x.t }); });
+        d.addEventListener("click", function (e) { e.stopPropagation(); if (!confirm("«" + x.t + "» löschen?")) return; var fid = x.data && x.data.fid, q = listGet(); q.splice(i, 1); lsSet(LK, JSON.stringify(q)); drawSaved(); remote("ausmass_delete", { p_titel: x.t }); if (fid) { fotoPurge("ausmass", fid); if (S.fid === fid) { S.fid = fotoRid(); save(); draw(); calc(); } } });
         ls.appendChild(row);
       });
       saved.appendChild(ls);
@@ -3540,7 +3789,7 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
+    if (isAdmin()) { items.push(["Offerte", openOffer]); items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
