@@ -504,7 +504,7 @@ h1 { color: #2c2166; }
     </div>
   </div>
 
-  <div class="sitesbar"><button class="btn" id="sitesBtn" type="button" aria-haspopup="dialog">Baustellen-Liste</button><button class="btn" id="sitesAdd" type="button" aria-haspopup="dialog" hidden>+ Baustelle hinzufügen</button><button class="btn" id="membersBtn" type="button" aria-haspopup="dialog" hidden>Mitarbeiter</button><button class="btn" id="bilanzBtn" type="button" aria-haspopup="dialog" hidden>Auswertung</button><span class="status" id="sitesInfo"></span></div>
+  <div class="sitesbar"><button class="btn" id="sitesBtn" type="button" aria-haspopup="dialog">Baustellen-Liste</button><button class="btn" id="sitesAdd" type="button" aria-haspopup="dialog" hidden>+ Baustelle hinzufügen</button><button class="btn" id="membersBtn" type="button" aria-haspopup="dialog" hidden>Mitarbeiter</button><button class="btn" id="bilanzBtn" type="button" aria-haspopup="dialog" hidden>Auswertung</button><button class="btn" id="colorsBtn" type="button" aria-haspopup="dialog" hidden>Farbtöne &amp; Hersteller</button><span class="status" id="sitesInfo"></span></div>
 
   <section class="auth" id="auth" hidden aria-label="Konto">
     <form id="authForm" novalidate>
@@ -677,9 +677,11 @@ h1 { color: #2c2166; }
   function sharedGet() { try { var o = JSON.parse(lsGet(SH) || "null"); if (o && Array.isArray(o.rows)) return o; } catch (e) { } return null; }
   function memberGet() { try { var o = JSON.parse(lsGet(MB) || "null"); if (o && o.firma) return o; } catch (e) { } return null; }
   function sharedOn() { return !!user && !!memberGet() && !!sharedGet(); } /* angemeldet, einer Firma zugeordnet, Firmenliste geladen */
-  function canEditSites() { var m = memberGet(); if (user && noFirma) return false; return (user && m) ? (m.rolle === "admin" && sharedOn()) : true; } /* ohne Firma gilt nur die eigene Liste auf diesem Gerät */
+  function canEditSites() { var m = memberGet(); if (user && noFirma) return false; return (user && m) ? ((m.rolle === "admin" || m.rolle === "buero") && sharedOn()) : true; } /* ohne Firma gilt nur die eigene Liste auf diesem Gerät */
   function isAdmin() { var m = memberGet(); return !!(user && m && m.rolle === "admin"); }
-  function roleLbl(r) { return r === "admin" ? "Administrator" : (r === "temporaer" ? "Temporär" : "Mitarbeiter"); }
+  function isBuero() { var m = memberGet(); return !!(user && m && m.rolle === "buero"); }
+  function isStaff() { return isAdmin() || isBuero(); } /* Administrator oder Büro */
+  function roleLbl(r) { return r === "admin" ? "Administrator" : (r === "buero" ? "Büro" : (r === "temporaer" ? "Temporär" : "Mitarbeiter")); }
   function roleText(m) { return m ? "Firma " + m.firma + " · " + roleLbl(m.rolle) : ""; }
   function byNr(a) { return a.sort(function (p, q) { return String(q.nr).localeCompare(String(p.nr), "de", { numeric: true }); }); }
   function localSites() { var o = sitesGet(); return Object.keys(o.s).map(function (k) { return o.s[k]; }).filter(function (x) { return !x.d; }); }
@@ -779,10 +781,22 @@ h1 { color: #2c2166; }
     del.forEach(function (nr) { if (o.s[nr]) o.s[nr] = { nr: nr, n: "", n2: "", u: t, d: 1 }; });
     o.u = t; sitesPut(o); renderSitesInfo(); return "";
   }
+  /* Büro: keine Wochenansicht, nur grosse Tasten */
+  function applyRole() {
+    var bu = isBuero();
+    if (!document.getElementById("bucss")) { var cs = document.createElement("style"); cs.id = "bucss";
+      cs.textContent = "body.buero .weeknav,body.buero label.name,body.buero #summary,body.buero #days,body.buero .foot{display:none!important}" +
+        "body.buero .sitesbar{display:flex;flex-direction:column;align-items:stretch;gap:14px;margin:10px 0}" +
+        "body.buero .sitesbar .btn{min-height:78px;font-size:1.25rem;font-weight:700;border-radius:22px;width:100%;box-shadow:0 4px 8px rgba(26,18,68,.18)}" +
+        "body.buero #sitesBtn{order:1}body.buero #sitesAdd{order:2}body.buero #colorsBtn{order:3}body.buero #bilanzBtn{order:4}body.buero #membersBtn{order:5}body.buero #sitesInfo{order:6;text-align:center}";
+      document.head.appendChild(cs); }
+    document.body.classList.toggle("buero", bu);
+    $("membersBtn").textContent = bu ? "Mitarbeiter hinzufügen" : "Mitarbeiter"; $("bilanzBtn").textContent = bu ? "Auswertung pro Baustelle" : "Auswertung"; $("sitesAdd").textContent = bu ? "Baustelle hinzufügen" : "+ Baustelle hinzufügen";
+  }
   function renderSitesInfo() {
     var n = sitesList().length, m = memberGet(), ed = canEditSites(), parts = [];
     $("sitesBtn").textContent = "Baustellen-Liste" + (n ? " (" + n + ")" : "");
-    $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isAdmin(); $("bilanzBtn").hidden = !isAdmin();
+    $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isStaff(); $("bilanzBtn").hidden = !isStaff(); $("colorsBtn").hidden = !isBuero(); applyRole();
     if (user && m) parts.push(roleText(m));
     if (user && noFirma) parts.push(sharedErr ? sharedErr : (user.user_metadata && user.user_metadata.beitritt_code) ? "Du bist registriert. Der Chef muss dich noch aufnehmen, danach siehst du die Baustellen." : "Dein Konto ist noch keiner Firma zugeordnet. Bitte melde dich beim Administrator.");
     else if (!n) parts.push(ed ? "Noch keine Baustellen. Tippe auf «+ Baustelle hinzufügen»." : "Noch keine Baustellen in der Liste.");
@@ -1454,7 +1468,7 @@ h1 { color: #2c2166; }
     }
     function draw() {
       var items = sitesFind(q.value, 300), total = sitesList().length, can = adminView && canEditSites(), sh = sharedOn(), m = memberGet();
-      info.textContent = sh ? "Gemeinsame Liste der Firma " + m.firma + "." + (m.rolle === "admin" ? "" : " Du kannst suchen. Hinzufügen dürfen nur Administratoren.")
+      info.textContent = sh ? "Gemeinsame Liste der Firma " + m.firma + "." + ((m.rolle === "admin" || m.rolle === "buero") ? "" : " Du kannst suchen. Hinzufügen dürfen nur Administratoren.")
         : user ? (noFirma ? "Dein Konto ist noch keiner Firma zugeordnet. Es gilt nur die Liste auf diesem Gerät." : sharedErr ? "Die Firmenliste ist nicht verfügbar: " + sharedErr : "Die Firmenliste wird geladen …")
         : "Nur auf diesem Gerät.";
       list.textContent = ""; list.hidden = !items.length;
@@ -1548,7 +1562,7 @@ h1 { color: #2c2166; }
     var msg = el("div", { "class": "status", role: "status" });
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     var em = el("input", { type: "email", inputmode: "email", autocapitalize: "none", autocomplete: "off", placeholder: "E-Mail-Adresse des Mitarbeiters", "aria-label": "E-Mail-Adresse" });
-    var role = el("select", { "aria-label": "Rolle" }, [el("option", { value: "mitarbeiter", text: "Mitarbeiter (darf suchen)" }), el("option", { value: "temporaer", text: "Temporär (wie Mitarbeiter, ohne Gleitzeit)" }), el("option", { value: "admin", text: "Administrator (darf auch hinzufügen)" })]);
+    var role = el("select", { "aria-label": "Rolle" }, [el("option", { value: "mitarbeiter", text: "Mitarbeiter (darf suchen)" }), el("option", { value: "temporaer", text: "Temporär (wie Mitarbeiter, ohne Gleitzeit)" })].concat(isBuero() ? [] : [el("option", { value: "buero", text: "Büro (Listen, Auswertung, Export, ohne eigene Stunden)" }), el("option", { value: "admin", text: "Administrator (darf auch hinzufügen)" })]));
     var add = el("button", { type: "button", "class": "btn primary", text: "Hinzufügen" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var form = el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), em, role, el("div", { "class": "actions" }, [add])]);
@@ -1591,7 +1605,7 @@ h1 { color: #2c2166; }
         cbox.appendChild(el("div", { "class": "status", text: "Gib diesen Code deinen Leuten. Sie wählen bei «Registrieren» «Ich gehöre zu einer Firma» und tippen ihn ein. Danach erscheinen sie unten bei «Neue Registrierungen», und du nimmst sie auf." }));
         var nc = el("button", { type: "button", text: "Neuen Code erzeugen" });
         nc.addEventListener("click", function () { if (confirm("Neuen Code erzeugen? Der alte Code gilt dann nicht mehr. Wer sich schon mit dem alten Code registriert hat, erscheint nicht mehr in der Liste.")) run(function () { return call("firma_code_neu"); }, "Neuer Code erzeugt."); });
-        cbox.appendChild(el("div", { "class": "actions" }, [nc]));
+        if (!isBuero()) cbox.appendChild(el("div", { "class": "actions" }, [nc]));
         cbox.appendChild(el("div", { "class": "lbl", text: "Mitarbeiter per E-Mail einladen" }));
         var ie = el("input", { type: "text", inputmode: "email", placeholder: "E-Mail-Adresse(n), mit Komma getrennt", autocomplete: "off", "aria-label": "E-Mail-Adressen" });
         var ib = el("button", { type: "button", "class": "btn primary", text: "Einladung senden" });
@@ -1636,11 +1650,13 @@ h1 { color: #2c2166; }
           t.appendChild(el("small", { text: "Passwort " + r.pw_resets + "× zurückgesetzt" + pd }));
         }
         var kids = [t];
-        if (r.email !== me && !prot) {
+        if (r.email !== me && !prot && !(isBuero() && (r.rolle === "admin" || r.rolle === "buero"))) {
           var tog = el("button", { type: "button", text: r.rolle === "admin" ? "Zu Mitarbeiter" : "Zu Administrator" }), del = el("button", { type: "button", "class": "x", text: "Entfernen" });
           tog.addEventListener("click", function () { run(function () { return call("member_set", { p_email: r.email, p_rolle: r.rolle === "admin" ? "mitarbeiter" : "admin" }); }, r.email + " ist jetzt " + (r.rolle === "admin" ? "Mitarbeiter" : "Administrator") + "."); });
           var tmp = null;
-          if (r.rolle !== "admin") {
+          var bu = null;
+          if (isAdmin() && r.rolle !== "admin") { bu = el("button", { type: "button", text: r.rolle === "buero" ? "Zu Mitarbeiter" : "Zu Büro" }); bu.addEventListener("click", function () { var nr2 = r.rolle === "buero" ? "mitarbeiter" : "buero"; run(function () { return call("member_set", { p_email: r.email, p_rolle: nr2 }); }, r.email + " ist jetzt " + roleLbl(nr2) + "."); }); }
+          if (r.rolle !== "admin" && r.rolle !== "buero") {
             tmp = el("button", { type: "button", text: r.rolle === "temporaer" ? "Zu Mitarbeiter" : "Zu Temporär" });
             tmp.addEventListener("click", function () { var nr = r.rolle === "temporaer" ? "mitarbeiter" : "temporaer"; run(function () { return call("member_set", { p_email: r.email, p_rolle: nr }); }, r.email + " ist jetzt " + roleLbl(nr) + "."); });
           }
@@ -1655,7 +1671,7 @@ h1 { color: #2c2166; }
               run(function () { return call("member_passwort", { p_email: r.email, p_pw: v }); }, "Neues Passwort für " + r.email + " gesetzt. Gib es der Person weiter. Sie kann es danach selbst ändern (Konto → Passwort ändern).");
             });
           }
-          kids.push(tog); if (tmp) kids.push(tmp); if (pwb) kids.push(pwb); kids.push(del);
+          if (!isBuero()) kids.push(tog); if (bu) kids.push(bu); if (tmp) kids.push(tmp); if (pwb) kids.push(pwb); kids.push(del);
         }
         list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, kids.length > 1 ? [kids[0], el("div", { "class": "acts" }, kids.slice(1))] : kids));
       });
@@ -1789,7 +1805,7 @@ h1 { color: #2c2166; }
   }
   /* Export-Bereich in der Auswertung (nur Administratoren) */
   function expBuild(getRows, getRange) {
-    if (!isAdmin()) return null;
+    if (!isStaff()) return null;
     var site = el("select", { "aria-label": "Baustelle für den Export" }), fmt = el("select", { "aria-label": "Dateiformat" }, [el("option", { value: "xlsx", text: "Excel (.xlsx)" }), el("option", { value: "csv", text: "CSV (Banana, bexio u. a.)" }), el("option", { value: "docx", text: "Word (.docx)" })]);
     var cs = el("input", { type: "checkbox", id: "expSp" }), cr = el("input", { type: "checkbox", id: "expRg" }); cs.checked = true;
     var go = el("button", { type: "button", "class": "btn primary", text: "Export erstellen" }), out = el("div", {}), msg = el("div", { "class": "status", role: "status" });
@@ -1798,7 +1814,7 @@ h1 { color: #2c2166; }
     box.hidden = true;
     var api = { node: box, fill: function (res) { var cur = site.value; site.textContent = ""; site.appendChild(el("option", { value: "*", text: "Alle Baustellen" })); res.sites.forEach(function (s) { if (s.nr) { var info = siteByNr(s.nr); site.appendChild(el("option", { value: s.nr, text: s.nr + " " + ((info && info.n) || s.name || "") })); } }); if (cur) site.value = cur; if (!site.value) site.value = "*"; box.hidden = !res.sites.length; out.textContent = ""; msg.textContent = ""; } };
     go.addEventListener("click", async function () {
-      if (!isAdmin()) return; var rg = getRange(), rows = getRows(); if (!rows || !rg.a) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; msg.className = "status bad"; return; }
+      if (!isStaff()) return; var rg = getRange(), rows = getRows(); if (!rows || !rg.a) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; msg.className = "status bad"; return; }
       go.disabled = true; out.textContent = ""; msg.textContent = "Einen Moment …"; msg.className = "status";
       try {
         var D = await expCollect(rows, rg.a, rg.b, site.value, cs.checked, cr.checked), blob, ext = fmt.value, mb = memberGet();
@@ -1912,6 +1928,7 @@ h1 { color: #2c2166; }
     document.body.appendChild(ov); setPreset(); load();
   }
   $("bilanzBtn").addEventListener("click", openBilanz);
+  $("colorsBtn").addEventListener("click", function () { openColors(); });
 
   /* ---------- Baustellenrapporte ---------- */
   var RP = "wr2:reports", RO = "wr2:rout";
@@ -2375,7 +2392,7 @@ function openReport(pre) {
     }
     async function pick(nr) {
       site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : "";
-      list.textContent = ""; newBtn.hidden = !nr; genBtn.hidden = !nr || !isAdmin(); dbox.textContent = ""; if (!nr) return;
+      list.textContent = ""; newBtn.hidden = !nr; genBtn.hidden = !nr || !isStaff(); dbox.textContent = ""; if (!nr) return;
       dateienLoad(nr, "regie", dbox);
       await loadList();
     }
@@ -2399,10 +2416,10 @@ function openReport(pre) {
       rows.forEach(function (r) {
         var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
-        t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isAdmin() && r.autor ? " · " + r.autor : "") }));
+        t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") }));
         list.appendChild(tapRow(t, function () { edit(r.nr, d); }));
       });
-      if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isAdmin() ? "" : " Du siehst nur deine eigenen."), "");
+      if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isStaff() ? "" : " Du siehst nur deine eigenen."), "");
     }
     function field(label, node) { return el("div", {}, [el("div", { "class": "lbl", text: label }), node]); }
     function edit(nr, d) {
@@ -2432,7 +2449,7 @@ function openReport(pre) {
       var fcR = fotoCtl("regie", site + "|" + (editing.nr || "n" + fotoRid())); if (editing.nr) fcR.load();
       var emsg = el("div", { "class": "status", role: "status" });
       var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), pf = el("button", { type: "button", "class": "btn", text: "Als PDF" });
-      var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.hidden = !(isAdmin() && nr);
+      var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.hidden = !(isStaff() && nr);
       var back = el("button", { type: "button", "class": "btn", text: "Zurück" });
       function collect() {
         return { datum: fd.value.trim(), auftraggeber: fa.value.trim(), baustelle: fb.value.trim(), montag: fm.value, arbeiten: fw.value, transporte: ftr.value.trim(), total: ft.value.trim(),
@@ -2756,6 +2773,7 @@ function openReport(pre) {
     doc.setFont("helvetica", "bold"); doc.setFontSize(17); doc.text(MNAME[m], mx + 96, y + 6.5);
     doc.setFont("helvetica", "bolditalic"); doc.setFontSize(7.5); doc.text("Saldo Monat + / -", mx + 96, y + 12); fill(YEL, mx + 135, y + 8.4, 15, 4.6); doc.rect(mx + 135, y + 8.4, 15, 4.6); doc.setFontSize(8); if (M.show && M.diff < 0) ink(RED); doc.text(M.show ? hmS(M.diff) : "", mx + 149, y + 11.8, { align: "right" }); ink(BLK);
     doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.text("Gelb = Eingabefelder (die App füllt die Zeilen aus dem Wochenrapport)", mx + 155, y + 11.8);
+    try { if (spMode() === "pauschal") { var pv = spPausch(spEmail(), R.y, m); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.text("Spesenpauschale " + MNAME[m] + ": CHF " + spChf(pv), mx + 155, y + 5.6); doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.text("Zusätzliche Spesen (Parkplatz usw.) siehe Wochenrapport", mx + 155, y + 8.6); } } catch (e) { }
     y += 15;
     /* Raster-Helfer */
     function grid(h) { doc.setLineWidth(0.1); doc.rect(mx, y, tw, h); doc.line(xd, y, xd, y + h); for (var q = 1; q <= 31; q++) doc.line(xd + q * cw, y, xd + q * cw, y + h); doc.line(xs, y, xs, y + h); }
@@ -4072,6 +4090,7 @@ function openReport(pre) {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
     if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Offerte", openOffer]); items.push(["Flächen-Rechner", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
+    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
