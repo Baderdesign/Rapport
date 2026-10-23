@@ -2391,7 +2391,7 @@ function openReport(pre) {
     var b = rgBlank(); d = d || {};
     ["datum", "auftraggeber", "baustelle", "montag", "arbeiten", "transporte", "total"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k]; });
     if (Array.isArray(d.rows)) b.rows = RG_ROWS.map(function (l, i) { var r = d.rows[i] || {}; var h = Array.isArray(r.h) ? r.h : []; return { l: typeof r.l === "string" ? r.l : l, h: [0, 1, 2, 3, 4].map(function (k) { return String(h[k] == null ? "" : h[k]); }) }; });
-    if (d.sig && typeof d.sig === "object" && typeof d.sig.img === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(d.sig.img) && d.sig.img.length < 40000) b.sig = { img: d.sig.img, name: String(d.sig.name || "").slice(0, 80), ts: String(d.sig.ts || "").slice(0, 40), w: +d.sig.w || 0, h: +d.sig.h || 0 };
+    ["sig", "sigU"].forEach(function (k) { var g = d[k]; if (g && typeof g === "object" && typeof g.img === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(g.img) && g.img.length < 40000) b[k] = { img: g.img, name: String(g.name || "").slice(0, 80), ts: String(g.ts || "").slice(0, 40), w: +g.w || 0, h: +g.h || 0 }; });
     if (Array.isArray(d.mat)) b.mat = d.mat.slice(0, RG_MAT).map(function (m) { m = m || {}; return { b: String(m.b || ""), e: String(m.e || ""), t: String(m.t || "") }; });
     return b;
   }
@@ -2445,9 +2445,9 @@ function openReport(pre) {
       var m = d.mat[k] || { b: "", e: "", t: "" };
       cell(0, 0, m.b); cell(1, 1, m.e); cell(2, 6, ""); cell(7, 7, m.t ? (num(m.t) ? rgFmt(num(m.t)) : m.t) : "", { right: 1 }); cell(8, 8, ""); cell(9, 9, ""); y += rh;
     }
-    chk(d.sig ? 40 : 28); y += 9;
+    chk(d.sig || d.sigU ? 40 : 28); y += 9;
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Für die Unternehmung:", mx, y); doc.text("Der Auftraggeber:", 105, y);
-    if (d.sig && d.sig.img) { try { var sw = 40, sh = d.sig.w ? sw * d.sig.h / d.sig.w : 12; if (sh > 15) { sh = 15; sw = d.sig.w ? sh * d.sig.w / d.sig.h : 40; } doc.addImage(d.sig.img, "PNG", 105, y + 1.5, sw, sh); doc.setFontSize(7.5); doc.text(String(d.sig.name || "") + (d.sig.ts ? " · " + d.sig.ts : ""), 105, y + 19.5); doc.setFontSize(9); } catch (e) { } }
+    [[d.sigU, mx], [d.sig, 105]].forEach(function (z) { var g = z[0]; if (g && g.img) { try { var sw = 40, sh = g.w ? sw * g.h / g.w : 12; if (sh > 15) { sh = 15; sw = g.w ? sh * g.w / g.h : 40; } doc.addImage(g.img, "PNG", z[1], y + 1.5, sw, sh); doc.setFontSize(7.5); doc.text(String(g.name || "") + (g.ts ? " · " + g.ts : ""), z[1], y + 19.5); doc.setFontSize(9); } catch (e) { } } });
     y += 10; doc.setFillColor(222, 224, 232); doc.rect(cx[7] - 1, y, cx[10] - cx[7] + 1, 5.2, "F");
     doc.setFont("helvetica", "bold"); doc.text("Total", cx[7] + 0.5, y + 3.8); if (d.total) { doc.setFont("helvetica", "normal"); doc.text(String(d.total), cx[10] - 1.2, y + 3.8, { align: "right" }); }
     return doc;
@@ -2506,7 +2506,7 @@ function openReport(pre) {
       rows.forEach(function (r) {
         var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
-        t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig ? " · ✍ unterschrieben" : "") }));
+        t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig || d.sigU ? " · ✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "") }));
         list.appendChild(tapRow(t, function () { edit(r.nr, d); }));
       });
       if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isStaff() ? "" : " Du siehst nur deine eigenen."), "");
@@ -2541,26 +2541,36 @@ function openReport(pre) {
       var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), pf = el("button", { type: "button", "class": "btn", text: "Als PDF" });
       var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.hidden = !(isStaff() && nr);
       var back = el("button", { type: "button", "class": "btn", text: "Zurück" });
-      var sigSt = d.sig || null, sigName = tx(sigSt ? sigSt.name : "", "Name in Druckschrift (z. B. Peter Keller, Bauleiter)", "Name Unterzeichner");
-      var sigPrev = el("div", { style: "min-height:96px;border:2px dashed var(--line);border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;margin:6px 0;padding:6px" }), sigInfo = el("div", { "class": "mut" });
-      var sigGo = el("button", { type: "button", "class": "btn primary", text: "✍ Unterschreiben" }), sigRm = el("button", { type: "button", "class": "btn", text: "Unterschrift entfernen" });
-      var sigBox = el("div", {}, [el("div", { "class": "lbl", text: "Unterschrift Bauleiter / Auftraggeber" }), sigName, sigPrev, el("div", { "class": "actions" }, [sigGo, sigRm]), sigInfo]);
-      function sigDraw() {
-        sigPrev.textContent = "";
-        if (sigSt) { var im = el("img", { src: sigSt.img, alt: "Unterschrift", style: "max-width:100%;max-height:130px" }); sigPrev.appendChild(im); sigInfo.textContent = "Unterschrieben am " + (sigSt.ts ? sigSt.ts : "") + ". Der Rapport ist gesperrt. Zum Ändern erst die Unterschrift entfernen. Zum Sichern «Speichern» tippen."; }
-        else { sigPrev.appendChild(el("span", { "class": "mut", text: "Noch nicht unterschrieben. «Unterschreiben» tippen und das Handy quer halten." })); sigInfo.textContent = "Der Bauleiter bestätigt mit seiner Unterschrift die Stunden und Arbeiten."; }
-        sigGo.hidden = !!sigSt; sigRm.hidden = !sigSt; sigName.disabled = !!sigSt;
-        var lock = !!sigSt; [].slice.call(ed.querySelectorAll("input,textarea,select,button")).forEach(function (n) { if (sigBox.contains(n) || n === sv || n === pf || n === back || n === del) return; n.disabled = lock; });
+      var SL = { A: { st: d.sig || null, nm: d.sig ? d.sig.name : "", label: "Bauleiter / Auftraggeber", ph: "Name in Druckschrift (z. B. Peter Keller, Bauleiter)" }, U: { st: d.sigU || null, nm: d.sigU ? d.sigU.name : "", label: "Unternehmung", ph: "Name in Druckschrift (z. B. Max Muster, Polier)" } }, curK = (!SL.A.st && SL.U.st) ? "A" : "A";
+      var sigName = tx("", "", "Name Unterzeichner"), tabA = el("button", { type: "button", "class": "btn", style: "flex:1;padding:10px 6px" }), tabU = el("button", { type: "button", "class": "btn", style: "flex:1;padding:10px 6px" });
+      var prev = el("div", { style: "min-height:96px;border:2px dashed var(--line);border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;margin:6px 0;padding:6px" }), info = el("div", { "class": "mut" });
+      var go = el("button", { type: "button", "class": "btn primary", text: "✍ Unterschreiben" }), rm = el("button", { type: "button", "class": "btn", text: "Unterschrift entfernen" });
+      var sigBox = el("div", { style: "margin-bottom:14px" }, [el("div", { "class": "lbl", text: "Unterschrift" }), el("div", { style: "display:flex;gap:8px;margin:6px 0" }, [tabA, tabU]), sigName, prev, el("div", { "class": "actions" }, [go, rm]), info]);
+      function applyLock() {
+        var lock = !!(SL.A.st || SL.U.st);
+        [].slice.call(ed.querySelectorAll("input,textarea,select,button")).forEach(function (n) { if (sigBox.contains(n) || n === sv || n === pf || n === back || n === del) return; n.disabled = lock; });
       }
-      sigGo.addEventListener("click", function () {
-        if (!sigName.value.trim()) { es("Bitte zuerst den Namen des Unterzeichners eintragen.", "bad"); sigName.focus(); return; } es("");
-        sigPad(function (o) { var t = new Date(); sigSt = { img: o.img, w: o.w, h: o.h, name: sigName.value.trim(), ts: dmy(t) + ", " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + " Uhr" }; sigDraw(); });
+      function sigDraw() {
+        var z = SL[curK];
+        tabA.textContent = (SL.A.st ? "✓ " : "") + "Auftraggeber"; tabU.textContent = (SL.U.st ? "✓ " : "") + "Unternehmung";
+        tabA.className = "btn" + (curK === "A" ? " primary" : ""); tabU.className = "btn" + (curK === "U" ? " primary" : ""); tabA.setAttribute("aria-pressed", curK === "A" ? "true" : "false"); tabU.setAttribute("aria-pressed", curK === "U" ? "true" : "false");
+        sigName.value = z.st ? z.st.name : z.nm; sigName.placeholder = z.ph; sigName.setAttribute("aria-label", "Name " + z.label); sigName.disabled = !!z.st;
+        prev.textContent = "";
+        if (z.st) { prev.appendChild(el("img", { src: z.st.img, alt: "Unterschrift " + z.label, style: "max-width:100%;max-height:130px" })); info.textContent = "Unterschrieben am " + z.st.ts + ". Der Rapport ist gesperrt. Zum Ändern erst die Unterschrift entfernen. Zum Sichern «Speichern» tippen."; }
+        else { prev.appendChild(el("span", { "class": "mut", text: "Noch nicht unterschrieben. «Unterschreiben» tippen und das Handy quer halten." })); info.textContent = (SL.A.st || SL.U.st) ? "Der Rapport ist gesperrt, weil die andere Seite schon unterschrieben hat." : "Wer unterschreibt, oben antippen. Beide können unterschreiben."; }
+        go.hidden = !!z.st; rm.hidden = !z.st; applyLock();
+      }
+      sigName.addEventListener("input", function () { SL[curK].nm = sigName.value; });
+      tabA.addEventListener("click", function () { SL[curK].nm = sigName.value; curK = "A"; sigDraw(); }); tabU.addEventListener("click", function () { SL[curK].nm = sigName.value; curK = "U"; sigDraw(); });
+      go.addEventListener("click", function () {
+        var z = SL[curK]; if (!sigName.value.trim()) { es("Bitte zuerst den Namen eintragen (" + z.label + ").", "bad"); sigName.focus(); return; } es("");
+        sigPad(function (o) { var t = new Date(); z.st = { img: o.img, w: o.w, h: o.h, name: sigName.value.trim(), ts: dmy(t) + ", " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + " Uhr" }; sigDraw(); });
       });
-      sigRm.addEventListener("click", function () { if (!confirm("Unterschrift entfernen? Der Rapport kann danach wieder geändert werden.")) return; sigSt = null; sigDraw(); });
+      rm.addEventListener("click", function () { if (!confirm("Unterschrift entfernen? Der Rapport kann danach wieder geändert werden.")) return; SL[curK].st = null; sigDraw(); });
       function collect() {
         return { datum: fd.value.trim(), auftraggeber: fa.value.trim(), baustelle: fb.value.trim(), montag: fm.value, arbeiten: fw.value, transporte: ftr.value.trim(), total: ft.value.trim(),
           rows: rin.map(function (r) { return { l: r.l.value, h: r.hs.map(function (h) { return h.value.trim(); }) }; }),
-          mat: mrows.map(function (m) { return { b: m.b.value.trim(), e: m.e.value.trim(), t: m.t.value.trim() }; }).filter(function (m) { return m.b || m.e || m.t; }), sig: sigSt };
+          mat: mrows.map(function (m) { return { b: m.b.value.trim(), e: m.e.value.trim(), t: m.t.value.trim() }; }).filter(function (m) { return m.b || m.e || m.t; }), sig: SL.A.st, sigU: SL.U.st };
       }
       var title = el("h3", { text: "Regie-Rapport " + (editing.nr ? "Nr. " + editing.nr : "(neu)") + " · Baustelle " + site });
       ed.appendChild(title);
@@ -2570,7 +2580,7 @@ function openReport(pre) {
       ed.appendChild(field("Material (Bezeichnung · Einheit · Total)", matBox)); ed.appendChild(addM); ed.appendChild(field("Total", ft));
       ed.appendChild(fcR.node); ed.appendChild(sigBox);
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
-      var es0 = emsg; sigDraw();
+      sigDraw();
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
       sv.addEventListener("click", async function () {
         if (isDemo()) { es(DEMO_MSG, "bad"); return; }
