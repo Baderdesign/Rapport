@@ -1701,7 +1701,7 @@ h1 { color: #2c2166; }
   }
   function expDmy(dk) { return dmy(fromKey(dk)); }
   async function expCollect(rows, a, b, nr, withSp, withRg) {
-    var res = bilanz(rows, a, b), sites = res.sites.filter(function (s) { return nr === "*" || s.nr === nr; }), people = res.people;
+    var res = bilanz(rows, a, b), pick = nr === "*" ? null : (Array.isArray(nr) ? nr : [nr]), sites = res.sites.filter(function (s) { return !pick || pick.indexOf(s.nr) >= 0; }), people = res.people;
     function pn(em) { return people[em] || em; }
     var D = { a: a, b: b, nr: nr, stunden: [], summen: [], spesen: [], regie: [], total: 0, spTotal: 0 }, seen = {};
     sites.forEach(function (s) {
@@ -1715,11 +1715,11 @@ h1 { color: #2c2166; }
         var em = String(r.email || "").toLowerCase(), mon = fromKey(r.week), sp = r.data && r.data.sp; if (!sp) return;
         for (var di = 0; di < DAYS.length; di++) {
           var dk = key(addDays(mon, di)); if (dk < a || dk > b) continue;
-          if (nr !== "*" && !seen[em + "|" + dk]) continue;
+          if (pick && !seen[em + "|" + dk]) continue;
           spDay(sp, di).forEach(function (it) { var v = spNum(it.b); if (v <= 0) return; D.spesen.push({ d: dk, ma: pn(em), art: it.a || "", n: it.n || "", b: v }); D.spTotal += v; });
         }
       });
-      if (cfg.m === "pauschal" && nr === "*") {
+      if (cfg.m === "pauschal" && !pick) {
         rows.forEach(function (r) { emails[String(r.email || "").toLowerCase()] = 1; });
         var y0 = parseInt(a.slice(0, 4), 10), m0 = parseInt(a.slice(5, 7), 10) - 1, y1 = parseInt(b.slice(0, 4), 10), m1 = parseInt(b.slice(5, 7), 10) - 1;
         Object.keys(emails).sort().forEach(function (em) {
@@ -1789,7 +1789,7 @@ h1 { color: #2c2166; }
       rows.forEach(function (r, i) { var b = i === 0 || (boldLast && i === rows.length - 1); x += "<w:tr>" + r.map(function (c, j) { return "<w:tc><w:tcPr><w:tcW w:w=\"" + widths[j] + "\" w:type=\"dxa\"/>" + (i === 0 ? "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"E6E3F5\"/>" : "") + "</w:tcPr>" + P(c, { b: b, sz: 18, after: 0 }) + "</w:tc>"; }).join("") + "</w:tr>"; });
       return x + "</w:tbl>" + P("", { after: 120 });
     }
-    var body = P((firma || "") + " – Auswertung", { b: 1, sz: 32, after: 60 }) + P("Zeitraum " + expDmy(D.a) + " bis " + expDmy(D.b) + (D.nr !== "*" ? " · Baustelle " + D.nr : " · alle Baustellen"), { after: 200 });
+    var body = P((firma || "") + " – Auswertung", { b: 1, sz: 32, after: 60 }) + P("Zeitraum " + expDmy(D.a) + " bis " + expDmy(D.b) + (D.nr !== "*" ? (Array.isArray(D.nr) && D.nr.length > 1 ? " · Baustellen " + D.nr.join(", ") : " · Baustelle " + [].concat(D.nr).join("")) : " · alle Baustellen"), { after: 200 });
     var bySite = {}; D.stunden.forEach(function (r) { (bySite[r.nr + "|" + r.bs] = bySite[r.nr + "|" + r.bs] || []).push(r); });
     Object.keys(bySite).forEach(function (k) {
       var l = bySite[k], t = 0, rows = [["Datum", "Mitarbeiter", "Stunden"]]; l.forEach(function (r) { rows.push([expDmy(r.d), r.ma, r.h.toFixed(2)]); t += r.h; }); rows.push(["Total", "", t.toFixed(2)]);
@@ -1806,20 +1806,52 @@ h1 { color: #2c2166; }
   /* Export-Bereich in der Auswertung (nur Administratoren) */
   function expBuild(getRows, getRange) {
     if (!isStaff()) return null;
-    var site = el("select", { "aria-label": "Baustelle für den Export" }), fmt = el("select", { "aria-label": "Dateiformat" }, [el("option", { value: "xlsx", text: "Excel (.xlsx)" }), el("option", { value: "csv", text: "CSV (Banana, bexio u. a.)" }), el("option", { value: "docx", text: "Word (.docx)" })]);
+    var site = el("button", { type: "button", "class": "btn", "aria-label": "Baustellen für den Export auswählen", style: "width:100%;justify-content:space-between;margin:6px 0" }), fmt = el("select", { "aria-label": "Dateiformat" }, [el("option", { value: "xlsx", text: "Excel (.xlsx)" }), el("option", { value: "csv", text: "CSV (Banana, bexio u. a.)" }), el("option", { value: "docx", text: "Word (.docx)" })]);
     var cs = el("input", { type: "checkbox", id: "expSp" }), cr = el("input", { type: "checkbox", id: "expRg" }); cs.checked = true;
     var go = el("button", { type: "button", "class": "btn primary", text: "Export erstellen" }), out = el("div", {}), msg = el("div", { "class": "status", role: "status" });
     var box = el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Export" }), site, fmt,
       el("label", { "for": "expSp", "class": "chk" }, [cs, el("span", { text: "Spesen" })]), el("label", { "for": "expRg", "class": "chk" }, [cr, el("span", { text: "Regie-Rapporte" })]), el("div", { "class": "actions" }, [go]), msg, out]);
     box.hidden = true;
-    var api = { node: box, fill: function (res) { var cur = site.value; site.textContent = ""; site.appendChild(el("option", { value: "*", text: "Alle Baustellen" })); res.sites.forEach(function (s) { if (s.nr) { var info = siteByNr(s.nr); site.appendChild(el("option", { value: s.nr, text: s.nr + " " + ((info && info.n) || s.name || "") })); } }); if (cur) site.value = cur; if (!site.value) site.value = "*"; box.hidden = !res.sites.length; out.textContent = ""; msg.textContent = ""; } };
+    var ALL = "*", chosen = { "*": true }, siteList = [];
+    function sel() { if (chosen["*"]) return "*"; return Object.keys(chosen).filter(function (k) { return k !== ALL && chosen[k]; }); }
+    function lbl() { var a = sel(); site.textContent = a === "*" ? "Baustellen: alle (" + siteList.length + ")" : "Baustellen: " + a.length + " von " + siteList.length + " gewählt  ▾"; if (a === "*") site.textContent += "  ▾"; }
+    function openSel() {
+      var boxes = {}, list = el("div", { style: "overflow:auto;-webkit-overflow-scrolling:touch;max-height:55vh;border:1px solid var(--line);border-radius:12px;padding:4px 12px;margin:10px 0" });
+      function sync() { Object.keys(boxes).forEach(function (k) { boxes[k].checked = !!chosen[k]; }); cnt.textContent = chosen[ALL] ? "Alle Baustellen" : sel().length + " von " + siteList.length + " gewählt"; }
+      var cnt = el("div", { "class": "mut", role: "status" });
+      function row(v, text, bold) {
+        var cb = el("input", { type: "checkbox", style: "width:24px;height:24px;accent-color:var(--accent);flex:none" }); boxes[v] = cb;
+        cb.addEventListener("change", function () {
+          if (v === ALL) { chosen = {}; chosen[ALL] = cb.checked; } else { chosen[v] = cb.checked; if (cb.checked) chosen[ALL] = false; }
+          sync();
+        });
+        return el("label", { style: "display:flex;align-items:center;gap:12px;padding:11px 0;font-size:1rem;border-bottom:1px solid var(--line)" + (bold ? ";font-weight:700" : "") }, [cb, el("span", { text: text })]);
+      }
+      list.appendChild(row(ALL, "Alle Baustellen", true));
+      siteList.forEach(function (x) { list.appendChild(row(x.nr, x.nr + " " + x.t, false)); });
+      var none = el("button", { type: "button", "class": "btn", text: "Keine" }), done = el("button", { type: "button", "class": "btn primary", text: "Fertig" });
+      none.addEventListener("click", function () { chosen = {}; chosen[ALL] = false; sync(); });
+      var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Baustellen für den Export" }), el("p", { text: "Kreuze die Baustellen an, die in den Export kommen sollen. Zum Suchen nach unten scrollen." }), cnt, list, el("div", { "class": "actions" }, [done, none])]);
+      var ov = el("div", { "class": "overlay sites", id: "expsel", role: "dialog", "aria-modal": "true", "aria-label": "Baustellen für den Export" }, [sheet]);
+      function shut() { ov.remove(); lbl(); }
+      done.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+      document.body.appendChild(ov); sync();
+    }
+    site.addEventListener("click", openSel);
+    var api = { node: box, fill: function (res) {
+      var valid = {}; siteList = [];
+      res.sites.forEach(function (x) { if (x.nr) { valid[x.nr] = 1; var info = siteByNr(x.nr); siteList.push({ nr: x.nr, t: (info && info.n) || x.name || "" }); } });
+      var keep = chosen; chosen = {}; Object.keys(keep).forEach(function (k) { if (k === ALL || valid[k]) chosen[k] = keep[k]; });
+      if (!Object.keys(chosen).some(function (k) { return chosen[k]; })) chosen[ALL] = true;
+      lbl(); box.hidden = false; } };
     go.addEventListener("click", async function () {
       if (!isStaff()) return; var rg = getRange(), rows = getRows(); if (!rows || !rg.a) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; msg.className = "status bad"; return; }
       go.disabled = true; out.textContent = ""; msg.textContent = "Einen Moment …"; msg.className = "status";
       try {
-        var D = await expCollect(rows, rg.a, rg.b, site.value, cs.checked, cr.checked), blob, ext = fmt.value, mb = memberGet();
+        var pk = sel(); if (pk !== "*" && !pk.length) { msg.textContent = "Bitte mindestens eine Baustelle ankreuzen."; msg.className = "status bad"; go.disabled = false; return; }
+        var D = await expCollect(rows, rg.a, rg.b, pk, cs.checked, cr.checked), blob, ext = fmt.value, mb = memberGet();
         if (ext === "csv") blob = new Blob([expCsv(D)], { type: "text/csv;charset=utf-8" }); else if (ext === "xlsx") blob = await expXlsx(D); else blob = await expDocx(D, mb && mb.firma);
-        var fn = "Auswertung_" + (site.value === "*" ? "Alle" : site.value) + "_" + rg.a + "_" + rg.b + "." + ext;
+        var fn = "Auswertung_" + (pk === "*" ? "Alle" : pk.length === 1 ? pk[0] : "Auswahl_" + pk.length) + "_" + rg.a + "_" + rg.b + "." + ext;
         msg.textContent = "Fertig: " + D.stunden.length + " Zeilen Stunden" + (D.spesen.length ? ", " + D.spesen.length + " Spesen" : "") + (D.regie.length ? ", " + D.regie.length + " Regie" : "") + "."; msg.className = "status ok";
         var sb2 = el("button", { type: "button", "class": "btn primary", text: "Datei teilen / speichern" }); out.appendChild(el("div", { "class": "mut", text: fn })); out.appendChild(sb2);
         sb2.addEventListener("click", async function () {
