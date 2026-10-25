@@ -1,0 +1,532 @@
+<title>Novacolor Kalkulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: Eingabe-Blöcke gestapelt (Fläche, Aufbau, Arbeit), violette Ergebniskarte am Ende. Look der Bader Design App. */
+:root{--bg:#eceff2;--paper:#fff;--ink:#18212b;--muted:#5a6776;--line:#d2d9e0;--accent:#2c2166;--soft:#ece8f8;--gold:#d4af5a;--bad:#b3261e;--ok:#1f7a43;
+--f-disp:"Barlow Condensed","Arial Narrow",sans-serif;--f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11161c;--paper:#1a212a;--ink:#e7ecf1;--muted:#9aa7b6;--line:#2f3a47;--accent:#e9cd82;--soft:#2a2540;--bad:#ff8a80;--ok:#62c88a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#11161c;--paper:#1a212a;--ink:#e7ecf1;--muted:#9aa7b6;--line:#2f3a47;--accent:#e9cd82;--soft:#2a2540;--bad:#ff8a80;--ok:#62c88a;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.4 var(--f-body);padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font:700 1.9rem var(--f-disp);color:var(--accent);margin:0;letter-spacing:.01em}
+.sub{color:var(--muted);margin:2px 0 0;font-size:.9rem}
+.block{background:var(--paper);border:1px solid var(--line);border-top:4px solid var(--gold);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.block h2{font:700 1.2rem var(--f-disp);letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.85rem;margin:0}
+label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:700;color:var(--muted);min-width:0}
+input,select{font:400 15px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:0 12px;height:44px;width:100%;min-width:0}
+input[inputmode=decimal]{text-align:right;font-variant-numeric:tabular-nums}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.btn{font:600 .9rem var(--f-body);border:1.5px solid var(--gold);color:var(--ink);background:var(--paper);border-radius:999px;padding:8px 16px;cursor:pointer;box-shadow:0 1px 3px rgba(26,18,68,.12)}
+.btn.solid{background:linear-gradient(180deg,#3a2c84,#2c2166 50%,#1a1244);color:#f3d98f;border:0;box-shadow:inset 0 0 0 2px #d4af5a,0 3px 6px rgba(26,18,68,.3)}
+.btn.small{padding:5px 13px;font-size:.82rem}.btn.del{border-color:var(--line);box-shadow:none;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.layer{border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.layer-head{display:flex;gap:6px;align-items:end}.layer-head label{flex:1}.layer-head select{padding:0 6px 0 10px;font-size:14px}.layer-head input{padding:0 8px;text-align:center}.layer-head .btn{padding:5px 10px;flex:none}
+.res{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:var(--soft);border-radius:999px;padding:4px 11px;font-size:.85rem;font-variant-numeric:tabular-nums}
+.chip b{font-weight:700}
+.tag{font-size:.78rem;color:var(--muted)}
+.tag.warn{color:var(--bad)}
+.prod{border-top:1px solid var(--line);padding:10px 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end}
+.prod:first-of-type{border-top:0}.prod .nm{grid-column:1/-1}.prod .nt{grid-column:1/-1;font-size:.78rem;color:var(--muted)}
+@media (max-width:520px){.prod{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tot{background:linear-gradient(135deg,#2c2166,#1d1450);border-radius:22px;padding:18px;color:#fff;box-shadow:inset 0 -4px 0 #d4af5a}
+.tot h2{font:700 1.3rem var(--f-disp);margin:0 0 4px}
+.tl{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #ffffff2e;font-variant-numeric:tabular-nums}
+.tl span:last-child{font-weight:700;white-space:nowrap}
+.tk{margin-top:12px;color:#cfc9ee;font-size:.85rem}.tg{font-size:2.3rem;font-weight:800;color:#f1d98f;font-variant-numeric:tabular-nums}
+.shop{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:.9rem}
+.shop td,.shop th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}.shop th{font-size:.75rem;color:var(--muted)}.shop td:nth-child(n+2),.shop th:nth-child(n+2){text-align:right}
+.scroll{overflow-x:auto}.shop th{white-space:nowrap}.shop td{white-space:nowrap}
+.toast{color:var(--ok);font-size:.85rem}
+.vrow{border-top:1px solid var(--line);padding:12px 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end}.vrow:first-child{border-top:0}
+.vrow .longtxt{grid-column:1/-1;order:-1}.vrow .chk{grid-column:1/-1;order:-2}
+#pick-list{max-height:176px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;padding:0 10px;margin:8px 0;background:var(--paper)}
+#pick-list .vrow{padding:8px 0;align-items:center}#pick-list .vrow .chk{grid-column:auto;order:0}#pick-list .vrow input[type=text],#pick-list .vrow input:not([type]){padding:8px}
+.longtxt{width:100%;font:400 15px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:9px 12px;resize:none;overflow:hidden;line-height:1.35;min-height:44px}
+.frg{margin:10px 0}.frg>b{display:block;margin-bottom:6px}.frrow{display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-bottom:6px}.frres{margin:8px 0;font-size:1.05rem}#fr-wrap{margin:10px 0}.chk{flex-direction:row;align-items:center;gap:8px;font-size:.95rem;color:var(--ink)}.chk input{width:22px;height:22px;accent-color:var(--gold)}
+.lt{display:block;margin-top:8px}
+.ov0{position:fixed;inset:0;background:rgba(10,10,30,.55);display:flex;align-items:center;justify-content:center;z-index:50}.ov[hidden]{display:none}
+.ovbox{background:var(--paper);border-radius:18px;padding:18px;width:min(300px,86vw);display:grid;gap:10px;box-shadow:0 10px 40px rgba(0,0,0,.35)}.ovbox b{font-size:1.1rem;text-align:center}
+.mmwrap,#mmwrap{position:relative;height:0;z-index:40}
+#matmenu{position:absolute;left:0;right:0;top:4px;background:var(--paper);border:2px solid var(--accent);border-radius:16px;box-shadow:0 12px 36px rgba(0,0,0,.3);padding:6px 12px 10px}
+#matmenu[hidden]{display:none}
+.mm-head{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+.mm-list{max-height:48vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--line)}
+.mm-h{font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:12px 0 4px}
+.mm-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+.sth{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}.simg{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.filebtn{cursor:pointer}
+.mm-row .sth{width:44px;height:44px;flex:0 0 44px}.mm-row .nm{flex:1;display:flex;align-items:center;gap:10px}
+.mm-menu button{width:100%;text-align:left;margin:4px 0}
+.vs{display:grid;grid-template-columns:1fr 84px auto auto;gap:6px 8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.vs:first-child{border-top:0}.vs-t{grid-column:1/-1;font-weight:600}.vs input{text-align:right}.vs-e{color:var(--muted);font-size:.85rem}
+.mm-row.done{color:var(--muted)}
+.chips{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}.chips .on{background:var(--accent);color:#fff}
+.vsum{font-weight:700;font-variant-numeric:tabular-nums;font-size:.9rem}
+[hidden]{display:none!important}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tabs .btn{flex:1;min-width:84px;padding:8px 10px}.tabs .btn.on{background:var(--accent);color:var(--paper);border-color:var(--gold)}
+.panel{display:flex;flex-direction:column;gap:16px}
+.btn.mega{width:100%;min-height:54px;font-size:1.05rem}
+.prow{border-top:1px solid var(--line);padding:12px 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end}.prow:first-child{border-top:0}
+.prow .longtxt{grid-column:1/-1;order:-1}.prow .psum{font-weight:700;font-variant-numeric:tabular-nums;font-size:.9rem}
+textarea.longtxt{display:block}
+</style>
+<div class="wrap">
+  <div><h1>Novacolor Kalkulator</h1><p class="sub">Materialkosten aus Preis und Verbrauch, dazu Arbeit und Zuschläge. Ergebnis: Verkaufspreis pro m² und Einkaufsliste.</p></div>
+
+  <div class="tabs" role="tablist"><button class="btn" data-tab="k">Kalkulation</button><button class="btn" data-tab="o">Offerte</button><button class="btn" data-tab="r">Rechnung</button><button class="btn" data-tab="m">Material</button><button class="btn" data-tab="f">Firma</button></div>
+  <div id="mmwrap"><div id="matmenu" hidden></div></div>
+  <div id="p-k" class="panel">
+  <div class="block">
+    <h2>Fläche</h2>
+    <div class="grid">
+      <label>Fläche m²<input id="f-m2" inputmode="decimal" data-k="m2"></label>
+      <label>Verlust / Reserve %<input id="f-res" inputmode="decimal" data-k="res"></label>
+      <label>Objekt (für Text)<input id="f-obj" data-k="obj"></label>
+    </div>
+    <div id="fr-wrap"><button class="btn small" data-act="frToggle" id="fr-btn" type="button">Flächen-Rechner (Wände, Fenster, Türen)</button><div id="fr" hidden></div></div>
+    <label class="chk"><input type="checkbox" id="f-solo"><span><b>Nur die Novacolor-Wand</b></span></label>
+  </div>
+
+  <div class="block">
+    <h2>Aufbau (Materialschichten) <button class="btn small" data-act="addLayer">+ Schicht</button></h2>
+    <p class="hint">Pro Schicht ein Produkt wählen. Verbrauch und Preis kommen aus der Produktliste unten und lassen sich dort anpassen.</p>
+    <div id="layers" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div class="row"><button class="btn solid" data-act="pickOpen">+ Mehrere Materialien wählen</button></div>
+    <div id="pick" class="layer" hidden><div class="hint">Häkchen setzen bei allem, was du brauchst. Rechts steht die Schichtzahl. Ironic gibt es als Set oder mit Fondo und Liquido einzeln. Das eine braucht das andere, das fehlende wird automatisch ergänzt.</div><div id="pick-list"></div>
+      <div class="row"><button class="btn solid" data-act="pickOk">Hinzufügen</button><button class="btn del" data-act="pickNo">Abbrechen</button></div></div>
+  </div>
+
+  <div class="block">
+    <h2>Gewählte Positionen <button class="btn small" data-act="mmOpenPos">+ Positionen wählen</button></h2>
+    <p class="hint">Abdecken, Tiefgrund, Schablonen usw. wählst du über «Material» oben. Die Menge ist automatisch die Fläche oben (grau). Mit dem Flächen-Rechner werden Boden abdecken, Bodenabschluss und Türen (lfm) sowie Fenster (m²) automatisch gefüllt. Du kannst sie überschreiben.</p>
+    <div id="vsel"></div>
+  </div>
+
+  <div class="block">
+    <h2>Arbeit und Zuschläge</h2>
+    <div class="grid">
+      <label>Stunden total (falls unten bei den Schichten nichts steht)<input id="f-ht" inputmode="decimal" data-k="ht" placeholder="vor Ort schätzen"></label>
+      <label>oder Arbeitszeit h pro m²<input id="f-h" inputmode="decimal" data-k="h"></label>
+      <label>Material verrechnen<select id="f-mm" data-k="matmode"><option value="full">Ganze Gebinde (Rest zu Lasten Kunde)</option><option value="prop">Nur den Verbrauch</option></select></label>
+      <label>Stundenansatz CHF<input id="f-sa" inputmode="decimal" data-k="satz"></label>
+      <label>Kleinmaterial %<input id="f-km" inputmode="decimal" data-k="km"></label>
+      <label>Gewinn und Risiko %<input id="f-gw" inputmode="decimal" data-k="gw"></label>
+      <label>Rabatt %<input id="f-rb" inputmode="decimal" data-k="rab"></label>
+      <label>MWST %<input id="f-mw" inputmode="decimal" data-k="mwst"></label>
+      <label>Anfahrt CHF pro Hinfahrt<input id="f-anf" inputmode="decimal" data-k="anf"></label>
+      <label>Wartezeit vor Ort bis h<input id="f-thr" inputmode="decimal" data-k="plan.thr"></label>
+    </div>
+    <p class="hint">Stundenansatz Maler: 85 CHF. Trage die geschätzte Zeit bei jedem Novacolor-Material ein (oben bei den Schichten). Sie erscheint in der Offerte. Ohne Eingabe gilt die Gesamtstundenzahl, sonst die Arbeitszeit pro m² (Platzhalter).</p>
+  </div>
+
+  <div class="tot" id="tot"></div>
+
+  <div class="block">
+    <h2>Einkaufsliste</h2>
+    <div class="scroll"><table class="shop" id="shop"></table></div>
+    <div class="row"><button class="btn solid" data-act="copy">Offerte als Text kopieren</button><span class="toast" id="toast"></span></div>
+  </div>
+
+  </div>
+
+  <div id="p-m" class="panel" hidden>
+  <div class="chips" id="mchips"><button class="btn small" data-act="matSel" data-v="prod">Novacolor</button><button class="btn small" data-act="matSel" data-v="pos">Position</button><button class="btn small" data-act="matSel" data-v="sch">Schablonen</button></div>
+    <div class="block" id="mb-vor">
+    <h2>Vorarbeiten und Zusatzleistungen <button class="btn small" data-act="addVor">+ Position</button></h2>
+    <p class="hint">Häkchen setzen, was zur Offerte gehört. Leere Menge bedeutet: Fläche in m². Die Preise stammen aus deinem Maler-Kalkulator (Leistungskatalog) und lassen sich hier ändern.</p>
+    <div id="vor"></div>
+    <div class="layer"><b>Schablone als Position</b>
+      <label>Schablone<select id="sc-sel"></select></label>
+      <div class="row"><label style="flex:0 0 90px">Anzahl<input id="sc-n" inputmode="decimal" value="1" style="text-align:center"></label><button class="btn solid" data-act="addSchab">Als Position hinzufügen</button></div></div>
+  </div>
+
+  <div class="block" id="mb-pos">
+    <h2>Eigene Material-Positionen <button class="btn small" data-act="newMpos">+ Position</button></h2>
+    <p class="hint">Hier hinterlegst du Material oder Leistungen mit Einheit und Preis, zum Beispiel Kleber, Abklebeband oder Gerüst. In der Kalkulation wählst du sie über «+ Mehrere Materialien wählen». Sie kommen als Position in die Offerte.</p>
+    <div id="mpos"></div>
+  </div>
+
+  <div class="block" id="mb-sch">
+    <h2>Schablonen <button class="btn small" data-act="newSchab">+ Schablone</button></h2>
+    <p class="hint">Preise aus der Novacolor-Stencil-Preisliste des Sikkens Centers (Stand 07/2026, Preis pro Stück). Ob mit oder ohne MWST, steht dort nicht. Eigene Schablonen ergänzt du mit «+ Schablone».</p>
+    <div id="schab"></div>
+  </div>
+
+  <div class="block" id="mb-prod">
+    <h2>Produktliste <button class="btn small" data-act="addProd">+ Produkt</button></h2>
+    <p class="hint">Preis pro Gebinde ist der Einkaufspreis. Verbrauch pro Schicht in Einheit (l oder kg) pro m². Aus dem Datenblatt: Verbrauch in m² pro Liter ergibt Liter pro m² als 1 geteilt durch diesen Wert.</p>
+    <div id="prods"></div>
+  </div>
+  </div>
+
+  <div id="p-o" class="panel" hidden>
+    <div class="block">
+      <h2>Offerte</h2>
+      <div class="grid">
+        <label>Offerte Nr.<input id="o-nr" data-d="o.nr"></label>
+        <label>Datum<input id="o-datum" type="date" data-d="o.datum"></label>
+        <label>Gültig (Tage)<input id="o-gueltig" inputmode="decimal" data-d="o.gueltig"></label>
+      </div>
+      <label>Kunde (Name, Adresse)<textarea id="o-kunde" class="longtxt" rows="3" data-d="o.kunde"></textarea></label>
+      <label>Objekt / Baustelle<input id="o-objekt" data-d="o.objekt"></label>
+      <button class="btn solid" data-act="fromCalc">Positionen aus Kalkulation übernehmen</button>
+      <p class="hint">Ersetzt die Positionen unten durch Vorarbeiten und Novacolor-Beschichtung mit den Preisen aus der Kalkulation.</p>
+    </div>
+    <div class="block"><h2>Positionen <button class="btn small" data-act="addPos" data-k="o">+ Position</button></h2><div id="o-pos"></div></div>
+    <div class="tot" id="o-tot"></div>
+    <button class="btn solid mega app-only" data-act="sendPdf" data-k="o" hidden>PDF erstellen &amp; senden · Fotos · Unterschrift</button>
+    <p class="hint" id="o-hint"></p>
+    <div class="row"><button class="btn" data-act="toInv">In Rechnung übernehmen</button><button class="btn del" data-act="newDoc" data-k="o">Neue Offerte</button></div>
+  </div>
+
+  <div id="p-r" class="panel" hidden>
+    <div class="block">
+      <h2>Rechnung</h2>
+      <div class="grid">
+        <label>Rechnung Nr.<input id="r-nr" data-d="r.nr"></label>
+        <label>Datum<input id="r-datum" type="date" data-d="r.datum"></label>
+        <label>Zahlungsfrist Tage<input id="r-frist" inputmode="decimal" data-d="r.frist"></label>
+      </div>
+      <label>Kunde (Name, Adresse)<textarea id="r-kunde" class="longtxt" rows="3" data-d="r.kunde"></textarea></label>
+      <label>Objekt / Baustelle<input id="r-objekt" data-d="r.objekt"></label>
+      <label>Ausführung (Zeitraum)<input id="r-ausf" data-d="r.ausf" placeholder="z. B. 3.–14. Oktober 2026"></label>
+      <div class="grid">
+        <label>Akonto bezahlt CHF<input id="r-akonto" inputmode="decimal" data-d="r.akonto"></label>
+        <label>Skonto %<input id="r-skonto" inputmode="decimal" data-d="r.skonto"></label>
+        <label>Skonto Tage<input id="r-skt" inputmode="decimal" data-d="r.skt"></label>
+      </div>
+    </div>
+    <div class="block"><h2>Positionen <button class="btn small" data-act="addPos" data-k="r">+ Position</button></h2><div id="r-pos"></div></div>
+    <div class="tot" id="r-tot"></div>
+    <button class="btn solid mega app-only" data-act="sendPdf" data-k="r" hidden>PDF erstellen &amp; senden · Fotos · Unterschrift</button>
+    <div class="row"><button class="btn del" data-act="newDoc" data-k="r">Neue Rechnung</button></div>
+  </div>
+
+  <div id="p-f" class="panel" hidden>
+    <div class="block">
+      <h2>Firma</h2>
+      <p class="hint">Briefkopf für Offerte und Rechnung. In der App wird er aus dem Maler-Kalkulator übernommen, solange hier nichts steht.</p>
+      <label>Firmenname<input id="f-firma" data-d="f.firma"></label>
+      <label>Adresse<input id="f-adr" data-d="f.adresse" placeholder="Strasse, PLZ Ort"></label>
+      <div class="grid"><label>Telefon<input id="f-tel" data-d="f.tel"></label><label>E-Mail<input id="f-mail" data-d="f.mail"></label></div>
+      <div class="grid"><label>IBAN<input id="f-iban" data-d="f.iban"></label><label>UID / MWST-Nr.<input id="f-uid" data-d="f.uid"></label></div>
+      <label class="chk"><input type="checkbox" id="f-mp" data-mp><span><b>Firma ist MWST-pflichtig</b><br><small style="color:var(--muted)">Ohne Haken werden Preise und Totale ohne MWST gerechnet und ausgewiesen.</small></span></label>
+      <label>Logo (optional)<input id="f-logo" type="file" accept="image/*"></label>
+      <div class="row"><img id="f-logo-prev" alt="Logo" style="max-width:140px;max-height:70px" hidden><button class="btn small del" data-act="logoDel">Logo entfernen</button></div>
+    </div>
+  </div>
+</div>
+<script>
+const KEY=window.NC_KEY||'novacolor-kalk-v1';
+const DEF={m2:'40',res:'10',anf:'85',plan:{thr:'4',wait:'paid'},obj:'',h:'0.5',satz:'85',km:'0',gw:'0',rab:'0',mwst:'8.1',
+ prods:[
+  {n:'Novacolor Africa',u:'l',g:'1',p:'111',v:'0.111',nt:'Listenpreis ohne Rabatt 111 CHF pro Liter exkl. MWST (Sikkens-Center-Offerte). Mit Geschäftsrabatt 89 CHF, die Marge auf dem Material kommt aus dem Listenpreis. Verbrauch laut Sikkens Center 8 bis 10 m² pro Liter, hier 9 gerechnet.'},
+  {n:'Novacolor Animamundi',u:'l',g:'1',p:'92.85',v:'0.167',nt:'Listenpreis 92.85 CHF pro Liter (Riviera Couleurs Webshop), 2,5 Liter kosten 239.90 CHF. Dein Einkauf lag bei 60 CHF pro kg. Verbrauch laut Händler 6 m² pro Liter.'},
+  {n:'Novacolor CalceCruda',u:'kg',g:'20',p:'150',v:'2',nt:'Listenpreis 150 CHF für 20 kg exkl. MWST (Sikkens-Center-Shop). Einkauf mit Geschäftsrabatt 100 CHF. Verbrauch laut Händler 2 kg pro m². Ob das ein oder zwei Schichten sind, im Datenblatt prüfen.'},
+  {n:'Novacolor Archi+ Concrete',u:'kg',g:'15',p:'154.1',v:'0.9',nt:'Listenpreis 154.10 CHF für 15 kg (Riviera Couleurs Webshop, Archi+ Beton Weiss). Dein Einkauf lag bei 90 CHF. Verbrauch laut Novacolor-Katalog ca. 1,6 bis 2 kg/m² für zwei Schichten, also rund 0,9 kg pro Schicht. Händler in Deutschland nennt 1,3 bis 1,8 kg/m². Im Datenblatt prüfen.'},
+  {n:'Novacolor Cera-Wax farblos',u:'l',g:'1',p:'50.5',v:'0.057',nt:'Listenpreis 50.50 CHF pro Liter farblos exkl. MWST (Sikkens-Center-Shop). Verbrauch laut Novacolor 15 bis 20 m² pro Liter je Schicht (Mittel 17,5), also rund 0,057 l/m² je Schicht.'},
+  {n:'Novacolor Marmorino KS',u:'kg',g:'20',p:'183.8',v:'0.45',nt:'Preis 183.80 CHF für 20 kg (Riviera Couleurs, Webshop). Kleinere Gebinde: 5 kg 59.20 CHF, 1 kg 15.10 CHF. Verbrauch laut Katalog 0,8 bis 1 kg/m² für zwei Schichten, also rund 0,45 kg pro Schicht.'},
+  {n:'Fase Silossanica (Lasur)',u:'l',g:'2.5',p:'116.1',v:'0.075',nt:'Riviera Couleurs: 2,5 l = CHF 116.10 (1 l = CHF 49.80). Ergiebigkeit ca. 12–15 m² pro Liter und Schicht (gerechnet mit 13,3 m²/l).'},
+  {n:'Novacolor Ironic Fondo',dry:'3',dryEnd:'12',u:'l',g:'1',p:'85.05',v:'0.077',nt:'Preis 85.05 CHF pro Liter exkl. MWST (Sikkens-Center-Offerte 03.08.2026, ohne Rabatt). Verbrauch laut Datenblatt 5 bis 8 m² pro Liter für zwei Schichten, also rund 0,077 l/m² je Schicht. Trocknung: Datenblatt etwa 4 Stunden zwischen den Schichten, hier 3 Stunden nach deiner Erfahrung. Etwa 12 Stunden bis zum Liquido, also am nächsten Tag.'},
+  {n:'Novacolor Ironic Liquido Antichizzante',dry:'4',dryEnd:'48',u:'l',g:'1',p:'68.05',v:'0.05',nt:'Preis 68.05 CHF pro Liter exkl. MWST (Sikkens-Center-Offerte 03.08.2026, ohne Rabatt). Verbrauch laut Datenblatt 8 bis 12 m² pro Liter für zwei Schichten, also rund 0,05 l/m² je Schicht. Trocknung: Datenblatt etwa 2 Stunden zwischen den Oxidationen, hier 4 Stunden nach deiner Erfahrung. Etwa 48 Stunden bis zum Schutz (Decofix).'},
+  {n:'Novacolor Novaprimer',dry:'24',u:'l',g:'1',p:'25.5',v:'0.111',nt:'Listenpreis 25.50 CHF pro Liter weiss exkl. MWST (Sikkens-Center-Shop). Verbrauch laut Datenblatt 8 bis 10 m² pro Liter und Schicht (Mittel 9), vor dem Auftrag mit 50 bis 80 % Wasser verdünnt.'},
+  {n:'Novacolor Decofix',dry:'2',u:'l',g:'1',p:'24.95',v:'0.061',nt:'Listenpreis 24.95 CHF pro Liter farblos exkl. MWST (Sikkens-Center-Shop). Verbrauch laut Datenblatt 15 bis 18 m² pro Liter auf normalem Putz (Mittel 16,5), auf Kalkputz oder saugendem Untergrund 8 bis 10 m² pro Liter. Eine dünne verdünnte Schicht.'},
+  {n:'Novacolor Ironic (Fondo + Liquido)',set:['Novacolor Ironic Fondo','Novacolor Ironic Liquido Antichizzante'],u:'',g:'',p:'',v:'',nt:'Ironic besteht immer aus Fondo (Farbe) und Liquido Antichizzante. Beide gehören zusammen und werden mit gleicher Schichtzahl gerechnet. Preise und Verbrauch kommen von den beiden Einzelprodukten weiter unten.'},
+  {n:'Novacolor Cera-Wax Silber',u:'l',g:'1',p:'70.25',v:'0.057',nt:'Preis 70.25 CHF pro Liter (Händler-Webshop, Angabe auf der Seite, MWST-Hinweis prüfen). Verbrauch laut Novacolor 15 bis 20 m² pro Liter je Schicht (Mittel 17,5).'},
+  {n:'Novacolor Cera-Wax Gold',u:'l',g:'1',p:'77.80',v:'0.057',nt:'Preis 77.80 CHF pro Liter (Händler-Webshop, Angabe auf der Seite, MWST-Hinweis prüfen). Verbrauch laut Novacolor 15 bis 20 m² pro Liter je Schicht (Mittel 17,5).'},
+  {n:'Novacolor Cera-Wax Bronze',u:'l',g:'1',p:'92.35',v:'0.057',nt:'Preis 92.35 CHF pro Liter (Händler-Webshop, Angabe auf der Seite, MWST-Hinweis prüfen). Verbrauch laut Novacolor 15 bis 20 m² pro Liter je Schicht (Mittel 17,5).'}
+ ],
+ layers:[{p:2,n:'1'}],tab:'k',
+ schab:[{n:'Hexagon Subway Tile',g:'54 x 84',p:'79.50'},{n:'Petra Tile',g:'53 x 79',p:'100.50'},{n:'Paladeo Tile',g:'53 x 79',p:'98.95'},{n:'Isabella Tile',g:'53 x 79',p:'186'},{n:'Large Tangier Lattice',g:'53 x 79',p:'75.95'},{n:'Italian Tile',g:'50 x 100',p:'30.50'},{n:'Antoniette Damask',g:'53 x 84',p:'102'},{n:'Imany Tapestry',g:'53 x 84',p:'98.95'},{n:'Infinity Trellis Cutfile',g:'54 x 79',p:'81.50'},{n:'Rabat Allover',g:'50 x 84',p:'91.50'},{n:'Mandala Medallion',g:'53 x 53',p:'81.50'},{n:'Steampunk',g:'54 x 84',p:'98.95'},{n:'Indian Damask',g:'58 x 78',p:'99.95'},{n:'Lisabetta Damask',g:'58 x 78',p:'116'},{n:'Anatolia Tile Wall',g:'53 x 78',p:'112'},{n:'Mandala Fusion',g:'58 x 58',p:'116'},{n:'Jameela Vine',g:'53 x 78',p:'66.05'},{n:'Zahara Morocco',g:'53 x 79',p:'75.50'},{n:'Esperanza Tile',g:'58 x 58',p:'105'},{n:'Palace Trellis',g:'50 x 70',p:'110'},{n:'Roman Tile',g:'98 x 68',p:'30.50'},{n:'UMA Mandala',g:'61 x 114',p:'100'},{n:'Kami Tile',g:'53 x 76',p:'100'},{n:'Athena Tile',g:'43 x 84',p:'100'},{n:'Sense',g:'65 x 95',p:'91.05'},{n:'Chaos',g:'65 x 95',p:'91.05'},{n:'Extravagance',g:'65 x 95',p:'91.05'},{n:'Eclectic',g:'65 x 95',p:'91.05'}],
+ f:{firma:'',adresse:'',tel:'',mail:'',uid:'',iban:'',logo:''},
+ o:{nr:'NC-O-'+new Date().getFullYear()+'-001',datum:'',gueltig:'30',kunde:'',objekt:'',rabatt:'',pos:[]},
+ r:{nr:'NC-R-'+new Date().getFullYear()+'-001',datum:'',frist:'30',kunde:'',objekt:'',ausf:'',akonto:'',skonto:'2',skt:'10',rabatt:'',pos:[]},
+ vor:[
+  {on:true,t:'Böden mit Abdeckvlies abdecken, angrenzende Bauteile abkleben, nach Abschluss entfernen',m:'',e:'m²',p:'4.5'},
+  {on:false,t:'Fenster abdecken und abkleben',m:'',e:'m²',p:'0'},
+  {on:false,t:'Türen abdecken, Rahmen und Futter abkleben',m:'',e:'lfm',p:'0'},
+  {on:false,t:'Bodenabschluss (Sockel) abdecken und abkleben',m:'',e:'lfm',p:'0'},
+  {on:false,t:'Möbel zusammenstellen und mit Folie schützen',m:'1',e:'pausch.',p:'150'},
+  {on:true,t:'Untergrund vorbereiten: prüfen, reinigen, lose Teile und Altanstriche entfernen',m:'',e:'m²',p:'2.5'},
+  {on:false,t:'Risse ausfräsen, mit Armierungsband überbrücken und spachteln',m:'10',e:'lfm',p:'12'},
+  {on:false,t:'Wände und Decken ganzflächig spachteln, Qualitätsstufe Q3, schleifen',m:'',e:'m²',p:'18'},
+  {on:false,t:'Grundieren mit Tiefgrund oder Haftgrund auf den Untergrund abgestimmt',m:'',e:'m²',p:'4',dry:'12'},
+  {on:false,t:'Abrieb mit Renogran spachteln',m:'',e:'m²',p:'0',dry:'24'},
+  {on:false,t:'Weissputz spachteln',m:'',e:'m²',p:'0',dry:'24'},
+  {on:false,t:'Schleifen',m:'',e:'m²',p:'0',dry:''},
+  {on:false,t:'Entsorgung und Schlussreinigung',m:'1',e:'pausch.',p:'0'}
+ ]};
+let S;try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(!S||!S.prods)S=JSON.parse(JSON.stringify(DEF));
+if(window.NC_INIT&&window.NC_INIT.prods&&(window.NC_INIT.ts||0)>(S.ts||0))S=window.NC_INIT;
+if(!S.fr)S.fr={open:false,w:[],f:[],t:[]};
+if(S.satz==='107.35')S.satz='85';
+if(!S.schab)S.schab=JSON.parse(JSON.stringify(DEF.schab));
+if(!S.mpos)S.mpos=[];
+if(!S.anf&&S.anf!=='0')S.anf='85';
+if(!S.plan)S.plan={thr:'4',wait:'paid'};
+if(!S.matmode)S.matmode='full';
+S.prods.forEach(p=>{if(p.n==='Novacolor Ironic Fondo'&&p.dry==='4')p.dry='3';if(p.n==='Novacolor Ironic Liquido Antichizzante'&&p.dry==='2')p.dry='4'});
+S.prods.forEach(p=>{if(p.dry===undefined){const d=DEF.prods.find(x=>x.n===p.n);if(d&&d.dry){p.dry=d.dry;if(d.dryEnd)p.dryEnd=d.dryEnd}}});
+if(!S.vor)S.vor=JSON.parse(JSON.stringify(DEF.vor));
+S.vor.forEach(r=>{if(/Tiefgrund/.test(r.t)&&(r.dry===undefined||r.dry==='4'))r.dry='12'});
+DEF.vor.forEach(d=>{if(/^(Fenster abdecken|Türen abdecken|Bodenabschluss)/.test(d.t)&&!S.vor.some(r=>r.t.indexOf(d.t.slice(0,14))===0)){const bi=S.vor.findIndex(r=>/^Böden mit Abdeckvlies/.test(r.t));S.vor.splice(bi<0?0:bi+1,0,JSON.parse(JSON.stringify(d)))}});
+DEF.vor.forEach(d=>{if(/Renogran|Weissputz|^Schleifen/.test(d.t)&&!S.vor.some(r=>r.t===d.t))S.vor.push(JSON.parse(JSON.stringify(d)))});
+S.vor.forEach(r=>{if(/^Weissputz/.test(r.t)&&(+r.p===10.25||+r.p===12)){r.p='0';r.p2=''}if(/^Abrieb mit Renogran/.test(r.t)&&+r.p===9.5)r.p='0'});
+S.vor.forEach(r=>{if(/^Böden mit Abdeckvlies/.test(r.t)&&+r.p===3.5)r.p='4.5';if(/^Grundieren mit Tiefgrund/.test(r.t)&&+r.p===3.8)r.p='4'});
+['f','o','r'].forEach(k=>{if(!S[k])S[k]=JSON.parse(JSON.stringify(DEF[k]))});if(!S.tab)S.tab='k';
+S.prods.forEach(p=>{if(/Silossanica/.test(p.n)&&String(p.p)==='77'){p.u='l';p.g='2.5';p.p='116.1';p.v='0.075';p.nt='Riviera Couleurs: 2,5 l = CHF 116.10 (1 l = CHF 49.80). Ergiebigkeit ca. 12–15 m² pro Liter und Schicht (gerechnet mit 13,3 m²/l).'}});
+DEF.prods.slice(6).forEach(d=>{if(!S.prods.some(p=>p.n===d.n||(/Silossanica/.test(d.n)&&/Silossanica/.test(p.n))))S.prods.push(JSON.parse(JSON.stringify(d)))});
+S.prods.forEach(p=>{if(p.n==='Novacolor CalceCruda'&&p.p==='27.95'){p.g='20';p.p='100';p.nt=DEF.prods[2].nt}});
+S.prods.forEach(p=>{if(p.n==='Novacolor CalceCruda'&&p.p==='100'){p.p='150';p.nt=DEF.prods[2].nt}if(p.n==='Novacolor Cera-Wax'&&p.p==='58.95'){p.p='50.5';p.nt=DEF.prods[4].nt}});
+S.prods.forEach(p=>{if(p.n==='Novacolor Cera-Wax')p.n='Novacolor Cera-Wax farblos'});
+S.prods.forEach(p=>{if(p.n==='Novacolor Marmorino KS'&&!String(p.p||'').trim()){p.p='183.8';p.g='20';p.v='0.45';p.nt=DEF.prods[5].nt}});
+S.prods.forEach(p=>{if(p.n==='Novacolor Animamundi'&&(p.p==='60'||p.p==='98.05')){p.u='l';p.p='92.85';p.nt=DEF.prods[1].nt}if(p.n==='Novacolor Archi+ Concrete'&&p.p==='90'){p.p='154.1';p.nt=DEF.prods[3].nt}});
+S.prods.forEach(p=>{delete p.nosel});
+S.prods.forEach(p=>{if(p.n==='Novacolor Africa'&&(p.p==='12.05'||p.p==='89')){p.u='l';p.p='111';p.nt=DEF.prods[0].nt}});
+S.prods.forEach(p=>{const d=DEF.prods.find(x=>x.n===p.n);if(d&&!String(p.v||'').trim()&&d.v){p.v=d.v;p.nt=d.nt}});
+const iso0=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+if(!S.o.datum)S.o.datum=iso0();if(!S.r.datum)S.r.datum=iso0();
+const NF=window.NC_FIRMA||null;if(NF&&!S.f.firma){S.f.firma=NF.firma||'';S.f.adresse=NF.adresse||'';S.f.tel=NF.tel||'';S.f.mail=NF.mail||'';S.f.uid=NF.uid||'';S.f.iban=NF.iban||'';if(!S.f.logo)S.f.logo=NF.logo||''}
+if(S.f.mwstpf===undefined)S.f.mwstpf=(NF&&NF.mwstpflichtig!==undefined)?!!NF.mwstpflichtig:true;
+const MP=()=>S.f.mwstpf!==false;
+const save=()=>{S.ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}try{if(window.parent!==window)parent.postMessage({kk:'save',app:'nc',s:S},'*')}catch(e){}};
+const $=s=>document.querySelector(s);
+const num=v=>{const n=parseFloat(String(v??'').replace(',','.'));return isFinite(n)?n:0};
+const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const r2=x=>Math.round(x*100)/100;
+const chf=x=>num(x).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const q=(x,d=2)=>num(x).toLocaleString('de-CH',{maximumFractionDigits:d});
+const r05=x=>Math.round(x*20)/20;
+function getP(p){const parts=p.split('.');let o=S;for(const k of parts)o=o?.[k];return o}
+function setP(p,v){const parts=p.split('.');let o=S;for(let i=0;i<parts.length-1;i++)o=o[parts[i]];o[parts.at(-1)]=v}
+function layerCalc(l){const pr=S.prods[l.p];if(!pr)return null;
+  if(pr.set){const n=num(l.n),comps=pr.set.map(nm=>S.prods.find(x=>x.n===nm)).filter(Boolean).map(cp=>{const per=num(cp.g)?num(cp.p)/num(cp.g):0,m=n*num(cp.v);return{pr:cp,mengeM2:m,kosten:m*per,ok:num(cp.p)>0&&num(cp.v)>0&&num(cp.g)>0}});
+    return{pr,n,set:true,comps,mengeM2:0,kosten:comps.reduce((a,c)=>a+c.kosten,0),ok:comps.length===pr.set.length&&comps.every(c=>c.ok)}}
+const n=num(l.n),per=num(pr.g)?num(pr.p)/num(pr.g):0;
+  const mengeM2=n*num(pr.v);const kosten=mengeM2*per;return{pr,n,mengeM2,kosten,ok:num(pr.p)>0&&num(pr.v)>0&&num(pr.g)>0}}
+function shortT(t){let x=String(t||'').split(/[:,]/)[0].trim();if(x.length>40){x=x.slice(0,40);x=x.slice(0,x.lastIndexOf(' ')>20?x.lastIndexOf(' '):40)+' …'}return x}
+function effP(r,A){const p=num(r.p),p2=num(r.p2);if(!(p2>0)||p2>=p)return p;const m=num(r.m)||A;return m<=50?p:m>=70?p2:p-(p-p2)*(m-50)/20}
+function plan(A){
+  const steps=[];
+  const rk=t=>/Renogran|Abrieb/.test(t)?1:/Weissputz/.test(t)?2:/^Schleifen/.test(t)?3:/Tiefgrund|Grundier/.test(t)?4:0;
+  const isS=t=>/^Schablone/.test(t),isE=t=>/^Entsorgung/.test(t);
+  S.vor.map((r,i)=>({r,i})).filter(o=>o.r.on&&!isS(o.r.t)&&!isE(o.r.t)).sort((a,b)=>rk(a.r.t)-rk(b.r.t)||a.i-b.i).forEach(o=>steps.push({l:shortT(o.r.t),w:num(o.r.dry)}));
+  S.layers.forEach(l=>{const lc=layerCalc(l);if(!lc)return;(lc.set?lc.comps.map(x=>({pr:x.pr,n:lc.n})):[{pr:lc.pr,n:lc.n}]).forEach(x=>{const n=Math.max(1,Math.round(x.n)),d=num(x.pr.dry),e=num(x.pr.dryEnd)||d,nm=x.pr.n.replace('Novacolor ','');for(let k=1;k<=n;k++)steps.push({l:nm+(n>1?' '+k+'/'+n:''),w:k<n?d:e})})});
+  S.vor.filter(r=>r.on&&isS(r.t)).forEach(r=>steps.push({l:shortT(r.t),w:num(r.dry)}));
+  S.vor.filter(r=>r.on&&isE(r.t)).forEach(r=>{if(steps.length)steps[steps.length-1].w=0;steps.push({l:shortT(r.t),w:0})});
+  const thr=num(S.plan.thr),days=[[]];let paid=0,wait=0;
+  steps.forEach((s0,i)=>{days[days.length-1].push(s0.l);if(i<steps.length-1&&s0.w>0){wait+=s0.w;if(s0.w>thr)days.push([]);else paid+=s0.w}});
+  return{days:steps.length?days:[],anfN:steps.length?days.length:1,paid,wait}}
+function calc(){
+  const A=num(S.m2),F=A*(1+num(S.res)/100);let mat=0,miss=[];const shop=[];
+  S.layers.forEach(l=>{const c=layerCalc(l);if(!c)return;if(!c.ok){miss.push(c.pr.n);return}mat+=c.kosten;(c.set?c.comps:[c]).forEach(x=>{const bedarf=x.mengeM2*F;const geb=num(x.pr.g)?Math.ceil(bedarf/num(x.pr.g)-1e-9):0;shop.push({n:x.pr.n,bedarf,u:x.pr.u,geb,g:num(x.pr.g),p:num(x.pr.p),sum:geb*num(x.pr.p)})})});
+  if(S.matmode!=='prop'){mat=A?shop.reduce((a,x)=>a+x.sum,0)/A:0}
+  const vor=S.vor.reduce((a,r)=>a+(r.on?(num(r.m)||A)*effP(r,A):0),0),vorM2=A?vor/A:0;
+  const hL=S.layers.reduce((a,l)=>a+(S.prods[l.p]?num(l.t):0),0),hArb=hL>0?hL:num(S.ht)>0?num(S.ht):num(S.h)*A,hVor=S.vor.reduce((a,r)=>a+(r.on?(num(r.m)||A)*num(r.h):0),0),hTot=hArb+hVor;
+  const arb=A?hArb*num(S.satz)/A:0,sub=mat+arb+vorM2,km=sub*num(S.km)/100,gw=(sub+km)*num(S.gw)/100,vk=sub+km+gw,rab=vk*num(S.rab)/100,netM2=vk-rab;
+  const P=plan(A),solo=S.plan.wait!=='free',anf=solo?P.anfN*num(S.anf):0,waitCost=solo?P.paid*num(S.satz):0,net=r05(netM2*A+anf+waitCost),mw=MP()?r05(net*num(S.mwst)/100):0,tot=r05(net+mw);
+  const wait=P.wait;
+  return{hArb,hVor,hTot,P,anf,waitCost,wait,vor,vorM2,A,F,mat,arb,km,gw,vk,rab,netM2,net,mw,tot,shop,miss,einkauf:shop.reduce((a,s)=>a+s.sum,0)}
+}
+function ironicPair(){const fi=S.prods.findIndex(p=>p.n==='Novacolor Ironic Fondo'),li=S.prods.findIndex(p=>p.n==='Novacolor Ironic Liquido Antichizzante');if(fi<0||li<0)return false;let ch=false;
+  [[fi,li],[li,fi]].forEach(([a,b])=>{const ia=S.layers.findIndex(l=>+l.p===a);if(ia>=0&&!S.layers.some(l=>+l.p===b)){S.layers.splice(ia+1,0,{p:b,n:S.layers[ia].n,sug:true});ch=true}});return ch}
+function renderLayers(){
+  $('#layers').innerHTML=S.layers.map((l,i)=>`<div class="layer">${l.sug?'<div class="tag">Vorschlag: gehört dazu. Schichten anpassen oder mit ✕ entfernen.</div>':''}<div class="layer-head">
+   <label>Produkt<select id="ly-${i}-p" data-lk="${i}.p">${S.prods.map((p,j)=>p.nosel&&+l.p!==j?'':`<option value="${j}"${+l.p===j?' selected':''}>${esc(p.n)}</option>`).join('')}</select></label>
+   <label style="flex:0 0 68px">Schichten<input id="ly-${i}-n" inputmode="decimal" data-lk="${i}.n" value="${esc(l.n)}"></label>
+   <button class="btn small del" data-act="delLayer" data-i="${i}" aria-label="Schicht entfernen">✕</button></div>
+   <div class="res" data-ly="${i}"></div>
+   <label class="lt">Geschätzte Zeit für diese Schichten, inkl. Trocknen (h)<input id="ly-${i}-t" inputmode="decimal" data-lk="${i}.t" value="${esc(l.t||'')}" placeholder="z.B. 4"></label></div>`).join('')||'<p class="hint">Noch keine Schicht. Oben „+ Schicht“ tippen.</p>';
+}
+function renderProds(){
+  $('#prods').innerHTML=S.prods.map((p,i)=>`<div class="prod"><label class="nm">Produkt<input id="pr-${i}-n" data-k="prods.${i}.n" value="${esc(p.n)}"></label>
+   ${p.set?'':`<label>Einheit<input id="pr-${i}-u" data-k="prods.${i}.u" value="${esc(p.u)}"></label>
+   <label>Gebinde (Einheit)<input id="pr-${i}-g" inputmode="decimal" data-k="prods.${i}.g" value="${esc(p.g)}"></label>
+   <label>Preis pro Gebinde CHF<input id="pr-${i}-p" inputmode="decimal" data-k="prods.${i}.p" value="${esc(p.p)}"></label>
+   <label>Verbrauch pro m² und Schicht<input id="pr-${i}-v" inputmode="decimal" data-k="prods.${i}.v" value="${esc(p.v)}"></label>
+   <label>Trocknung h zwischen Schichten<input id="pr-${i}-d" inputmode="decimal" data-k="prods.${i}.dry" value="${esc(p.dry||'')}" placeholder="Datenblatt"></label>
+   <label>Trocknung h bis nächstes Produkt<input id="pr-${i}-e" inputmode="decimal" data-k="prods.${i}.dryEnd" value="${esc(p.dryEnd||'')}" placeholder="wie links"></label>`}
+   <div class="nt">${esc(p.nt||'')}</div><div><button class="btn small del" data-act="delProd" data-i="${i}">Produkt entfernen</button></div></div>`).join('');
+}
+function schLabel(x){return x.n+(x.g?' ('+x.g+' cm)':'')+' – CHF '+chf(x.p)}
+function renderMpos(){
+  $('#mpos').innerHTML=S.mpos.map((x,i)=>`<div class="prod"><label class="nm">Bezeichnung<input id="mp-${i}-t" data-mk="${i}.t" value="${esc(x.t)}"></label>
+   <label>Einheit<input id="mp-${i}-e" data-mk="${i}.e" value="${esc(x.e)}"></label>
+   <label>Preis CHF pro Einheit<input id="mp-${i}-p" inputmode="decimal" data-mk="${i}.p" value="${esc(x.p)}"></label>
+   <button class="btn small del" data-act="delMpos" data-i="${i}">Entfernen</button></div>`).join('')||'<p class="hint">Noch keine eigenen Positionen.</p>'}
+function renderSchab(){
+  $('#sc-sel').innerHTML=S.schab.map((x,i)=>`<option value="${i}">${esc(schLabel(x))}</option>`).join('');
+  $('#schab').innerHTML=S.schab.map((x,i)=>`<div class="prod"><label class="nm">Name<input id="sk-${i}-n" data-sk="${i}.n" value="${esc(x.n)}"></label>
+   <label>Grösse cm<input id="sk-${i}-g" data-sk="${i}.g" value="${esc(x.g)}"></label>
+   <label>Preis CHF<input id="sk-${i}-p" inputmode="decimal" data-sk="${i}.p" value="${esc(x.p)}"></label>
+   <div class="simg">${x.img?`<img src="${x.img}" alt="" class="sth"><button class="btn small" data-act="delSimg" data-i="${i}">Bild entfernen</button>`:''}<label class="btn small filebtn">${x.img?'Bild ändern':'Bild hinterlegen'}<input type="file" accept="image/*" data-simg="${i}" hidden></label></div>
+   <div><button class="btn small del" data-act="delSchab" data-i="${i}">Entfernen</button></div></div>`).join('')}
+const fit=t=>{t.style.height='auto';if(t.scrollHeight>0)t.style.height=(t.scrollHeight+2)+'px'};
+function renderVor(){
+  $('#vor').innerHTML=S.vor.map((r,i)=>`<div class="vrow"><label class="chk"><input type="checkbox" id="vo-${i}-on" data-vk="${i}.on"${r.on?' checked':''}>Dabei</label>
+   <textarea id="vo-${i}-t" class="longtxt" rows="1" data-vk="${i}.t" aria-label="Beschreibung">${esc(r.t)}</textarea>
+   <label>Menge<input id="vo-${i}-m" inputmode="decimal" data-vk="${i}.m" value="${esc(r.m)}" placeholder="Fläche"></label>
+   <label>Einheit<input id="vo-${i}-e" data-vk="${i}.e" value="${esc(r.e)}"></label>
+   <label>Preis CHF<input id="vo-${i}-p" inputmode="decimal" data-vk="${i}.p" value="${esc(r.p)}"></label>
+   <label>Preis ab 70 m² (optional)<input id="vo-${i}-p2" inputmode="decimal" data-vk="${i}.p2" value="${esc(r.p2||'')}" placeholder="bis 50 m² gilt der Preis links"></label>
+   <label>Trocknung h danach<input id="vo-${i}-d" inputmode="decimal" data-vk="${i}.dry" value="${esc(r.dry||'')}"></label>
+   <div class="vsum" data-vs="${i}"></div>
+   <button class="btn small del" data-act="delVor" data-i="${i}">Entfernen</button></div>`).join('');
+  document.querySelectorAll('.longtxt').forEach(fit);
+  const on=S.vor.map((r,i)=>({r,i})).filter(o=>o.r.on);
+  $('#vsel').innerHTML=on.map(o=>`<div class="vs"><div class="vs-t">${esc(shortT(o.r.t))}</div><input id="vs-${o.i}-m" inputmode="decimal" data-vk="${o.i}.m" value="${esc(o.r.m)}" placeholder="Fläche" aria-label="Menge"><span class="vs-e">${esc(o.r.e)}</span><span class="vsum" data-vs="${o.i}"></span><button class="btn small del" data-act="offVor" data-i="${o.i}" aria-label="Entfernen">✕</button></div>`).join('')||'<p class="hint">Noch nichts gewählt.</p>';
+}
+function bind(){document.querySelectorAll('[data-k]').forEach(e=>{if(e.closest('#prods'))return;e.value=getP(e.dataset.k)??''})}
+function update(){
+  const c=calc();
+  document.querySelectorAll('[data-ly]').forEach(el=>{const l=S.layers[+el.dataset.ly],lc=layerCalc(l);
+    el.innerHTML=!lc?'':lc.set?(lc.ok?lc.comps.map(x=>`<span class="chip">${esc(x.pr.n.replace('Novacolor Ironic ',''))} <b>${q(x.mengeM2,3)} ${esc(x.pr.u)}/m²</b>${num(x.pr.dry)?' · '+q(x.pr.dry)+' h'+(num(x.pr.dryEnd)?' / '+q(x.pr.dryEnd)+' h':''):''}</span>`).join('')+`<span class="chip">Material <b>CHF ${chf(lc.kosten)}/m²</b></span>`:`<span class="tag warn">Preis oder Verbrauch der Einzelprodukte fehlt.</span>`):lc.ok?`<span class="chip">Verbrauch <b>${q(lc.mengeM2,3)} ${esc(lc.pr.u)}/m²</b></span><span class="chip">Material <b>CHF ${chf(lc.kosten)}/m²</b></span><span class="chip">für ${q(c.F,1)} m²: <b>${q(lc.mengeM2*c.F,1)} ${esc(lc.pr.u)}</b></span>${num(lc.pr.dry)?`<span class="chip">Trocknung <b>${q(lc.pr.dry)} h${num(lc.pr.dryEnd)?' / '+q(lc.pr.dryEnd)+' h':''}</b></span>`:`<span class="tag">Trocknungszeit im Datenblatt prüfen</span>`}`:`<span class="tag warn">Preis, Gebinde oder Verbrauch fehlt in der Produktliste.</span>`});
+  document.querySelectorAll('#vsel input[data-vk],#vor input[id$="-m"]').forEach(e=>{e.placeholder=q(S.m2)});
+  document.querySelectorAll('[data-vs]').forEach(el=>{const r=S.vor[+el.dataset.vs];el.textContent=r.on?`= CHF ${chf((num(r.m)||c.A)*effP(r,c.A))}`:'nicht dabei'});
+  const row=(a,b)=>`<div class="tl"><span>${a}</span><span>${b}</span></div>`;
+  $('#tot').innerHTML=`<h2>Ergebnis</h2>`+row('Material pro m²','CHF '+chf(c.mat))+row('Vorarbeiten pro m²','CHF '+chf(c.vorM2))+row('Arbeit pro m²','CHF '+chf(c.arb))+(c.km?row('Kleinmaterial','CHF '+chf(c.km)):'')+(c.gw?row('Gewinn und Risiko','CHF '+chf(c.gw)):'')+(c.hTot>0?row('Geschätzte Arbeitszeit total',q(c.hTot,1)+' h'):'')+(c.rab?row('Rabatt','− CHF '+chf(c.rab)):'')
+   +`<div class="tk">Verkaufspreis pro m²${MP()?' (exkl. MWST)':''}</div><div class="tg">CHF ${chf(c.netM2)}</div>`
+   +(c.anf?row(`Anfahrt ${c.P.anfN} × CHF ${chf(num(S.anf))}`,'CHF '+chf(c.anf)):'')+(c.waitCost?row(`Wartezeit vor Ort ${q(c.P.paid,1)} h × CHF ${chf(num(S.satz))}`,'CHF '+chf(c.waitCost)):'')+row(`Total ${q(c.A,1)} m²${MP()?' exkl. MWST':''}`,'CHF '+chf(c.net))+(MP()?row(`MWST ${q(S.mwst)} %`,'CHF '+chf(c.mw)):'')+`<div class="tk">Total${MP()?' inkl. MWST':''}</div><div class="tg">CHF ${chf(c.tot)}</div>`
+   +(c.P.days.length?`<div class="tk">Ablauf: ${c.P.days.length} ${c.P.days.length>1?'Tage':'Tag'}${S.plan.wait==='free'?'':' mit je einer Hinfahrt'}</div>`+c.P.days.map((d,i)=>`<div class="tk" style="margin-top:4px"><b>Tag ${i+1}:</b> ${esc(d.join(', '))}</div>`).join('')+`<div class="tk">Trocknungszeit insgesamt etwa ${q(c.wait,0)} h</div>`:'')+(c.miss.length?`<div class="tk">Es fehlen Angaben bei: ${esc(c.miss.join(', '))}</div>`:'');
+  $('#shop').innerHTML=c.shop.length?`<tr><th>Produkt</th><th>Bedarf</th><th>Anzahl × Gebinde</th><th>Einkauf CHF</th></tr>`+c.shop.map(s=>`<tr><td>${esc(s.n)}</td><td>${q(s.bedarf,1)} ${esc(s.u)}</td><td>${s.geb} × ${q(s.g)} ${esc(s.u)}</td><td>${chf(s.sum)}</td></tr>`).join('')+`<tr><td><b>Einkauf total</b></td><td></td><td></td><td><b>${chf(c.einkauf)}</b></td></tr>`:'<tr><td class="tag">Noch kein Material berechnet.</td></tr>';
+}
+function plain(){const c=calc(),L=[];L.push('OFFERTE'+(S.obj?' – '+S.obj:''),'');
+  L.push(`Fläche: ${q(c.A,1)} m²`,'Aufbau:');S.layers.forEach(l=>{const p=S.prods[l.p];if(p)L.push(`- ${q(l.n)} × ${p.n}`)});
+  const vs=S.vor.filter(r=>r.on);if(vs.length){L.push('','Vorarbeiten:');vs.forEach(r=>L.push('- '+r.t))}
+  if(c.P.days.length>1)L.push('',`Ablauf: ${c.P.days.length} Arbeitstage`);
+  L.push('',...(MP()?[`Preis pro m² exkl. MWST: CHF ${chf(c.netM2)}`,`Total exkl. MWST: CHF ${chf(c.net)}`,`MWST ${q(S.mwst)} %: CHF ${chf(c.mw)}`,`TOTAL inkl. MWST: CHF ${chf(c.tot)}`]:[`Preis pro m²: CHF ${chf(c.netM2)}`,`TOTAL: CHF ${chf(c.tot)}`]));return L.join('\n')}
+document.addEventListener('input',e=>{
+  if(e.target.classList.contains('longtxt'))fit(e.target);
+  if(e.target.dataset.mk){const[i,k]=e.target.dataset.mk.split('.');S.mpos[+i][k]=e.target.value}
+  else if(e.target.dataset.sk){const[i,k]=e.target.dataset.sk.split('.');S.schab[+i][k]=e.target.value;const o=$('#sc-sel').options[+i];if(o)o.textContent=schLabel(S.schab[+i])}
+  else if(e.target.dataset.vk){const[i,k]=e.target.dataset.vk.split('.');S.vor[+i][k]=e.target.type==='checkbox'?e.target.checked:e.target.value;if(k==='m')S.vor[+i].auto=false}
+  else if(e.target.dataset.k){setP(e.target.dataset.k,e.target.value);if(e.target.dataset.k.startsWith('prods'))renderLayersKeep()}
+  else if(e.target.dataset.lk){const[i,k]=e.target.dataset.lk.split('.');S.layers[+i][k]=e.target.tagName==='SELECT'?+e.target.value:e.target.value;if(e.target.tagName==='SELECT'&&ironicPair()){renderLayers();update();save();return}if(k==='n'&&S.layers[+i+1]&&S.layers[+i+1].sug){const nx=S.layers[+i+1];nx.n=e.target.value;const f=document.getElementById('ly-'+(+i+1)+'-n');if(f)f.value=nx.n}}
+  else return;update();save();
+});
+function renderLayersKeep(){const a=document.activeElement&&document.activeElement.id;S.layers.forEach((l,i)=>{const s=document.getElementById(`ly-${i}-p`);if(s)[...s.options].forEach(o=>{const pp=S.prods[+o.value];if(pp)o.textContent=pp.n})})}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,i=+b.dataset.i;
+  if(a==='addSchab'){const x=S.schab[+$('#sc-sel').value];if(x){S.vor.push({on:true,t:'Schablone '+x.n+(x.g?' ('+x.g+' cm)':'')+' anbringen und Dekor ausführen, inkl. Material',m:String(num($('#sc-n').value)||1),e:'Stk.',p:String(num(x.p))});renderVor()}}
+  if(a==='newMpos'){S.mpos.push({t:'Neue Position',e:'Stk.',p:''});renderMpos()}
+  if(a==='delMpos'){S.mpos.splice(i,1);renderMpos()}
+  if(a==='newSchab'){S.schab.push({n:'Neue Schablone',g:'',p:''});renderSchab()}
+  if(a==='delSimg'){delete S.schab[i].img;renderSchab();save()}
+  if(a==='delSchab'){S.schab.splice(i,1);renderSchab()}
+  if(a==='addVor'){S.vor.push({on:true,t:'',m:'',e:'m²',p:'0'});renderVor()}
+  if(a==='delVor'){S.vor.splice(i,1);renderVor()}
+  if(a==='addLayer'){S.layers.push({p:0,n:'1'});renderLayers()}
+  if(a==='delLayer'){S.layers.splice(i,1);renderLayers()}
+  if(a==='addProd'){S.prods.push({n:'Neues Produkt',u:'kg',g:'1',p:'',v:'',nt:''});renderProds();renderLayers()}
+  if(a==='delProd'){S.prods.splice(i,1);S.layers=S.layers.filter(l=>+l.p!==i).map(l=>({...l,p:+l.p>i?+l.p-1:+l.p}));renderProds();renderLayers()}
+  if(a==='pickOpen'){$('#pick-list').innerHTML=S.prods.map((p,j)=>p.nosel?'':`<div class="vrow" style="grid-template-columns:1fr 70px;align-items:center"><label class="chk"><input type="checkbox" id="pk-${j}" data-pick="${j}">${esc(p.n)}</label><input id="pkn-${j}" inputmode="decimal" aria-label="Schichten" value="1" style="text-align:center"></div>`).join('')+(S.schab.length?'<div class="tag" style="padding:10px 0 2px"><b>Schablonen</b> (Anzahl, kommt als Position dazu)</div>'+S.schab.map((x,j)=>`<div class="vrow" style="grid-template-columns:1fr 70px;align-items:center"><label class="chk"><input type="checkbox" id="ps-${j}" data-pickS="${j}">${esc(x.n)}${x.g?' ('+esc(x.g)+' cm)':''}</label><input id="psn-${j}" inputmode="decimal" aria-label="Anzahl" value="1" style="text-align:center"></div>`).join(''):'')+(S.mpos.length?'<div class="tag" style="padding:10px 0 2px"><b>Eigene Positionen</b> (Menge)</div>'+S.mpos.map((x,j)=>`<div class="vrow" style="grid-template-columns:1fr 70px;align-items:center"><label class="chk"><input type="checkbox" id="pm-${j}" data-pickM="${j}">${esc(x.t)} (${esc(x.e)})</label><input id="pmn-${j}" inputmode="decimal" aria-label="Menge" value="1" style="text-align:center"></div>`).join(''):'');$('#pick').hidden=false}
+  if(a==='pickNo'){$('#pick').hidden=true}
+  if(a==='pickOk'){document.querySelectorAll('[data-pick]:checked').forEach(c=>{const j=+c.dataset.pick;S.layers.push({p:j,n:$('#pkn-'+j).value||'1'})});document.querySelectorAll('[data-pickS]:checked').forEach(c=>{const j=+c.dataset.picks,x=S.schab[j];if(x)S.vor.push({on:true,t:'Schablone '+x.n+(x.g?' ('+x.g+' cm)':'')+' anbringen und Dekor ausführen, inkl. Material',m:String(num($('#psn-'+j).value)||1),e:'Stk.',p:String(num(x.p))})});document.querySelectorAll('[data-pickM]:checked').forEach(c=>{const j=+c.dataset.pickm,x=S.mpos[j];if(x)S.vor.push({on:true,t:x.t,m:String(num($('#pmn-'+j).value)||1),e:x.e||'Stk.',p:String(num(x.p))})});$('#pick').hidden=true;ironicPair();renderLayers();renderVor()}
+  if(a==='preset'){{const ix=n=>S.prods.findIndex(p=>p.n===n);S.layers=b.dataset.p==='calce'?[{p:2,n:'1'}]:b.dataset.p==='ironic'?[{p:ix('Novacolor Ironic (Fondo + Liquido)'),n:'2'}]:[{p:0,n:'2'},{p:4,n:'1'}]}renderLayers()}
+  if(a==='copy'){const t=plain(),T=$('#toast');navigator.clipboard.writeText(t).then(()=>{T.textContent='Kopiert'},()=>{const r=document.createRange();r.selectNodeContents($('#shop'));T.textContent='Kopieren nicht möglich'});setTimeout(()=>{T.textContent=''},2500);return}
+  update();save();
+});
+
+const NO=window.NC_APP||(window.parent!==window);
+const fmtd=v=>{const p=String(v||'').split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:''};
+function tot(k){const d=S[k],A=0;const sub=d.pos.reduce((a,p)=>a+r2(num(p.m)*num(p.p)),0),rab=r2(sub*num(d.rabatt)/100),net=r2(sub-rab),mw=MP()?r05(net*num(S.mwst)/100):0,total=r05(net+mw),ak=num(d.akonto),off=r05(total-ak);return{sub,rab,net,mw,total,ak,off}}
+function renderPos(k){const el=$('#'+k+'-pos');el.innerHTML=S[k].pos.map((p,i)=>`<div class="prow"><textarea id="${k}p-${i}-t" class="longtxt" rows="1" data-pk="${k}.${i}.t" aria-label="Beschreibung">${esc(p.t)}</textarea>
+   <label>Menge<input id="${k}p-${i}-m" inputmode="decimal" data-pk="${k}.${i}.m" value="${esc(p.m)}"></label>
+   <label>Einheit<input id="${k}p-${i}-e" data-pk="${k}.${i}.e" value="${esc(p.e)}"></label>
+   <label>Preis CHF<input id="${k}p-${i}-p" inputmode="decimal" data-pk="${k}.${i}.p" value="${esc(p.p)}"></label>
+   <div class="psum" data-ps="${k}.${i}"></div><button class="btn small del" data-act="delPos" data-k2="${k}" data-i="${i}">Entfernen</button></div>`).join('')||'<p class="hint">Noch keine Position. „+ Position“ oder (bei der Offerte) „Positionen aus Kalkulation übernehmen“.</p>';
+  el.querySelectorAll('.longtxt').forEach(fit)}
+function updDoc(){['o','r'].forEach(k=>{const t=tot(k),d=S[k];
+  document.querySelectorAll('[data-ps^="'+k+'."]').forEach(e=>{const p=d.pos[+e.dataset.ps.split('.')[1]];e.textContent='= CHF '+chf(num(p.m)*num(p.p))});
+  const row=(a,b)=>`<div class="tl"><span>${a}</span><span>${b}</span></div>`;
+  $('#'+k+'-tot').innerHTML=`<h2>${k==='o'?'Offerte':'Rechnung'} Total</h2>`+row('Positionen','CHF '+chf(t.sub))+(t.rab?row('Rabatt '+q(d.rabatt)+' %','− CHF '+chf(t.rab)):'')+(MP()?row('Total exkl. MWST','CHF '+chf(t.net))+row('MWST '+q(S.mwst)+' %','CHF '+chf(t.mw)):'')
+   +`<div class="tk">Total${MP()?' inkl. MWST':''}</div><div class="tg">CHF ${chf(t.total)}</div>`+(k==='r'&&t.ak?row('abzüglich Akonto','− CHF '+chf(t.ak))+`<div class="tk">Zu bezahlen</div><div class="tg">CHF ${chf(t.off)}</div>`:'')})}
+function fromCalc(){const c=calc(),f=(1+num(S.km)/100)*(1+num(S.gw)/100),A=num(S.m2),pos=[];
+  S.vor.filter(r=>r.on).forEach(r=>pos.push({t:r.t+(num(r.h)>0?' (geschätzt ca. '+q((num(r.m)||A)*num(r.h),1)+' h)':''),m:String(num(r.m)||A),e:r.e||'m²',p:String(r2(effP(r,A)*f))}));
+  const ay=S.layers.map(l=>{const p=S.prods[l.p];return p?q(l.n)+' × '+p.n+(num(l.t)>0?' (ca. '+q(l.t,1)+' h)':''):''}).filter(Boolean).join(', ');
+  pos.push({t:'Beschichtung mit Novacolor'+(ay?': '+ay:'')+', Material und Arbeit'+(c.hArb>0?' (geschätzt ca. '+q(c.hArb,1)+' h)':''),m:String(A),e:'m²',p:String(r2((c.mat+c.arb)*f))});
+  {const P=plan(A),solo=S.plan.wait!=='free';if(solo&&num(S.anf)>0)pos.push({t:'Anfahrt (pro Hinfahrt)',m:String(P.anfN),e:'Hinfahrt',p:String(num(S.anf))});if(solo&&P.paid>0)pos.push({t:'Wartezeit vor Ort wegen Trocknung',m:String(r2(P.paid)),e:'h',p:String(num(S.satz))})}
+  S.o.pos=pos;S.o.rabatt=S.rab&&num(S.rab)?String(S.rab):'';if(S.obj&&!S.o.objekt)S.o.objekt=S.obj;}
+function toInv(){const n=S.r.nr;S.r.pos=JSON.parse(JSON.stringify(S.o.pos));S.r.kunde=S.o.kunde;S.r.objekt=S.o.objekt;S.r.rabatt=S.o.rabatt;S.tab='r'}
+function nextNr(n){return String(n||'').replace(/(\d+)(\D*)$/,(m,d,t)=>String(+d+1).padStart(d.length,'0')+t)}
+function payload(k){const d=S[k],f=S.f;return{s:{firma:f.firma,adresse:f.adresse,tel:f.tel,mail:f.mail,uid:f.uid,iban:f.iban,logo:f.logo,mwstpflichtig:MP(),mwst:S.mwst,kleinmaterial:0},
+  offerte:{nr:S.o.nr,datum:S.o.datum,gueltig:S.o.gueltig,kunde:S.o.kunde,objekt:S.o.objekt,rabatt:S.o.rabatt,positionen:S.o.pos,akonto:0,skonto:0,skontotage:0,frist:0,ausfuehrung:''},
+  rechnung:{nr:S.r.nr,datum:S.r.datum,frist:S.r.frist,kunde:S.r.kunde,objekt:S.r.objekt,ausfuehrung:S.r.ausf,rabatt:S.r.rabatt,positionen:S.r.pos,akonto:S.r.akonto,skonto:S.r.skonto,skontotage:S.r.skt,gueltig:0}}}
+let mmView='';
+function renderMM(){
+  const row=(t,g,j,d,img)=>`<div class="mm-row${d?' done':''}"><span class="nm">${img?`<img class="sth" src="${img}" alt="">`:''}<span>${esc(t)}</span></span><button class="btn small" data-act="mmAdd" data-g="${g}" data-j="${j}">${d?'✓ nochmal':'+'}</button></div>`;
+  const rowV=(t,j,on)=>`<div class="mm-row${on?' done':''}"><span class="nm"><span>${esc(t)}</span></span><button class="btn small" data-act="mmAdd" data-g="v" data-j="${j}">${on?'✓ dabei':'+'}</button></div>`;
+  const head=t=>`<div class="mm-head"><b>${mmView?'<button class="btn small" data-act="mmView" data-v="">‹</button> ':''}${t}</b><span>${mmView?'<button class="btn small" data-act="mmManage">Bearbeiten</button> ':''}<button class="btn small solid" data-act="mmClose">Fertig</button></span></div>`;
+  let h;
+  if(!mmView)h=head('Material')+`<div class="mm-menu"><button class="btn solid" data-act="mmView" data-v="n">Novacolor</button><button class="btn solid" data-act="mmView" data-v="v">Positionen</button><button class="btn solid" data-act="mmView" data-v="s">Schablonen</button></div>`;
+  else if(mmView==='n'){const used=new Set(S.layers.map(l=>+l.p));h=head('Novacolor')+'<div class="mm-list">'+S.prods.map((p,j)=>p.nosel?'':row(p.n.replace(/^Novacolor /,''),'n',j,used.has(j))).join('')+'</div>'}
+  else if(mmView==='v')h=head('Positionen')+'<div class="mm-list">'+S.vor.map((r,i)=>/^Schablone/.test(r.t)?'':rowV(shortT(r.t),i,r.on)).join('')+S.mpos.map((x,j)=>row(x.t+' ('+x.e+')','m',j,false)).join('')+'</div>';
+  else h=head('Schablonen')+'<div class="mm-list">'+S.schab.map((x,j)=>row(schLabel(x),'s',j,false,x.img)).join('')+'</div>';
+  $('#matmenu').innerHTML=h}
+function showMat(){['prod','pos','sch','vor'].forEach(k=>{const e=document.getElementById('mb-'+k);if(e)e.hidden=(k==='vor'?'pos':k)!==S.msub});document.querySelectorAll('#mchips [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===S.msub))}
+function showTab(){document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!=='p-'+S.tab);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));document.querySelectorAll('.longtxt').forEach(fit)}
+
+/* Flächen-Rechner: Wände minus Fenster und Türen */
+function vkind(r){const t=r.t||'';return /^Böden mit Abdeckvlies/.test(t)?'boden':/^Fenster abdecken/.test(t)?'fenster':/^Türen abdecken/.test(t)?'tuer':/^Bodenabschluss/.test(t)?'sockel':''}
+function frAuto(){const f=S.fr;if(!f.w.length)return;const sd=f.sides==='2'?2:1,r1=x=>String(Math.round(x*10)/10);
+  const L=f.w.reduce((t,r)=>t+num(r.l),0),F=f.f.reduce((t,r)=>t+num(r.b)*num(r.h),0),T=f.t.reduce((t,r)=>t+(num(r.b)+2*num(r.h)),0)*sd;
+  S.vor.forEach(r=>{const k=vkind(r);if(!k||r.auto===false)return;r.auto=true;
+    if(k==='boden'||k==='sockel'){r.m=r1(L);r.e='lfm'}if(k==='fenster'){r.m=r1(F);r.e='m²'}
+    if(k==='tuer'){r.m=r1(T);r.e='lfm';r.base=r.base||r.t.replace(/ \((ein|beid)seitig\)$/,'');r.t=r.base+(sd===2?' (beidseitig)':' (einseitig)')}})}
+function frSum(){const f=S.fr,a=(x,y)=>num(x)*num(y);return Math.round((f.w.reduce((t,r)=>t+a(r.l,r.h),0)-f.f.reduce((t,r)=>t+a(r.b,r.h),0)-f.t.reduce((t,r)=>t+a(r.b,r.h),0))*10)/10}
+function frRes(){const n=frSum(),e=$('#fr-res');if(e)e.textContent=String(n).replace('.',',')+' m²';frAuto();if(S.fr.w.length){renderVor();S.m2=String(Math.max(0,n));const i=$('#f-m2');if(i)i.value=S.m2;update()}}
+function renderFr(){const f=S.fr,box=$('#fr');if(!box)return;box.hidden=!f.open;if(!f.open)return;
+  const G={w:['Wand','Länge m','Höhe m'],f:['Fenster','Breite m','Höhe m'],t:['Tür','Breite m','Höhe m']};
+  box.innerHTML=['w','f','t'].map(g=>{const a=g==='w'?'l':'b';return `<div class="frg"><b>${G[g][0]}${g==='w'?'':' (Abzug)'}</b>`+f[g].map((r,i)=>`<div class="frrow"><input inputmode="decimal" placeholder="${G[g][1]}" data-fr="${g}.${i}.${a}" value="${esc(r[a])}" aria-label="${G[g][1]}"><span>×</span><input inputmode="decimal" placeholder="${G[g][2]}" data-fr="${g}.${i}.h" value="${esc(r.h)}" aria-label="${G[g][2]}"><button class="btn small del" type="button" data-act="frDel" data-g="${g}" data-i="${i}">✕</button></div>`).join('')+`<button class="btn small" type="button" data-act="frAdd" data-g="${g}">+ ${G[g][0]}</button>`+(g==='t'?`<label style="margin-top:6px">Türen abdecken<select id="fr-sides"><option value="1"${f.sides!=='2'?' selected':''}>einseitig</option><option value="2"${f.sides==='2'?' selected':''}>beidseitig</option></select></label>`:'')+'</div>'}).join('')+`<div class="frres">Fläche netto: <b id="fr-res"></b></div>`;
+  const e=$('#fr-res');if(e)e.textContent=String(frSum()).replace('.',',')+' m²'}
+document.addEventListener('change',e=>{if(e.target.id==='fr-sides'){S.fr.sides=e.target.value;frRes();save()}});
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||!t.dataset.fr)return;const[g,i,k]=t.dataset.fr.split('.');S.fr[g][+i][k]=t.value;frRes();save()});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='frToggle'){S.fr.open=!S.fr.open;if(S.fr.open&&!S.fr.w.length)S.fr.w.push({l:'',h:'2.5'});renderFr();save()}
+  if(a==='frAdd'){const g=b.dataset.g;S.fr[g].push(g==='w'?{l:'',h:'2.5'}:g==='f'?{b:'1.2',h:'1.3'}:{b:'0.9',h:'2.1'});renderFr();frRes();save()}
+  if(a==='frDel'){S.fr[b.dataset.g].splice(+b.dataset.i,1);renderFr();frRes();save()}});
+function bindSolo(){const c=$('#f-solo');if(c)c.checked=S.plan.wait!=='free';const m=$('#f-mp');if(m)m.checked=MP()}
+function bindD(){document.querySelectorAll('[data-d]').forEach(e=>{e.value=getP(e.dataset.d)??''});
+  const lg=$('#f-logo-prev');lg.hidden=!S.f.logo;if(S.f.logo)lg.src=S.f.logo;document.querySelectorAll('.longtxt').forEach(fit)}
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.dataset.d){setP(t.dataset.d,t.value);if(t.classList.contains('longtxt'))fit(t);updDoc();save()}
+  else if(t.dataset.pk){const[k,i,f]=t.dataset.pk.split('.');S[k].pos[+i][f]=t.value;if(t.classList.contains('longtxt'))fit(t);updDoc();save()}
+  else if(t.dataset.k==='mwst'){updDoc()}});
+document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.simg!==undefined){const i=+e.target.dataset.simg,f=e.target.files[0];if(!f)return;const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const m=260,k=Math.min(1,m/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);S.schab[i].img=c.toDataURL('image/jpeg',.75);URL.revokeObjectURL(u);renderSchab();save()};im.src=u;return}
+if(e.target.id==='f-mp'){S.f.mwstpf=e.target.checked;update();if(typeof updDoc==='function')updDoc();save();return}
+if(e.target.id==='f-solo'){S.plan.wait=e.target.checked?'paid':'free';update();save();return}
+  if(e.target.id!=='f-logo'||!e.target.files[0])return;const fr=new FileReader();
+  fr.onload=()=>{const im=new Image();im.onload=()=>{const m=Math.min(1,500/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*m);c.height=Math.round(im.height*m);c.getContext('2d').drawImage(im,0,0,c.width,c.height);S.f.logo=c.toDataURL('image/png');bindD();save()};im.src=fr.result};fr.readAsDataURL(e.target.files[0])});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act],[data-tab]');if(!b)return;
+  if(b.dataset.tab==='m'){const mm=$('#matmenu');if(mm.hidden){mmView='';renderMM();mm.hidden=false}else mm.hidden=true;return}
+  if(b.dataset.tab){$('#matmenu').hidden=true;S.tab=b.dataset.tab;renderVor();showTab();save();return}
+  if(b.dataset.act==='matSel'){S.msub=b.dataset.v;showMat();save();return}
+  if(b.dataset.act==='mmView'){mmView=b.dataset.v;renderMM();return}
+  if(b.dataset.act==='offVor'){S.vor[+b.dataset.i].on=false;renderVor();update();save();return}
+  if(b.dataset.act==='mmOpenPos'){mmView='v';renderMM();$('#matmenu').hidden=false;window.scrollTo({top:0,behavior:'smooth'});return}
+  if(b.dataset.act==='mmClose'){$('#matmenu').hidden=true;return}
+  if(b.dataset.act==='mmManage'){$('#matmenu').hidden=true;S.msub={n:'prod',v:'pos',s:'sch'}[mmView]||'prod';showMat();S.tab='m';showTab();save();return}
+  if(b.dataset.act==='mmAdd'){const g=b.dataset.g,j=+b.dataset.j;let nm='';
+    if(g==='n'){S.layers.push({p:j,n:'1'});ironicPair();renderLayers();nm=S.prods[j].n}
+    if(g==='v'){S.vor[j].on=!S.vor[j].on;renderVor();nm=shortT(S.vor[j].t)+(S.vor[j].on?'':' entfernt')}
+    if(g==='m'){const x=S.mpos[j];S.vor.push({on:true,t:x.t,m:'1',e:x.e||'Stk.',p:String(num(x.p))});renderVor();nm=x.t}
+    if(g==='s'){const x=S.schab[j];S.vor.push({on:true,t:'Schablone '+x.n+(x.g?' ('+x.g+' cm)':'')+' anbringen und Dekor ausführen, inkl. Material',m:'1',e:'Stk.',p:String(num(x.p))});renderVor();nm='Schablone '+x.n}
+    update();save();renderMM();const T=$('#toast');if(T){T.textContent='Hinzugefügt: '+nm;setTimeout(()=>{T.textContent=''},2000)}return}
+  const a=b.dataset.act,i=+b.dataset.i,k=b.dataset.k;
+  if(a==='fromCalc'){fromCalc();renderPos('o');bindD();updDoc();save()}
+  if(a==='addPos'){S[k].pos.push({t:'',m:'1',e:'pausch.',p:'0'});renderPos(k);updDoc();save()}
+  if(a==='delPos'){S[b.dataset.k2].pos.splice(i,1);renderPos(b.dataset.k2);updDoc();save()}
+  if(a==='toInv'){toInv();showTab();renderPos('r');bindD();updDoc();save()}
+  if(a==='newDoc'){const d=S[k];d.nr=nextNr(d.nr);d.datum=iso0();d.kunde='';d.objekt='';d.pos=[];d.rabatt='';if(k==='r'){d.ausf='';d.akonto=''}renderPos(k);bindD();updDoc();save()}
+  if(a==='logoDel'){S.f.logo='';bindD();save()}
+  if(a==='sendPdf'){const kind=k==='o'?'offerte':'rechnung';try{parent.postMessage({kk:'pdf',app:'nc',kind,s:payload(kind)},'*')}catch(x){}}
+});
+bind();renderProds();renderLayers();renderVor();renderSchab();renderMpos();if(!S.msub)S.msub='prod';showMat();update();
+document.querySelectorAll('.app-only').forEach(b=>{b.hidden=!NO});
+renderPos('o');renderPos('r');bindD();bindSolo();renderFr();showTab();updDoc();if(!NO){['o','r'].forEach(k=>{$('#'+k+'-hint')&&0});document.querySelectorAll('.tot').forEach(()=>{});const h=$('#o-hint');if(h)h.textContent='PDF mit Unterschrift und Fotos gibt es in der Bader Design App.'}window.addEventListener('resize',()=>document.querySelectorAll('.longtxt').forEach(fit));
+</script>
