@@ -1,0 +1,728 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Maler-Kalkulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Werkstattblatt – Tabs oben, Eingabe-Blöcke gestapelt, Dokumentvorschau als Papierblatt am Ende */
+:root{
+  --bg:#eceff2; --paper:#ffffff; --ink:#18212b; --muted:#5a6776; --line:#d2d9e0;
+  --accent:#2c2166; --accent-soft:#ece8f8; --ok:#1f7a43; --warn:#6b4f12; --gold:#d4af5a;
+  --f-disp:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11161c; --paper:#1a212a; --ink:#e7ecf1; --muted:#9aa7b6; --line:#2f3a47;
+  --accent:#e9cd82; --accent-soft:#2a2540; --ok:#62c88a; --warn:#e9cd82; --gold:#d4af5a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c; --paper:#1a212a; --ink:#e7ecf1; --muted:#9aa7b6; --line:#2f3a47;
+  --accent:#e9cd82; --accent-soft:#2a2540; --ok:#62c88a; --warn:#e9cd82; --gold:#d4af5a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:860px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+header{display:flex;gap:14px;align-items:center;margin-bottom:14px}
+header .logo{width:64px;height:auto;border-radius:12px;flex:none}
+header p{margin:2px 0 0!important}
+header h1{font-family:var(--f-disp);font-weight:700;font-size:2rem;letter-spacing:.01em;margin:0;text-wrap:balance}
+header p{margin:2px 0 14px;color:var(--muted)}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:18px;overflow-x:auto}
+.tabs button{font:600 1.05rem var(--f-disp);letter-spacing:.04em;text-transform:uppercase;background:none;border:0;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+section.panel{display:flex;flex-direction:column;gap:16px}
+.block{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.block h2{font:600 1.15rem var(--f-disp);letter-spacing:.05em;text-transform:uppercase;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.85rem;margin:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);min-width:0}
+input,select,textarea{font:400 15px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 9px;width:100%;min-width:0;text-transform:none;letter-spacing:0}
+input[type=number]{font-family:var(--f-mono);font-size:14px;text-align:right}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn{font:600 .9rem var(--f-body);border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:4px;padding:7px 12px;cursor:pointer}
+.btn.solid{background:var(--accent);color:var(--paper)}
+.btn.small{padding:4px 9px;font-size:.82rem}
+.btn.del{border-color:var(--line);color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.item{border:1px solid var(--line);border-radius:5px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.item-head{display:flex;gap:8px;align-items:end}
+.item-head label{flex:1}
+.item-grid{display:grid;grid-template-columns:1fr .9fr 1.2fr 1.2fr;gap:8px;align-items:end}
+@media (max-width:520px){.item-grid{grid-template-columns:1fr 1fr}}
+.room-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media (max-width:520px){.room-grid{grid-template-columns:1fr 1fr}}
+.out{font-family:var(--f-mono);font-size:14px;font-variant-numeric:tabular-nums;padding:8px 0;text-align:right;white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--f-mono);font-size:.8rem;background:var(--accent-soft);color:var(--ink);padding:3px 8px;border-radius:3px}
+.cat{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px}
+.cat .catg{grid-column:1/-1;margin:8px 0 0;font:600 .78rem var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cat button{text-align:left;font:500 .88rem var(--f-body);background:var(--bg);color:var(--ink);border:1px dashed var(--line);border-radius:4px;padding:7px 9px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.cat button span{font-family:var(--f-mono);color:var(--muted);white-space:nowrap}
+.cat button:hover{border-color:var(--accent)}
+.totals{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-variant-numeric:tabular-nums}
+.totals div:nth-child(even){font-family:var(--f-mono);text-align:right}
+.totals .grand{font:700 1.25rem var(--f-disp);letter-spacing:.03em;border-top:2px solid var(--ink);padding-top:6px;margin-top:4px}
+.totals .grand + div{font-weight:600;font-size:1.05rem;border-top:2px solid var(--ink);padding-top:6px;margin-top:4px}
+/* Dokumentvorschau */
+.sheet{background:var(--paper);border:1px solid var(--line);box-shadow:0 2px 14px rgba(20,30,60,.08);padding:28px 26px;font-size:14px;overflow-x:auto}
+.sheet .head{display:flex;gap:14px;align-items:center;border-bottom:2px solid var(--gold);padding-bottom:10px;margin-bottom:16px}
+.sheet .head img{width:62px;height:auto;border-radius:10px;flex:none}
+.sheet .head b{display:block;font:700 1.15rem var(--f-disp);letter-spacing:.04em}
+.sheet .from{font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:16px}
+.sheet .to{white-space:pre-line;margin-bottom:22px}
+.sheet h3{font:700 1.6rem var(--f-disp);margin:0 0 2px;letter-spacing:.02em}
+.sheet .meta{color:var(--muted);font-size:13px;margin-bottom:16px}
+.sheet table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:440px}
+.sheet th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;border-bottom:1px solid var(--ink);padding:4px 6px}
+.sheet td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.sheet .r{text-align:right;font-family:var(--f-mono);font-size:13px;white-space:nowrap}
+.sheet tfoot td{border:0;padding:3px 6px}
+.sheet tfoot tr.sum td{font-weight:700;border-top:2px solid var(--ink);font-size:15px}
+.sheet .foot{margin-top:18px;font-size:13px;white-space:pre-line}
+.toast{color:var(--ok);font-size:.85rem}
+.kicker{font:600 .75rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--warn)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* App-Look (Bader Design): goldene Umrandung, violette Hauptknöpfe */
+.btn{border:1.5px solid var(--gold);color:var(--ink);background:var(--paper);border-radius:999px;padding:8px 16px;box-shadow:0 1px 3px rgba(26,18,68,.12)}
+.btn.small{padding:5px 13px}
+.btn.solid{background:linear-gradient(180deg,#3a2c84,#2c2166 50%,#1a1244);color:#f3d98f;border:0;box-shadow:inset 0 0 0 2px #d4af5a,0 3px 6px rgba(26,18,68,.3);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.btn.del{border-color:var(--line);box-shadow:none}
+.block{border-radius:22px;border-top:4px solid var(--gold);padding:18px}
+.block h2{color:var(--accent)}
+.item,.wb,.set,.ep{border-radius:14px}
+input,select,textarea{border-radius:12px}
+.chip{border-radius:999px;padding:4px 10px}
+.wchip{padding:8px 16px;font-family:var(--f-body);font-size:.9rem;border:1.5px solid var(--gold)}
+.wchip.on{background:linear-gradient(180deg,#3a2c84,#2c2166 50%,#1a1244);color:#f3d98f;border-color:var(--gold)}
+.dlg{border-radius:22px}
+.cat button{border-radius:12px}
+.sheet{border-radius:14px}
+
+/* Flächen-Rechner im Look der App */
+#flaeche .fcard{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:16px;display:flex;flex-direction:column}
+#flaeche .fcard.gold{border:1.5px solid #cdae6a}
+#flaeche .fbig{font-size:1.1rem}
+#flaeche .fh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}#flaeche .fh b{font-size:1.3rem;overflow-wrap:anywhere}
+#flaeche .lk{background:none;border:0;color:var(--muted);font-size:.9rem;padding:4px 0;cursor:pointer;font-family:inherit}
+#flaeche .fl{font-size:.8rem;font-weight:700;color:var(--muted);margin:12px 0 5px;text-transform:none;letter-spacing:0}#flaeche .fl.c{text-align:center}
+#flaeche .fcard input,#flaeche .fcard select{height:46px;border-radius:14px;padding:0 14px;font-size:1.05rem;font-family:var(--f-body);text-align:left;background:var(--bg)}
+#flaeche .f3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#flaeche .wchips{display:grid;grid-template-columns:repeat(2,minmax(0,150px));gap:10px;justify-content:center}
+#flaeche .wchips.three{grid-template-columns:repeat(3,minmax(0,1fr));max-width:none}
+#flaeche .chip{border:1.5px solid var(--line);border-radius:999px;padding:10px 8px;font-weight:700;font-size:.92rem;font-family:var(--f-body);background:var(--paper);color:var(--muted);cursor:pointer;text-align:center}
+#flaeche .chip.on{background:#2c2166;border-color:#2c2166;color:#fff}
+#flaeche .chip.all{grid-column:1/-1;justify-self:center;width:200px;border-color:#d4af5a;color:#6b4f12;background:transparent}
+#flaeche .chip.all.on{background:#d4af5a;color:#2a1f05;border-color:#d4af5a}
+:root[data-theme=dark] #flaeche .chip.all{color:#e9cd82}:root[data-theme=dark] #flaeche .chip.all.on{color:#2a1f05}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) #flaeche .chip.all{color:#e9cd82}:root:not([data-theme=light]) #flaeche .chip.all.on{color:#2a1f05}}
+#flaeche .addw{display:block;margin:10px auto 0;background:none;border:0;color:var(--muted);font-size:.85rem;text-decoration:underline;cursor:pointer;font-family:inherit}
+#flaeche .wb{border:0;border-top:1px solid var(--line);border-radius:0;padding:8px 0;display:block}#flaeche .wb:first-of-type{border-top:0}
+#flaeche .wr{display:flex;flex-direction:column;gap:2px}#flaeche .sts{display:flex;gap:12px;flex-wrap:wrap;margin:2px 0 4px}
+#flaeche .wl{min-width:0;text-align:left;background:none;border:0;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;gap:1px;color:inherit;font-family:inherit}
+#flaeche .wl b{font-size:1rem}#flaeche .wl .wa{font-size:.82rem;color:var(--muted);font-family:var(--f-body)}
+#flaeche .wl::after{content:'Masse ändern';font-size:.72rem;color:var(--muted);text-decoration:underline}
+#flaeche .stp{display:flex;align-items:center;gap:6px;font-size:.85rem;font-weight:600}#flaeche .stp b{min-width:1.4em;text-align:center;font-variant-numeric:tabular-nums}#flaeche .stp span{min-width:3.9em}
+#flaeche .stp .btn.pl{padding:0;width:38px;height:36px;font-size:1.2rem}
+#flaeche .ol{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.85rem;margin:3px 0}
+#flaeche .ep{background:var(--bg);border-radius:14px;padding:10px 12px;margin:2px 0 6px;display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+#flaeche .ep .lk{grid-column:1/-1;justify-self:start;text-decoration:underline}
+#flaeche .btn.pl{height:34px;padding:0 20px;font-size:.86rem;font-weight:600;letter-spacing:.01em;border-radius:999px;border:2px solid #d4af5a;background:linear-gradient(180deg,#fff,#f3efe2);color:#18212b;box-shadow:0 1px 0 #fff inset,0 -2px 3px rgba(212,175,90,.25) inset,0 4px 8px rgba(26,18,68,.22),0 1px 2px rgba(26,18,68,.2)}
+#flaeche .std{font-size:.8rem;color:var(--muted);margin-top:6px}
+#flaeche .chk{flex-direction:row;align-items:center;gap:10px;margin:14px 0 4px;font-size:1rem;font-weight:400;color:var(--ink);text-transform:none;letter-spacing:0}
+#flaeche .chk input{width:24px;height:24px;accent-color:#d4af5a}
+#flaeche .res{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:var(--bg);border-radius:16px;padding:12px 14px;margin-top:12px}
+#flaeche .res small{display:block;color:var(--muted);font-size:.78rem}#flaeche .res b{font-size:1.05rem;font-variant-numeric:tabular-nums}#flaeche .res .m{color:#b3261e}
+:root[data-theme=dark] #flaeche .res .m{color:#ff8a80}@media (prefers-color-scheme:dark){:root:not([data-theme=light]) #flaeche .res .m{color:#ff8a80}}
+#flaeche .addz{display:block;width:100%;border:1.5px solid #d4af5a;border-radius:16px;background:transparent;padding:13px;font:700 1rem var(--f-body);color:var(--ink);cursor:pointer}
+#flaeche .gtot{background:linear-gradient(135deg,#2c2166,#1d1450);border-radius:22px;padding:18px 18px 16px;color:#fff;box-shadow:inset 0 -4px 0 #d4af5a}
+#flaeche .gtot h3{margin:0 0 4px;font:700 1.3rem var(--f-disp)}
+#flaeche .tl{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #ffffff2e}#flaeche .tl span:last-child{font-weight:700;white-space:nowrap}
+#flaeche .tk{margin-top:12px;color:#cfc9ee;font-size:.85rem}#flaeche .tv{font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums}#flaeche .tg2{font-size:2.3rem;font-weight:800;color:#f1d98f;font-variant-numeric:tabular-nums}
+.btn.mega{width:100%;padding:16px;font-size:1.05rem;border-radius:18px}
+@media (max-width:480px){.tabs button{padding:10px 9px;font-size:1rem}}
+.kchk{flex-direction:row;align-items:center;gap:10px;font-size:.95rem;font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0}.kchk input{width:24px;height:24px;accent-color:#d4af5a}
+.longtxt{resize:none;height:42px;min-height:42px;overflow:hidden;line-height:1.35;padding:9px 12px;font:400 15px var(--f-body)}
+</style>
+
+<div class="wrap">
+<header>
+  <img class="logo" id="hdr-logo" alt="Firmenlogo">
+  <div><h1>Maler-Kalkulator</h1>
+  <p>Flächen aufmessen, Offerte rechnen, Rechnung stellen. Beträge in CHF, gerundet auf 5 Rappen.</p></div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="offerte" aria-selected="true">Offerte</button>
+  <button role="tab" data-tab="rechnung" aria-selected="false">Rechnung</button>
+  <button role="tab" data-tab="einst" aria-selected="false">Firma &amp; Positionen</button>
+</nav>
+
+<!-- OFFERTE -->
+<section class="panel" id="p-offerte">
+  <div class="block">
+    <h2>Kunde &amp; Objekt</h2>
+    <div class="grid">
+      <label>Offerte Nr.<input id="o-nr" data-k="offerte.nr"></label>
+      <label>Datum<input id="o-datum" type="date" data-k="offerte.datum"></label>
+      <label>Gültig (Tage)<input id="o-gueltig" type="number" data-k="offerte.gueltig"></label>
+    </div>
+    <label>Kunde (Name, Adresse)<textarea id="o-kunde" rows="3" data-k="offerte.kunde"></textarea></label>
+    <label>Objekt / Baustelle<input id="o-objekt" data-k="offerte.objekt"></label>
+  </div>
+
+  <div class="block" id="flaeche">
+    <h2>Flächen-Rechner</h2>
+    <details class="set">
+      <summary>Abzüge einstellen (Standardwerte)</summary>
+      <div class="set-grid">
+        <label>Tür Breite m<input id="s-tb" inputmode="decimal" data-k="offerte.tuer.b"></label>
+        <label>Tür Höhe m<input id="s-th" inputmode="decimal" data-k="offerte.tuer.h"></label>
+        <label>Fenster Breite m<input id="s-fb" inputmode="decimal" data-k="offerte.fenster.b"></label>
+        <label>Fenster Höhe m<input id="s-fh" inputmode="decimal" data-k="offerte.fenster.h"></label>
+        <label>Leibungstiefe m (Standard)<input id="s-lt" inputmode="decimal" data-k="offerte.lt"></label>
+        <label>Abdeckstreifen bei nur Wänden m<input id="s-abd" inputmode="decimal" data-k="offerte.abdeck"></label>
+        <label>Öffnungen unter m² übermessen<input id="s-gr" inputmode="decimal" data-k="offerte.grenze"></label>
+        <label>Wandhöhe neuer Raum m<input id="s-ho" inputmode="decimal" data-k="offerte.hoehe"></label>
+      </div>
+      <p class="hint">0 = jede Öffnung wird abgezogen.</p>
+    </details>
+    <div class="fcard gold">
+      <b class="fbig">Farbe (ca.)</b>
+      <div class="fl">Untergrund Wände</div><select id="f-ugw" data-k="offerte.fw"></select>
+      <div class="fl">Untergrund Decke</div><select id="f-ugd" data-k="offerte.fd"></select>
+      <div class="fl">Anzahl Anstriche</div>
+      <div class="wchips three" id="an-chips"><button class="chip" data-act="setAn" data-n="1">1×</button><button class="chip" data-act="setAn" data-n="2">2×</button><button class="chip" data-act="setAn" data-n="3">3×</button></div>
+      <div class="fl">Ergiebigkeit (m²/l), steht auf dem Gebinde</div><input id="f-erg" inputmode="decimal" data-k="offerte.fer" placeholder="z. B. 7">
+    </div>
+    <div id="rooms"></div>
+    <button class="addz" data-act="addRoom">+ Zimmer hinzufügen</button>
+    <div class="gtot" id="gtot"></div>
+    <div class="row"><button class="btn" data-act="roomsToPos">Flächen als Positionen übernehmen</button></div>
+  </div>
+
+  <div class="block">
+    <h2>Positionen <button class="btn small" data-act="addPos" data-doc="offerte">+ Position</button></h2>
+    <div id="o-pos" style="display:flex;flex-direction:column;gap:8px"></div>
+    <p class="hint">Neue Leistungen wählst du unter «Firma &amp; Positionen» (Häkchen «In Offerte») oder legst dort neue an.</p>
+    <div class="row"><button class="btn" data-tab="einst">Positionen wählen</button></div>
+  </div>
+
+  <div class="block">
+    <h2>Total</h2>
+    <div class="grid">
+      <label>Rabatt %<input id="o-rabatt" type="number" step="0.5" data-k="offerte.rabatt"></label>
+    </div>
+    <div class="totals" id="o-totals"></div>
+    <button class="btn solid mega app-only" data-act="sendPdf" data-doc="offerte" hidden>PDF erstellen &amp; senden · Fotos · Unterschrift</button>
+    <div class="row">
+      <button class="btn solid" data-act="toInvoice">In Rechnung übernehmen</button>
+      <button class="btn" data-act="copy" data-doc="offerte">Offerte als Text kopieren</button>
+      <button class="btn del" data-act="reset" data-doc="offerte">Neue Offerte</button>
+      <span class="toast" id="o-toast"></span>
+    </div>
+  </div>
+
+  <div class="sheet" id="o-sheet"></div>
+</section>
+
+<!-- RECHNUNG -->
+<section class="panel" id="p-rechnung" hidden>
+  <div class="block">
+    <h2>Kunde &amp; Objekt</h2>
+    <div class="grid">
+      <label>Rechnung Nr.<input id="r-nr" data-k="rechnung.nr"></label>
+      <label>Datum<input id="r-datum" type="date" data-k="rechnung.datum"></label>
+      <label>Zahlbar innert (Tage)<input id="r-frist" type="number" data-k="rechnung.frist"></label>
+    </div>
+    <label>Kunde (Name, Adresse)<textarea id="r-kunde" rows="3" data-k="rechnung.kunde"></textarea></label>
+    <div class="grid">
+      <label>Objekt / Baustelle<input id="r-objekt" data-k="rechnung.objekt"></label>
+      <label>Ausführung<input id="r-ausf" data-k="rechnung.ausfuehrung" placeholder="z. B. 12.–23. Oktober 2026"></label>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>Positionen <button class="btn small" data-act="addPos" data-doc="rechnung">+ Position</button></h2>
+    <p class="hint">Aus der Offerte übernehmen, dann Mengen auf das effektive Ausmass anpassen.</p>
+    <div id="r-pos" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="row">
+      <label style="flex:2;min-width:200px">Regie nach SMGV-Ansatz 2026<select id="r-regiecat"></select></label>
+      <button class="btn small" data-act="addRegie" style="align-self:end">+ Regiestunden</button>
+    </div>
+    <div class="row"><button class="btn small" data-act="addMat">+ Material nach Aufwand (EP + 40 %)</button><button class="btn small" data-act="addMatP">+ Materialpauschale Ausbesserungen</button></div>
+    <p class="hint">Material nach Aufwand: Menge = Einkaufspreis in CHF, Preis 1.40 entspricht dem SMGV-Zuschlag von 40 %.</p>
+
+  </div>
+
+  <div class="block">
+    <h2>Total &amp; Zahlung</h2>
+    <div class="grid">
+      <label>Rabatt %<input id="r-rabatt" type="number" step="0.5" data-k="rechnung.rabatt"></label>
+      <label>Akonto bezahlt CHF<input id="r-akonto" type="number" step="0.05" data-k="rechnung.akonto"></label>
+      <label>Skonto %<input id="r-skonto" type="number" step="0.5" data-k="rechnung.skonto"></label>
+      <label>Skonto innert Tagen<input id="r-skontotage" type="number" data-k="rechnung.skontotage"></label>
+    </div>
+    <div class="totals" id="r-totals"></div>
+    <button class="btn solid mega app-only" data-act="sendPdf" data-doc="rechnung" hidden>PDF erstellen &amp; senden · Fotos · Unterschrift</button>
+    <div class="row">
+      <button class="btn" data-act="copy" data-doc="rechnung">Rechnung als Text kopieren</button>
+      <button class="btn del" data-act="reset" data-doc="rechnung">Neue Rechnung</button>
+      <span class="toast" id="r-toast"></span>
+    </div>
+  </div>
+
+  <div class="sheet" id="r-sheet"></div>
+</section>
+
+<!-- EINSTELLUNGEN -->
+<section class="panel" id="p-einst" hidden>
+  <div class="block">
+    <h2>Firma</h2>
+    <div class="row" style="align-items:center">
+      <img id="s-logo-prev" alt="Logo" style="width:72px;border-radius:12px">
+      <label style="flex:1;min-width:180px">Logo hochladen (optional)<input id="s-logo-file" type="file" accept="image/*"></label>
+      <button class="btn small del" data-act="logoReset">Logo entfernen</button>
+    </div>
+    <label>Firmenname<input id="s-firma" data-k="s.firma"></label>
+    <label>Adresse<textarea id="s-adresse" rows="2" data-k="s.adresse"></textarea></label>
+    <div class="grid">
+      <label>Telefon<input id="s-tel" data-k="s.tel"></label>
+      <label>E-Mail<input id="s-mail" data-k="s.mail"></label>
+      <label>MWST-Nr.<input id="s-uid" data-k="s.uid" placeholder="CHE-123.456.789 MWST"></label>
+      <label>IBAN<input id="s-iban" data-k="s.iban"></label>
+    </div>
+  </div>
+  <div class="block">
+    <h2>Ansätze</h2>
+    <div class="grid">
+      <label>Stundenansatz Maler:in CHF<input id="s-std" type="number" step="0.5" data-k="s.stundensatz"></label>
+      <label>Kleinmaterial %<input id="s-km" type="number" step="0.5" data-k="s.kleinmaterial"></label>
+      <label>MWST %<input id="s-mwst" type="number" step="0.1" data-k="s.mwst"></label>
+    </div>
+    <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:.95rem;color:var(--ink)"><input id="s-pflicht" type="checkbox" data-k="s.mwstpflichtig" style="width:auto">MWST auf Offerten und Rechnungen ausweisen</label>
+    <p class="hint">Ohne Häkchen werden alle Beträge ohne MWST gerechnet und ausgewiesen (z. B. wenn du unter CHF 100'000 Jahresumsatz bleibst). MWST-Normalsatz 2026: 8,1 %. Eine Erhöhung auf 8,5 % ab 2028 ist im Parlament beschlossen, die Abstimmung steht noch aus. Regieansätze nach SMGV-Empfehlung 2026 (netto, inkl. Werkzeug). Die Katalogpreise sind Richtwerte inkl. Material; die offiziellen NPK-Texte und SMGV-Leistungswerte sind lizenzpflichtig und hier nicht enthalten. Kleinmaterial-Zuschlag nur verwenden, wenn deine Preise ohne Material sind.</p>
+  </div>
+  <div class="block">
+    <h2>Positionen (Leistungskatalog) <button class="btn small" data-act="addCat">+ Leistung</button></h2>
+    <p class="hint">Häkchen bei «In Offerte» setzen, dann kommt die Leistung als Position in die Offerte. Häkchen weg nimmt sie wieder heraus. Die Menge passt du danach in der Offerte an. Preise und Texte kannst du hier ändern.</p>
+    <p class="toast" id="k-info"></p>
+    <div id="s-cat" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="row"><button class="btn" data-act="addCat">+ Neue Leistung</button><button class="btn solid" data-tab="offerte">Zur Offerte</button></div>
+  </div>
+  <p class="hint">Alle Eingaben werden nur in diesem Browser gespeichert.</p>
+</section>
+</div>
+
+<script>/*KK_INIT*/</script>
+<script>
+const KEY=window.KK_KEY||'malerkalk-v1';
+const REGIE=[["Malermeister:in",143.15],["Vorarbeiter:in",125.25],["Servicemaler:in",116.30],["Maler:in",107.35],["Tapezierer:in",107.35],["Hilfsmaler:in",98.40],["Spritzlackierer:in (inkl. Anlage)",156.55],["Lernende:r 3. Lehrjahr",76.05],["Lernende:r 2. Lehrjahr",53.70],["Lernende:r 1. Lehrjahr",40.25]];
+const logoSrc=()=>S.s.logo||'';
+const today=()=>new Date().toISOString().slice(0,10);
+const DEFAULT_CAT=[{"g": "Vorarbeiten", "t": "Böden mit Abdeckvlies abdecken, angrenzende Bauteile abkleben, nach Abschluss entfernen", "e": "m²", "p": 4.5}, {"g": "Vorarbeiten", "t": "Möbel zusammenstellen und mit Folie schützen", "e": "pausch.", "p": 150}, {"g": "Vorarbeiten", "t": "Fenster abdecken und abkleben", "e": "m²", "p": 0}, {"g": "Vorarbeiten", "t": "Türen abdecken, Rahmen und Futter abkleben", "e": "lfm", "p": 0}, {"g": "Vorarbeiten", "t": "Bodenabschluss (Sockel) abdecken und abkleben", "e": "lfm", "p": 0}, {"g": "Vorarbeiten", "t": "Untergrund prüfen, reinigen, lose Teile und Altanstriche entfernen", "e": "m²", "p": 2.5}, {"g": "Vorarbeiten", "t": "Risse ausfräsen, mit Armierungsband überbrücken und spachteln", "e": "lfm", "p": 12}, {"g": "Vorarbeiten", "t": "Wände und Decken ganzflächig spachteln, Qualitätsstufe Q3, schleifen", "e": "m²", "p": 18}, {"g": "Vorarbeiten", "t": "Grundieren mit Tiefgrund auf saugende Untergründe", "e": "m²", "p": 4}, {"g": "Vorarbeiten", "t": "Wände: deckender Anstrich Abrieb, 2 Anstriche", "e": "m²", "p": 8.5}, {"g": "Wände und Decken", "t": "Wände: Dispersion matt, 1 Zwischen- und 1 Schlussanstrich, weiss", "e": "m²", "p": 13.5}, {"g": "Wände und Decken", "t": "Decken: deckender Anstrich auf Weissputz Q3", "e": "m²", "p": 11}, {"g": "Wände und Decken", "t": "Decken: Dispersion matt, 1 Zwischen- und 1 Schlussanstrich, weiss", "e": "m²", "p": 15.5}, {"g": "Wände und Decken", "t": "Zuschlag für getönten Farbton (mittlere Farbtöne)", "e": "m²", "p": 1.8}, {"g": "Wände und Decken", "t": "Wände: Silikatfarbe (Mineralfarbe), 2 Anstriche", "e": "m²", "p": 16.5}, {"g": "Wände und Decken", "t": "Raufasertapete liefern und tapezieren, Stösse sauber geschnitten", "e": "m²", "p": 14}, {"g": "Wände und Decken", "t": "Glasfasergewebe liefern und tapezieren, inkl. 2 Anstriche Dispersion", "e": "m²", "p": 32}, {"g": "Holz und Metall", "t": "Türe inkl. Futter und Verkleidung: anschleifen, 1 Zwischen- und 1 Schlusslack, beidseitig", "e": "Stk", "p": 220}, {"g": "Holz und Metall", "t": "Holzfenster innen, Flügel und Rahmen: überholen, anschleifen und lackieren", "e": "Stk", "p": 145}, {"g": "Holz und Metall", "t": "Heizkörper reinigen, anschleifen, 2× Heizkörperlack", "e": "Stk", "p": 110}, {"g": "Holz und Metall", "t": "Stahlzarge entrosten, grundieren und lackieren", "e": "Stk", "p": 85}, {"g": "Holz und Metall", "t": "Sockelleisten anschleifen und lackieren", "e": "lfm", "p": 9.5}, {"g": "Fassade", "t": "Fassade mit Hochdruck reinigen", "e": "m²", "p": 6}, {"g": "Fassade", "t": "Fassade: Silikonharzfarbe, 1 Grund- und 2 Deckanstriche", "e": "m²", "p": 32}, {"g": "Fassade", "t": "Gerüst (Fremdleistung nach Offerte Gerüstbauer)", "e": "pausch.", "p": 0}, {"g": "Zimmer pauschal", "t": "Zimmer 10 bis 15 m²: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 550}, {"g": "Zimmer pauschal", "t": "Zimmer 16 bis 20 m²: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 630}, {"g": "Zimmer pauschal", "t": "Zimmer 21 bis 25 m²: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 840}, {"g": "Zimmer pauschal", "t": "Zimmer 26 bis 30 m²: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 930}, {"g": "Zimmer pauschal", "t": "Küche: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 470}, {"g": "Zimmer pauschal", "t": "Bad, Dusche, WC bis 10 m²: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 455}, {"g": "Zimmer pauschal", "t": "Wohnzimmer mit Küche 30 bis 50 m²: Wände und Decke streichen, Dispersion", "e": "pausch.", "p": 2000}, {"g": "Fenster, Türen, Heizkörper", "t": "Fenster mit 1 Flügel streichen", "e": "Stk", "p": 135}, {"g": "Fenster, Türen, Heizkörper", "t": "Fenster mit 2 Flügeln streichen", "e": "Stk", "p": 195}, {"g": "Fenster, Türen, Heizkörper", "t": "Fenster mit 3 Flügeln streichen", "e": "Stk", "p": 270}, {"g": "Fenster, Türen, Heizkörper", "t": "Balkontüre mit 1 oder 2 Flügeln streichen", "e": "Stk", "p": 345}, {"g": "Fenster, Türen, Heizkörper", "t": "Türe beidseitig inkl. Rahmen streichen", "e": "Stk", "p": 295}, {"g": "Fenster, Türen, Heizkörper", "t": "Türe beidseitig ohne Rahmen streichen", "e": "Stk", "p": 174}, {"g": "Fenster, Türen, Heizkörper", "t": "Türe einseitig ohne Rahmen streichen", "e": "Stk", "p": 77}, {"g": "Fenster, Türen, Heizkörper", "t": "Türfutter, Zargen, Blockrahmen abgewickelt bis 35 cm streichen", "e": "Stk", "p": 125}, {"g": "Fenster, Türen, Heizkörper", "t": "Vorhangbrett bis 45 cm streichen", "e": "Stk", "p": 86}, {"g": "Fenster, Türen, Heizkörper", "t": "Heizkörper oder Heizwand bis 0,5 m² streichen", "e": "Stk", "p": 65}, {"g": "Fenster, Türen, Heizkörper", "t": "Heizkörper oder Heizwand 0,5 bis 1 m² streichen", "e": "Stk", "p": 98}, {"g": "Fenster, Türen, Heizkörper", "t": "Heizröhre streichen", "e": "lfm", "p": 12.75}, {"g": "Fenster, Türen, Heizkörper", "t": "Einbauschrank streichen", "e": "m²", "p": 56}, {"g": "Weitere Preise", "t": "Isoliergrund auftragen", "e": "m²", "p": 10}, {"g": "Weitere Preise", "t": "Weissputz spachteln", "e": "m²", "p": 12}, {"g": "Weitere Preise", "t": "Abrieb (Renogran) spachteln", "e": "m²", "p": 9.5}, {"g": "Weitere Preise", "t": "Betonlasur auftragen", "e": "m²", "p": 19}, {"g": "Weitere Preise", "t": "Fassade streichen", "e": "m²", "p": 22.5}, {"g": "Weitere Preise", "t": "Material (Farbe, Grundierung, Abdeckmaterial)", "e": "pausch.", "p": 500}];
+function blankOfferte(){return{abdeck:'1,00',nr:'O-'+new Date().getFullYear()+'-001',datum:today(),gueltig:30,kunde:'',objekt:'',rabatt:0,anstriche:2,fer:7,fw:0,fd:0,tuer:{b:'1,00',h:'2,10'},fenster:{b:'1,20',h:'1,20'},lt:'0,20',grenze:3,hoehe:'2,50',raeume:[],positionen:[]}}
+const UG=[["Bereits gestrichene, glatte Wand",1],["Neuer Putz / Gipskarton / Raufaser (saugend)",1.3],["Rauputz / Strukturputz",1.4],["Glatte Tapete / Vlies (gestrichen)",1],["Holz (grundiert)",0.9],["Fassade (mineralisch)",1.4]];
+function mkWall(){return{on:true,l:'',h:'',o:[]}}
+function mkRoom(n,h,l,b){return{n:n,l:l??'',b:b??'',h:h,deck:true,xab:'',walls:[mkWall(),mkWall(),mkWall(),mkWall()]}}
+function blankRechnung(){return{nr:'R-'+new Date().getFullYear()+'-001',datum:today(),frist:30,kunde:'',objekt:'',ausfuehrung:'',rabatt:0,akonto:0,skonto:2,skontotage:10,positionen:[]}}
+function sample(){
+  const o=blankOfferte();
+  o.kunde='Familie Muster\nBeispielweg 12\n8000 Zürich';
+  o.objekt='Wohnung 3.5 Zi., 2. OG – Beispiel';
+  o.raeume=[mkRoom('Wohnzimmer',2.5,5.2,4.1),mkRoom('Schlafzimmer',2.5,4,3.4),mkRoom('Korridor',2.5,6,1.4)];
+  o.raeume[0].walls[0].o.push({k:'f',b:2.4,h:1.4,lt:0.15});o.raeume[0].walls[1].o.push({k:'t',b:1,h:2.1,lt:''});
+  o.raeume[1].walls[0].o.push({k:'f',b:1.2,h:1.2,lt:''});o.raeume[1].walls[2].o.push({k:'t',b:1,h:2.1,lt:''});
+  o.raeume[2].walls[1].o.push({k:'t',b:1,h:2.1,lt:''});o.raeume[2].walls[3].o.push({k:'t',b:1,h:2.1,lt:''});
+  o.positionen=[0,6,7,12].map((k,j)=>({t:DEFAULT_CAT[k].t,m:[43.36,142.5,43.36,4][j],e:DEFAULT_CAT[k].e,p:DEFAULT_CAT[k].p}));
+  return{s:{firma:'Meine Malerfirma',adresse:'Werkstrasse 5, 8000 Zürich',tel:'044 000 00 00',mail:'info@beispiel.ch',uid:'CHE-000.000.000 MWST',iban:'CH00 0000 0000 0000 0000 0',stundensatz:107.35,kleinmaterial:0,catVersion:8,mwst:8.1,mwstpflichtig:false,cat:DEFAULT_CAT},offerte:o,rechnung:blankRechnung(),tab:'offerte'};
+}
+let S;
+const num0=v=>{const n=parseFloat(v);return isFinite(n)?n:0};
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(window.KK_INIT&&window.KK_INIT.s&&(!S||!S.s||(window.KK_INIT.ts||0)>(S.ts||0)))S=window.KK_INIT;
+if(!S||!S.s)S=sample();
+if(S.s.mwstpflichtig===undefined)S.s.mwstpflichtig=false;
+(function(){const o=S.offerte,d=blankOfferte();
+  ['tuer','fenster'].forEach(k=>{if(!o[k])o[k]={...d[k]}});if(!o.lt)o.lt='0,20';if(!o.abdeck)o.abdeck='1,00';
+  if(o.grenze===undefined)o.grenze=3;if(!o.hoehe)o.hoehe='2,50';if(o.fw===undefined)o.fw=0;if(o.fd===undefined)o.fd=0;
+  if(o.fer===undefined)o.fer=num0(o.verbrauch)>0?Math.round(10/num0(o.verbrauch))/10:7;
+  (o.raeume||[]).forEach(r=>{if(r.walls)return;r.xab=r.abzug||'';delete r.abzug;r.deck=true;r.walls=[mkWall(),mkWall(),mkWall(),mkWall()]});
+  o.raeume.forEach(r=>r.walls.forEach(w=>{if(!Array.isArray(w.o))w.o=[]}));
+})();
+if(S.s.firma==='Malergeschäft Beispiel GmbH')S.s.firma='Bader Design';
+if(S.s.catVersion===2){const have=new Set((S.s.cat||[]).map(x=>x.t));DEFAULT_CAT.forEach(x=>{if(!have.has(x.t))S.s.cat.push({...x})});S.s.catVersion=3}
+if(S.s.catVersion===3){const ch=(t,o,n)=>{const x=S.s.cat.find(y=>y.t===t);if(x&&Number(x.p)===o)x.p=n};ch(DEFAULT_CAT[0].t,3.5,4.5);ch(DEFAULT_CAT.find(y=>/^Grundieren mit Tiefgrund/.test(y.t)).t,3.8,4);const have=new Set(S.s.cat.map(x=>x.t));DEFAULT_CAT.forEach(x=>{if(!have.has(x.t))S.s.cat.push({...x})});S.s.catVersion=4}
+if(S.s.catVersion===4){const ch=(t,o,n)=>{const x=S.s.cat.find(y=>y.t===t);if(x&&Number(x.p)===o)x.p=n};ch('Weissputz spachteln',10.25,12);ch('Betonlasur auftragen',14.25,19);S.s.catVersion=5}
+if(S.s.catVersion===5){const have=new Set(S.s.cat.map(x=>x.t));DEFAULT_CAT.forEach(x=>{if(!have.has(x.t))S.s.cat.push({...x})});S.s.catVersion=6}
+if(S.s.catVersion===6){(S.s.cat||[]).forEach(x=>{if(x.t==='Türen abdecken, Rahmen und Futter abkleben')x.t='Türen einseitig abdecken, Rahmen und Futter abkleben'});['offerte','rechnung'].forEach(d=>(S[d].positionen||[]).forEach(x=>{if(x.t==='Türen abdecken, Rahmen und Futter abkleben')x.t='Türen einseitig abdecken, Rahmen und Futter abkleben'}));const have=new Set(S.s.cat.map(x=>x.t));DEFAULT_CAT.forEach(x=>{if(!have.has(x.t))S.s.cat.push({...x})});S.s.catVersion=7}
+if(S.s.catVersion===7){S.s.cat=S.s.cat.filter(x=>x.t!=='Türen beidseitig abdecken, Rahmen und Futter abkleben');S.s.cat.forEach(x=>{if(x.t==='Türen einseitig abdecken, Rahmen und Futter abkleben')x.t='Türen abdecken, Rahmen und Futter abkleben'});
+  ['offerte','rechnung'].forEach(d=>(S[d].positionen||[]).forEach(x=>{const b2=x.t==='Türen beidseitig abdecken, Rahmen und Futter abkleben',b1=x.t==='Türen einseitig abdecken, Rahmen und Futter abkleben';if(!(b1||b2))return;x.t='Türen abdecken, Rahmen und Futter abkleben';if(d==='offerte'){x.ak='tuer';x.auto=true;x.base='Türen abdecken, Rahmen und Futter abkleben';x.sides=b2?2:1}}));
+  const have=new Set(S.s.cat.map(x=>x.t));DEFAULT_CAT.forEach(x=>{if(!have.has(x.t))S.s.cat.push({...x})});S.s.catVersion=8}
+if(S.s.catVersion!==8){S.s.cat=DEFAULT_CAT.map(c=>({...c}));S.s.catVersion=8;if(num0(S.s.stundensatz)===78)S.s.stundensatz=107.35;if(num0(S.s.kleinmaterial)===3)S.s.kleinmaterial=0}
+const PREP=/abdeck|vorbereit|untergrund|spachtel|^grundier|^riss|^möbel/i;
+const isPrep=t=>PREP.test(String(t||''));
+const akind=p=>{const t=String(p.t||''),e=String(p.e||'');
+  if(/abdeck/i.test(t)&&/fenster/i.test(t))return 'fenster';
+  if(/abdeck/i.test(t)&&/tür|tuer/i.test(t))return 'tuer';
+  if(/bodenabschluss/i.test(t)||(/abdeck/i.test(t)&&/sockel/i.test(t)))return 'sockel';
+  if(/abdeck/i.test(t)&&/m²|m2/i.test(e))return 'boden';return ''};
+const isAbd=p=>!!akind(p);
+const fkind=p=>{const t=String(p.t||''),e=String(p.e||'');if(!/m²|m2/i.test(e))return akind(p);
+  if(/^Allgemeine/i.test(t))return 'flaeche';const k=akind(p);if(k)return k;
+  const w=/wand|wände/i.test(t),d=/(^|[^a-zäöü])decken?([^a-zäöü]|$)/i.test(t);return w&&!d?'wand':d&&!w?'decke':'flaeche'};
+function areaSum(){let W=0,D=0;(S.offerte.raeume||[]).forEach(r=>{const c=roomCalc(r);W+=c.wand;D+=c.decke});return{W:r2(W),D:r2(D)}}
+function pnum(v){const n=parseFloat(String(v??'').replace(',','.'));return isFinite(n)?n:0}
+function floorArea(){const o=S.offerte,st=pnum(o.abdeck)||1;
+  return Math.round(100*(o.raeume||[]).reduce((a,r)=>{
+    if(r.deck)return a+pnum(r.l)*pnum(r.b);
+    return a+(r.walls||[]).reduce((b,w,j)=>b+(w.on===false?0:(pnum(w.l)||(j%2===0&&j<4?pnum(r.l):j<4?pnum(r.b):0))*st),0)},0))/100}
+function wallLen(r,j){const w=r.walls[j];return pnum(w.l)||(j===0||j===2?pnum(r.l):j===1||j===3?pnum(r.b):0)}
+function bodenLfm(){const R=S.offerte.raeume||[];return R.length>0&&!R.some(r=>r.deck)}
+function wallsTotal(){let v=0;(S.offerte.raeume||[]).forEach(r=>(r.walls||[]).forEach((w,j)=>{if(w.on!==false)v+=wallLen(r,j)}));return Math.round(v*100)/100}
+function autoValP(p,k){return autoVal(k)*(k==='tuer'?(pnum(p.sides)===2?2:1):1)}
+function autoVal(k){const R=S.offerte.raeume||[];let v=0;
+  if(k==='wand')return areaSum().W;if(k==='decke')return areaSum().D;if(k==='flaeche'){const a=areaSum();return r2(a.W+a.D)}
+  if(k==='boden')return bodenLfm()?wallsTotal():floorArea();
+  R.forEach(r=>(r.walls||[]).forEach((w,j)=>{if(w.on===false)return;
+    if(k==='sockel')v+=wallLen(r,j);
+    (w.o||[]).forEach(x=>{if(k==='fenster'&&x.k==='f')v+=pnum(x.b)*pnum(x.h);if(k==='tuer'&&x.k==='t')v+=(pnum(x.b)+2*pnum(x.h))})}));
+  return Math.round(v*100)/100}
+function markAuto(p){const k=fkind(p);if(k&&p.auto===undefined){p.auto=true;p.ak=k;if(k==='tuer'){p.base=p.base||p.t;p.sides=p.sides||1}const F=autoValP(p,k);if(F>0)p.m=F;if(k==='boden'&&bodenLfm())p.e='lfm'}return p}
+(function(){const c=S.s.cat;c.forEach(x=>{if(isPrep(x.t))x.g='Vorarbeiten'});
+  const order=['Vorarbeiten'];c.forEach(x=>{const g=x.g||'';if(!order.includes(g))order.push(g)});
+  (S.offerte.positionen||[]).forEach(p=>{const k=akind(p);if(p.auto===undefined&&k==='boden'&&floorArea()>0&&Math.abs(num0(p.m)-floorArea())<0.1){p.auto=true;p.ak=k}});
+  S.s.cat=c.map((x,i)=>({x,i})).sort((p,q)=>order.indexOf(p.x.g||'')-order.indexOf(q.x.g||'')||p.i-q.i).map(o=>o.x);
+})();
+function save(){S.ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}try{if(window.parent!==window)parent.postMessage({kk:'save',s:S},'*')}catch(e){}}
+
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num=v=>{const n=parseFloat(String(v??'').replace(',','.'));return isFinite(n)?n:0};
+const r05=x=>Math.round(x*20)/20;
+const r2=x=>Math.round(x*100)/100;
+const chf=x=>num(x).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const qty=x=>num(x).toLocaleString('de-CH',{maximumFractionDigits:2});
+const dch=d=>{if(!d)return'';const[y,m,t]=d.split('-');return`${t}.${m}.${y}`};
+const addDays=(d,n)=>{const x=new Date(d||today());x.setDate(x.getDate()+num(n));return x.toISOString().slice(0,10)};
+
+function getPath(p){const parts=p.split('.');let o=S;for(const k of parts)o=o?.[k];return o}
+function setPath(p,v){const parts=p.split('.');let o=S;for(let i=0;i<parts.length-1;i++)o=o[parts[i]];o[parts.at(-1)]=v}
+
+/* ---------- Rechnen ---------- */
+const ueG=()=>num(S.offerte.grenze);
+const oA=x=>num(x.b)*num(x.h);
+const oBig=x=>{const a=oA(x);return a>0&&(ueG()<=0||a>=ueG())};
+const oLb=x=>ueG()>0?(x.k==='t'?num(x.b)+2*num(x.h):2*(num(x.b)+num(x.h)))*num(x.lt):0;
+const autoL=(r,j)=>j===0||j===2?num(r.l):(j===1||j===3?num(r.b):0);
+function wallCalc(r,j){
+  const w=r.walls[j],l=num(w.l)||autoL(r,j),hh=num(w.h)||num(r.h),m2=l*hh;let ded=0,lb=0,ue=false;
+  (w.o||[]).forEach(x=>{const a=oA(x);if(oBig(x)){ded+=a;lb+=oLb(x)}else if(a>0)ue=true});
+  const ab=m2?Math.min(m2,ded):0,lbn=m2?lb:0;
+  return{on:w.on!==false,l,h:hh,m2,ab,lb:lbn,net:m2-ab+lbn,ue:!!(m2&&ue),ch:!!(num(w.l)||num(w.h))};
+}
+function roomCalc(r){
+  let wm=0,ab=0,lb=0,wn=0;
+  r.walls.forEach((w,j)=>{const c=wallCalc(r,j);if(c.on){wm+=c.m2;ab+=c.ab;lb+=c.lb;wn+=c.net}});
+  wn=Math.max(0,wn-num(r.xab));
+  const dk=r.deck?num(r.l)*num(r.b):0;
+  return{wand:r2(wn),decke:r2(dk),u:r2(2*(num(r.l)+num(r.b))),wm:r2(wm),ab:r2(ab+num(r.xab)),lb:r2(lb)};
+}
+function totals(doc){
+  const sub=doc.positionen.reduce((a,p)=>a+r2(num(p.m)*num(p.p)),0);
+  const km=r2(sub*num(S.s.kleinmaterial)/100);
+  const brutto1=sub+km;
+  const rab=r2(brutto1*num(doc.rabatt)/100);
+  const netto=r2(brutto1-rab);
+  const mwst=S.s.mwstpflichtig?r2(netto*num(S.s.mwst)/100):0;
+  const total=r05(netto+mwst);
+  const akonto=num(doc.akonto);
+  const offen=r05(total-akonto);
+  const skonto=r05(offen*num(doc.skonto)/100);
+  return{sub:r2(sub),km,rab,netto,mwst,total,akonto,offen,skonto};
+}
+
+/* ---------- Rendern ---------- */
+function bindStatic(){
+  document.querySelectorAll('[data-k]').forEach(el=>{const v=getPath(el.dataset.k);if(el.type==='checkbox')el.checked=!!v;else el.value=v??''});
+}
+let ed={};
+const f2=x=>(Math.round(x*100)/100).toFixed(2).replace('.',',');
+function wallHtml(r,i,w,j){
+  const k=i+'-'+j,P=`offerte.raeume.${i}.walls.${j}`;
+  const grp={};(w.o||[]).forEach(x=>{const g=x.k+'|'+x.b+'|'+x.h+'|'+x.lt;(grp[g]=grp[g]||{x,n:0}).n++});
+  const ol=Object.values(grp).map(({x,n})=>`<div class="ol"><span>${n} × ${x.k==='t'?'Tür':'Fenster'} ${f2(num(x.b))} × ${f2(num(x.h))} m = ${f2(oA(x)*n)} m² · ${oBig(x)?'abgezogen, Leibung +'+f2(oLb(x)*n)+' m²':'übermessen'}</span></div>`).join('');
+  const cnt=k=>(w.o||[]).filter(x=>x.k===k).length;
+  const stp=(k,nm)=>`<div class="stp"><span>${nm}</span><button class="btn pl" data-act="decO" data-kind="${k}" data-i="${i}" data-j="${j}" aria-label="${nm} weniger">−</button><b>${cnt(k)}</b><button class="btn pl" data-act="incO" data-kind="${k}" data-i="${i}" data-j="${j}" aria-label="${nm} mehr">+</button></div>`;
+  return `<div class="wb"><div class="wr">
+    <button class="wl" data-act="editWall" data-i="${i}" data-j="${j}" aria-label="Wand ${j+1} Masse ändern"><b>Wand ${j+1}</b><span class="wa" data-wa="${k}"></span></button>
+    <div class="sts">${stp("f","Fenster")}${stp("t","Türen")}</div></div>
+    ${ol}
+    <div class="ep" id="ep-${k}"${ed[k]?'':' hidden'}>
+      <div><div class="fl">Wandlänge (m)</div><input id="rm-${i}-w${j}-l" inputmode="decimal" data-k="${P}.l" value="${esc(w.l)}"></div>
+      <div><div class="fl">Wandhöhe (m)</div><input id="rm-${i}-w${j}-h" inputmode="decimal" data-k="${P}.h" value="${esc(w.h)}"></div>
+      <button class="lk" data-act="resetWall" data-i="${i}" data-j="${j}">Automatisch aus Zimmermassen</button>
+      ${j>=4?`<button class="lk" data-act="delWall" data-i="${i}" data-j="${j}">Wand entfernen</button>`:''}
+    </div></div>`;
+}
+function renderRooms(){
+  const o=S.offerte;
+  $('#rooms').innerHTML=o.raeume.map((r,i)=>{
+    const P=`offerte.raeume.${i}`,allOn=r.walls.every(w=>w.on!==false),any=r.walls.some(w=>w.on!==false);
+    const chips=r.walls.map((w,j)=>`<button class="chip${w.on!==false?' on':''}" data-act="togWall" data-i="${i}" data-j="${j}" data-wchip="${i}-${j}" aria-pressed="${w.on!==false}"></button>`).join('')
+      +`<button class="chip all${allOn?' on':''}" data-act="allWalls" data-i="${i}" aria-pressed="${allOn}">Alle Wände</button>`;
+    const walls=r.walls.map((w,j)=>w.on===false?'':wallHtml(r,i,w,j)).join('');
+    return `<div class="fcard">
+     <div class="fh"><b data-rn="${i}">${esc(r.n)||'Zimmer'}</b><button class="lk" data-act="delRoom" data-i="${i}">Entfernen</button></div>
+     <div class="fl">Raumbezeichnung</div><input id="rm-${i}-n" data-k="${P}.n" value="${esc(r.n)}">
+     <div class="f3">
+       <div><div class="fl">Länge (m)</div><input id="rm-${i}-l" inputmode="decimal" data-k="${P}.l" value="${esc(r.l)}"></div>
+       <div><div class="fl">Breite (m)</div><input id="rm-${i}-b" inputmode="decimal" data-k="${P}.b" value="${esc(r.b)}"></div>
+       <div><div class="fl">Höhe (m)</div><input id="rm-${i}-h" inputmode="decimal" data-k="${P}.h" value="${esc(r.h)}"></div>
+     </div>
+     <div class="fl c">Welche Wände werden gestrichen?</div>
+     <div class="wchips">${chips}</div>
+     <button class="addw" data-act="addWall" data-i="${i}">+ weitere Wand (z. B. Nische)</button>
+     <div class="fl">${any?'Masse und Abzüge pro Wand':'Keine Wand gewählt'}</div>
+     ${walls}
+     <div class="std" data-std>Standard: Fenster ${f2(num(o.fenster.b))} × ${f2(num(o.fenster.h))} m · Tür ${f2(num(o.tuer.b))} × ${f2(num(o.tuer.h))} m (änderbar oben)</div>
+     <label class="chk"><input type="checkbox" id="rm-${i}-d" data-k="${P}.deck"${r.deck?' checked':''}><span data-dk="${i}"></span></label>
+     ${num(r.xab)>0?`<div class="fl">Zusätzliche Abzüge m² (aus früherer Version)</div><input id="rm-${i}-x" inputmode="decimal" data-k="${P}.xab" value="${esc(r.xab)}">`:''}
+     <div class="res"><div><small>Wandfläche</small><b data-ra="${i}"></b></div><div><small>Abzüge</small><b class="m" data-rb="${i}"></b></div><div><small>Netto Wand</small><b data-rc="${i}"></b></div></div>
+   </div>`}).join('')||'<p class="hint">Noch keine Zimmer erfasst.</p>';
+}
+function renderUg(){const h=UG.map((u,i)=>`<option value="${i}">${esc(u[0])}</option>`).join('');$('#f-ugw').innerHTML=h;$('#f-ugd').innerHTML=h}
+function openO(i,j,kind){
+  const o=S.offerte,d=kind==='t'?o.tuer:o.fenster,nm=kind==='t'?'Tür':'Fenster',w=o.raeume[i].walls[j];
+  const ov=document.createElement('div');ov.className='dlg-ov';
+  ov.innerHTML=`<div class="dlg" role="dialog" aria-modal="true" aria-label="${nm} hinzufügen"><h3>${nm} hinzufügen · Wand ${j+1}</h3>
+   <div class="set-grid" style="margin:0"><label>Breite m<input id="dl-b" inputmode="decimal"></label><label>Höhe m<input id="dl-h" inputmode="decimal"></label><label>Fläche<div class="out" id="dl-a"></div></label></div>
+   <div class="note" id="dl-note"></div>
+   <label id="dl-lbw">Leibungstiefe m (Pflicht)<input id="dl-lt" inputmode="decimal" placeholder="z. B. 0,20"></label>
+   <div class="hint" id="dl-info"></div>
+   <div class="row"><button class="btn solid" id="dl-ok">Übernehmen</button><button class="btn" id="dl-no">Abbrechen</button></div></div>`;
+  document.body.appendChild(ov);
+  const q=s=>ov.querySelector(s),B=q('#dl-b'),H=q('#dl-h'),L=q('#dl-lt'),ok=q('#dl-ok');
+  B.value=d.b;H.value=d.h;
+  const cur=()=>({k:kind,b:B.value,h:H.value,lt:L.value});
+  function upd(){
+    const x=cur(),a=oA(x),big=oBig(x),g=ueG(),n=q('#dl-note');
+    q('#dl-a').textContent=qty(r2(a))+' m²';q('#dl-lbw').hidden=!big;
+    if(!a){n.className='note';n.textContent='Bitte Breite und Höhe eingeben.';q('#dl-info').textContent='';ok.disabled=true;return}
+    if(!big){n.className='note ok';n.textContent=`Fläche unter ${qty(g)} m²: wird übermessen.`;q('#dl-info').textContent='Kein Abzug, keine Leibung nötig.';ok.disabled=false;return}
+    n.className='note warn';n.textContent=`Ab ${qty(g)} m²: Abzug −${qty(r2(a))} m². Leibung ist Pflicht.`;
+    const good=num(L.value)>0;ok.disabled=!good;
+    q('#dl-info').textContent=good?`Leibungsfläche ${qty(r2(oLb(x)))} m² wird zur Malerfläche addiert.`:'Bitte die Tiefe der Leibung eintragen.';
+  }
+  [B,H,L].forEach(e=>e.addEventListener('input',upd));
+  const shut=()=>{ov.remove();document.removeEventListener('keydown',esc2)};
+  const esc2=e=>{if(e.key==='Escape')shut()};document.addEventListener('keydown',esc2);
+  q('#dl-no').addEventListener('click',shut);ov.addEventListener('click',e=>{if(e.target===ov)shut()});
+  ok.addEventListener('click',()=>{const x=cur();if(!oA(x)||(oBig(x)&&!(num(L.value)>0)))return;if(!oBig(x))x.lt='';w.o.push(x);shut();renderRooms();recalc();save()});
+  upd();B.focus();B.select();
+}
+function posHtml(doc,list){
+  return list.map((p,i)=>`
+   <div class="item">
+     <div class="item-head"><label>Beschreibung<textarea id="${doc}-p${i}-t" class="longtxt" rows="1" data-k="${doc}.positionen.${i}.t">${esc(p.t)}</textarea></label>
+     <button class="btn small del" data-act="delPos" data-doc="${doc}" data-i="${i}" aria-label="Position löschen">✕</button></div>
+     <div class="item-grid">
+       <label>Menge<input id="${doc}-p${i}-m" type="number" step="0.01" data-k="${doc}.positionen.${i}.m" value="${esc(p.m)}"></label>
+       <label>Einheit<input id="${doc}-p${i}-e" data-k="${doc}.positionen.${i}.e" value="${esc(p.e)}"></label>
+       <label>Preis CHF<input id="${doc}-p${i}-p" type="number" step="0.05" data-k="${doc}.positionen.${i}.p" value="${esc(p.p)}"></label>
+       <div class="out" data-line="${doc}-${i}"></div>
+     </div>
+     ${doc==='offerte'&&p.ak==='tuer'?`<label>Türen abdecken<select id="${doc}-p${i}-s" data-k="${doc}.positionen.${i}.sides"><option value="1"${pnum(p.sides)!==2?' selected':''}>einseitig</option><option value="2"${pnum(p.sides)===2?' selected':''}>beidseitig</option></select></label>`:''}
+   </div>`).join('')||'<p class="hint">Noch keine Positionen. Unten aus dem Katalog wählen oder „+ Position".</p>';
+}
+function sortPos(){const P=S.offerte.positionen;S.offerte.positionen=P.map((p,i)=>({p,i})).sort((a,b)=>(isPrep(a.p.t)?0:1)-(isPrep(b.p.t)?0:1)||a.i-b.i).map(o=>o.p)}
+function renderPos(){sortPos();$('#o-pos').innerHTML=posHtml('offerte',S.offerte.positionen);$('#r-pos').innerHTML=posHtml('rechnung',S.rechnung.positionen);fitAll()}
+function renderCat(){
+  renderCatButtonsOnly();
+  const inO=new Set(S.offerte.positionen.map(p=>p.base||p.t));let g0=null;
+  $('#s-cat').innerHTML=S.s.cat.map((c,i)=>{const gh=c.g&&c.g!==g0?`<p class="kicker" style="margin:10px 0 0">${esc(g0=c.g)}</p>`:'';return gh+`
+   <div class="item"><label class="kchk"><input type="checkbox" data-act="catOff" data-i="${i}"${inO.has(c.t)?' checked':''}>In Offerte</label><div class="item-head"><label>Leistung<textarea id="c${i}-t" class="longtxt" rows="1" data-k="s.cat.${i}.t">${esc(c.t)}</textarea></label>
+   <button class="btn small del" data-act="delCat" data-i="${i}" aria-label="Leistung löschen">✕</button></div>
+   <div class="grid"><label>Einheit<input id="c${i}-e" data-k="s.cat.${i}.e" value="${esc(c.e)}"></label>
+   <label>Preis CHF<input id="c${i}-p" type="number" step="0.05" data-k="s.cat.${i}.p" value="${esc(c.p)}"></label></div></div>`}).join('');
+  const n=S.s.cat.filter(c=>inO.has(c.t)).length;$('#k-info').textContent=n?n+(n>1?' Leistungen':' Leistung')+' in der Offerte':'';
+  fitAll();
+}
+function renderLogo(){const l=logoSrc();['#hdr-logo','#s-logo-prev'].forEach(id=>{const e=$(id);if(l)e.src=l;else e.removeAttribute('src');e.hidden=!l})}
+function renderRegie(){$('#r-regiecat').innerHTML=REGIE.map((r,i)=>`<option value="${i}"${i===3?' selected':''}>${esc(r[0])} – CHF ${chf(r[1])}/h</option>`).join('')}
+function renderAll(){renderUg();bindStatic();renderRegie();renderLogo();renderRooms();renderPos();renderCat();recalc()}
+
+function totalsHtml(t,doc){
+  let h=`<div>Positionen</div><div>${chf(t.sub)}</div>`;
+  if(t.km)h+=`<div>Kleinmaterial ${qty(S.s.kleinmaterial)} %</div><div>${chf(t.km)}</div>`;
+  if(t.rab)h+=`<div>Rabatt ${qty(doc.rabatt)} %</div><div>−${chf(t.rab)}</div>`;
+  if(S.s.mwstpflichtig)h+=`<div>Total exkl. MWST</div><div>${chf(t.netto)}</div><div>MWST ${qty(S.s.mwst)} %</div><div>${chf(t.mwst)}</div>`;
+  h+=`<div class="grand">Total CHF</div><div>${chf(t.total)}</div>`;
+  if(doc===S.rechnung&&t.akonto){h+=`<div>abzüglich Akonto</div><div>−${chf(t.akonto)}</div><div class="grand">Zu bezahlen CHF</div><div>${chf(t.offen)}</div>`}
+  return h;
+}
+function sheetHtml(kind){
+  const d=S[kind],t=totals(d),s=S.s,isR=kind==='rechnung';
+  const rows=d.positionen.map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.t)}</td><td class="r">${qty(p.m)} ${esc(p.e)}</td><td class="r">${chf(p.p)}</td><td class="r">${chf(r2(num(p.m)*num(p.p)))}</td></tr>`).join('');
+  let f=`<tr><td colspan="4">Total Positionen</td><td class="r">${chf(t.sub)}</td></tr>`;
+  if(t.km)f+=`<tr><td colspan="4">Kleinmaterial ${qty(s.kleinmaterial)} %</td><td class="r">${chf(t.km)}</td></tr>`;
+  if(t.rab)f+=`<tr><td colspan="4">Rabatt ${qty(d.rabatt)} %</td><td class="r">−${chf(t.rab)}</td></tr>`;
+  if(s.mwstpflichtig)f+=`<tr><td colspan="4">Total exkl. MWST</td><td class="r">${chf(t.netto)}</td></tr><tr><td colspan="4">MWST ${qty(s.mwst)} %</td><td class="r">${chf(t.mwst)}</td></tr>`;
+  f+=`<tr class="sum"><td colspan="4">Total${s.mwstpflichtig?' inkl. MWST':''} CHF</td><td class="r">${chf(t.total)}</td></tr>`;
+  if(isR&&t.akonto)f+=`<tr><td colspan="4">abzüglich Akontozahlung</td><td class="r">−${chf(t.akonto)}</td></tr><tr class="sum"><td colspan="4">Zu bezahlen CHF</td><td class="r">${chf(t.offen)}</td></tr>`;
+  let foot=isR
+    ?`Zahlbar innert ${qty(d.frist)} Tagen, bis ${dch(addDays(d.datum,d.frist))}.`+(num(d.skonto)?`\nBei Zahlung innert ${qty(d.skontotage)} Tagen ${qty(d.skonto)} % Skonto (CHF ${chf(t.skonto)}).`:'')+(s.iban?`\nIBAN: ${s.iban}`:'')
+    :`Diese Offerte ist gültig bis ${dch(addDays(d.datum,d.gueltig))}. Abrechnung nach effektivem Ausmass.\nWir danken für Ihre Anfrage und freuen uns auf Ihren Auftrag.`;
+  return `<div class="head">${logoSrc()?`<img src="${logoSrc()}" alt="">`:''}<div><b>${esc(s.firma)}</b><span class="from" style="border:0;margin:0;padding:0">${esc(s.adresse)}${s.tel?' · '+esc(s.tel):''}${s.mail?' · '+esc(s.mail):''}${s.mwstpflichtig&&s.uid?' · '+esc(s.uid):''}</span></div></div>
+   <div class="to">${esc(d.kunde)||'<span style="color:var(--muted)">Kunde</span>'}</div>
+   <h3>${isR?'Rechnung':'Offerte'} ${esc(d.nr)}</h3>
+   <div class="meta">${dch(d.datum)}${d.objekt?' · Objekt: '+esc(d.objekt):''}${isR&&d.ausfuehrung?' · Ausführung: '+esc(d.ausfuehrung):''}</div>
+   <table><thead><tr><th>Pos.</th><th>Leistung</th><th class="r">Menge</th><th class="r">Preis</th><th class="r">Betrag</th></tr></thead>
+   <tbody>${rows}</tbody><tfoot>${f}</tfoot></table>
+   <div class="foot">${esc(foot)}</div>`;
+}
+function recalc(){
+  // Räume
+  let W=0,D=0;const T=(sel,t)=>{const e=document.querySelector(sel);if(e)e.textContent=t};
+  S.offerte.raeume.forEach((r,i)=>{const c=roomCalc(r);W+=c.wand;D+=c.decke;
+    T(`[data-rn="${i}"]`,r.n||'Zimmer');T(`[data-dk="${i}"]`,`Decke streichen (${f2(num(r.l)*num(r.b))} m²)`);
+    T(`[data-ra="${i}"]`,f2(c.wm)+' m²');T(`[data-rb="${i}"]`,'−'+f2(c.ab)+' m²'+(c.lb?' +'+f2(c.lb):''));T(`[data-rc="${i}"]`,f2(c.wand)+' m²');
+    r.walls.forEach((w,j)=>{const wc=wallCalc(r,j),k=i+'-'+j;
+      T(`[data-wchip="${k}"]`,`Wand ${j+1} · ${wc.l?f2(wc.l):'–'}`);
+      T(`[data-wa="${k}"]`,wc.m2?`${f2(wc.m2)} m²`+(wc.ab?` · Abzug −${f2(wc.ab)} m²`:'')+(wc.lb?` · Leibung +${f2(wc.lb)} m²`:'')+(wc.ue?' · Öffnungen übermessen':''):'');
+      const il=document.getElementById(`rm-${i}-w${j}-l`),ih=document.getElementById(`rm-${i}-w${j}-h`);
+      if(il)il.placeholder=autoL(r,j)?f2(autoL(r,j)):'Länge';if(ih)ih.placeholder=num(r.h)?f2(num(r.h)):'Höhe';
+    });
+  });
+  W=r2(W);D=r2(D);
+  document.querySelectorAll('#an-chips .chip').forEach(b=>b.classList.toggle('on',+b.dataset.n===(num(S.offerte.anstriche)||2)));
+  const er=num(S.offerte.fer),an=num(S.offerte.anstriche)||2,l1=x=>(Math.round(x*10)/10).toFixed(1).replace('.',',');
+  let fw='–',fd='–',ft='–';
+  if(er){const f=(UG[num(S.offerte.fw)]||UG[0])[1],g=(UG[num(S.offerte.fd)]||UG[0])[1],lw=W*f/er*an*1.1,ld=D*g/er*an*1.1;fw=l1(lw)+' l';fd=l1(ld)+' l';ft=l1(lw+ld)+' Liter'}
+  $('#gtot').innerHTML=`<h3>Gesamtaufmass</h3>`+S.offerte.raeume.map(r=>{const c=roomCalc(r);return `<div class="tl"><span>${esc(r.n)||'Zimmer'}</span><span>${f2(c.wand+c.decke)} m²</span></div>`}).join('')
+   +`<div class="tk">Wandfläche netto (gesamt)</div><div class="tv">${f2(W)} m²</div><div class="tk">Deckenfläche (gesamt)</div><div class="tv">${f2(D)} m²</div><div class="tk">Gesamtfläche</div><div class="tg2">${f2(r2(W+D))} m²</div>`
+   +`<div class="tk">Farbe Wände ca. (inkl. 10 % Reserve)</div><div class="tv">${fw}</div><div class="tk">Farbe Decke ca. (inkl. 10 % Reserve)</div><div class="tv">${fd}</div><div class="tk">Farbe total ca.</div><div class="tg2">${ft}</div>`;
+  // Zeilen
+  S.offerte.positionen.forEach(p=>{if(p.auto===undefined&&num0(p.m)===1){const k=fkind(p);if(k==='wand'||k==='decke'||k==='flaeche'){p.auto=true;p.ak=k}}});
+  S.offerte.positionen.forEach((p,i)=>{if(p.auto!==true)return;const k=p.ak||fkind(p);if(!k)return;p.ak=k;const F=autoValP(p,k);if((k==='wand'||k==='decke'||k==='flaeche')&&!(F>0))return;if(k==='tuer'&&p.base){const t=p.base+' ('+(pnum(p.sides)===2?'beidseitig':'einseitig')+')';if(p.t!==t){p.t=t;const te=document.getElementById(`offerte-p${i}-t`);if(te)te.value=t}}if(num0(p.m)!==F){p.m=F;const el=document.getElementById(`offerte-p${i}-m`);if(el)el.value=F}if(k==='boden'){const u=bodenLfm()?'lfm':'m²';if(p.e!==u){p.e=u;const el=document.getElementById(`offerte-p${i}-e`);if(el)el.value=u}}});
+  ['offerte','rechnung'].forEach(doc=>S[doc].positionen.forEach((p,i)=>{const el=document.querySelector(`[data-line="${doc}-${i}"]`);if(el)el.textContent=chf(r2(num(p.m)*num(p.p)))}));
+  $('#o-totals').innerHTML=totalsHtml(totals(S.offerte),S.offerte);
+  $('#r-totals').innerHTML=totalsHtml(totals(S.rechnung),S.rechnung);
+  $('#o-sheet').innerHTML=sheetHtml('offerte');
+  $('#r-sheet').innerHTML=sheetHtml('rechnung');
+}
+
+/* ---------- Text kopieren ---------- */
+function plain(kind){
+  const d=S[kind],t=totals(d),s=S.s,isR=kind==='rechnung',L=[];
+  const pad=(a,b)=>a+' '.repeat(Math.max(1,46-a.length-b.length))+b;
+  L.push(s.firma,s.adresse,[s.tel,s.mail].filter(Boolean).join(' · '),s.mwstpflichtig?s.uid:'','',d.kunde,'',`${isR?'RECHNUNG':'OFFERTE'} ${d.nr}`,`Datum: ${dch(d.datum)}`);
+  if(d.objekt)L.push('Objekt: '+d.objekt);
+  if(isR&&d.ausfuehrung)L.push('Ausführung: '+d.ausfuehrung);
+  L.push('');
+  d.positionen.forEach((p,i)=>{L.push(`${i+1}. ${p.t}`);L.push(pad(`   ${qty(p.m)} ${p.e} à ${chf(p.p)}`,chf(r2(num(p.m)*num(p.p)))))});
+  L.push('-'.repeat(46),pad('Total Positionen',chf(t.sub)));
+  if(t.km)L.push(pad(`Kleinmaterial ${qty(s.kleinmaterial)} %`,chf(t.km)));
+  if(t.rab)L.push(pad(`Rabatt ${qty(d.rabatt)} %`,'-'+chf(t.rab)));
+  if(s.mwstpflichtig)L.push(pad('Total exkl. MWST',chf(t.netto)),pad(`MWST ${qty(s.mwst)} %`,chf(t.mwst)));
+  L.push('='.repeat(46),pad(s.mwstpflichtig?'TOTAL inkl. MWST CHF':'TOTAL CHF',chf(t.total)));
+  if(isR&&t.akonto)L.push(pad('abzüglich Akonto','-'+chf(t.akonto)),pad('ZU BEZAHLEN CHF',chf(t.offen)));
+  L.push('');
+  if(isR){L.push(`Zahlbar innert ${qty(d.frist)} Tagen, bis ${dch(addDays(d.datum,d.frist))}.`);if(num(d.skonto))L.push(`Bei Zahlung innert ${qty(d.skontotage)} Tagen ${qty(d.skonto)} % Skonto (CHF ${chf(t.skonto)}).`);if(s.iban)L.push('IBAN: '+s.iban)}
+  else L.push(`Gültig bis ${dch(addDays(d.datum,d.gueltig))}. Abrechnung nach effektivem Ausmass.`);
+  return L.filter((x,i,a)=>!(x===''&&a[i-1]==='')).join('\n');
+}
+function toast(id,msg){const el=$(id);el.textContent=msg;setTimeout(()=>{el.textContent=''},2500)}
+async function copy(kind){
+  const txt=plain(kind),id=kind==='offerte'?'#o-toast':'#r-toast';
+  try{await navigator.clipboard.writeText(txt);toast(id,'Kopiert')}
+  catch(e){const sh=$(kind==='offerte'?'#o-sheet':'#r-sheet');const rg=document.createRange();rg.selectNodeContents(sh);const sel=getSelection();sel.removeAllRanges();sel.addRange(rg);toast(id,'Text markiert – jetzt kopieren')}
+}
+
+/* ---------- Ereignisse ---------- */
+document.addEventListener('input',e=>{
+  const k=e.target.dataset.k;if(!k)return;
+  {const mm=/^offerte\.positionen\.(\d+)\.m$/.exec(k);if(mm&&S.offerte.positionen[+mm[1]])S.offerte.positionen[+mm[1]].auto=false}
+  setPath(k,e.target.type==='checkbox'?e.target.checked:e.target.type==='number'?(e.target.value===''?'':num(e.target.value)):e.target.value);
+  if(k.startsWith('s.cat'))renderCatButtonsOnly();
+  recalc();save();
+});
+function renderCatButtonsOnly(){
+  const h=doc=>{let g=null,out='';S.s.cat.forEach((c,i)=>{if(c.g&&c.g!==g){g=c.g;out+=`<p class="catg">${esc(g)}</p>`}out+=`<button data-act="fromCat" data-doc="${doc}" data-i="${i}">${esc(c.t)}<span>${chf(c.p)}/${esc(c.e)}</span></button>`});return out};
+  const oc=$('#o-cat'),rc=$('#r-cat');if(oc)oc.innerHTML=h('offerte');if(rc)rc.innerHTML=h('rechnung');
+}
+document.addEventListener('change',e=>{
+  if(e.target.id!=='s-logo-file'||!e.target.files[0])return;
+  const fr=new FileReader();
+  fr.onload=()=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas'),k=Math.min(1,320/img.width);c.width=img.width*k;c.height=img.height*k;c.getContext('2d').drawImage(img,0,0,c.width,c.height);S.s.logo=c.toDataURL('image/png');renderLogo();recalc();save()};img.src=fr.result};
+  fr.readAsDataURL(e.target.files[0]);
+});
+const fit=t=>{t.style.height='auto';if(t.scrollHeight>0)t.style.height=(t.scrollHeight+2)+'px'};
+function fitAll(){document.querySelectorAll('.longtxt').forEach(fit)}
+window.addEventListener('resize',fitAll);
+document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('longtxt'))fit(e.target)});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('longtxt')){e.preventDefault();e.target.blur()}});
+let resetArm=null;
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act],[data-tab]');if(!b)return;
+  if(b.dataset.tab){showTab(b.dataset.tab);return}
+  const a=b.dataset.act,doc=b.dataset.doc,i=+b.dataset.i;
+  const j=+b.dataset.j,Rm=S.offerte.raeume[i];
+  if(a==='addRoom'){S.offerte.raeume.push(mkRoom('Raum '+(S.offerte.raeume.length+1),S.offerte.hoehe||'2,50'));renderRooms()}
+  if(a==='setAn'){S.offerte.anstriche=+b.dataset.n}
+  if(a==='togWall'){Rm.walls[j].on=Rm.walls[j].on===false;renderRooms()}
+  if(a==='allWalls'){Rm.walls.forEach(w=>w.on=true);renderRooms()}
+  if(a==='addWall'){Rm.walls.push(mkWall());ed[i+'-'+(Rm.walls.length-1)]=true;renderRooms()}
+  if(a==='delWall'){Rm.walls.splice(j,1);ed={};renderRooms()}
+  if(a==='resetWall'){Rm.walls[j].l='';Rm.walls[j].h='';renderRooms()}
+  if(a==='incO'||a==='decO'){const kd=b.dataset.kind,w=Rm.walls[j],O=S.offerte;if(!w.o)w.o=[];
+    if(a==='incO'){const d=kd==='t'?O.tuer:O.fenster,x={k:kd,b:d.b,h:d.h,lt:''};if(oBig(x)){if(!(num(O.lt)>0))O.lt='0,20';x.lt=O.lt}w.o.push(x)}
+    else{for(let q=w.o.length-1;q>=0;q--)if(w.o[q].k===kd){w.o.splice(q,1);break}}renderRooms()}
+  if(a==='editWall'){const k=i+'-'+j;ed[k]=!ed[k];const ep=document.getElementById('ep-'+k);ep.hidden=!ed[k];if(ed[k])ep.querySelector('input').focus();return}
+  if(a==='delRoom'){S.offerte.raeume.splice(i,1);renderRooms()}
+  if(a==='addPos'){S[doc].positionen.push({t:'',m:1,e:'m²',p:0});renderPos()}
+  if(a==='delPos'){S[doc].positionen.splice(i,1);renderPos();renderCat()}
+  if(a==='fromCat'){const c=S.s.cat[i];S[doc].positionen.push(doc==='offerte'?markAuto({t:c.t,m:1,e:c.e,p:c.p}):{t:c.t,m:1,e:c.e,p:c.p});renderPos();renderCat()}
+  if(a==='addRegie'){const k=+($('#r-regiecat').value||3),rg=REGIE[k];S.rechnung.positionen.push({t:'Regiearbeiten '+rg[0],m:1,e:'h',p:rg[1]});renderPos()}
+  if(a==='addMatP'){S.rechnung.positionen.push({t:'Materialpauschale für Ausbesserungsarbeiten',m:1,e:'h',p:20.35});renderPos()}
+  if(a==='addMat')S.rechnung.positionen.push({t:'Material nach Aufwand (Einkaufspreis + 40 %)',m:0,e:'CHF EP',p:1.4}),renderPos();
+  if(a==='logoReset'){S.s.logo='';renderLogo()}
+  if(a==='addCat'){S.s.cat.push({g:'Eigene Leistungen',t:'Neue Leistung',e:'m²',p:0});renderCat();const t=document.getElementById('c'+(S.s.cat.length-1)+'-t');if(t){t.focus();t.select()}}
+  if(a==='catOff'){const c=S.s.cat[i],P=S.offerte.positionen;if(b.checked){if(!P.some(p=>(p.base||p.t)===c.t))P.push(markAuto({t:c.t,m:1,e:c.e,p:c.p}))}else S.offerte.positionen=P.filter(p=>(p.base||p.t)!==c.t);renderPos();renderCat()}
+  if(a==='delCat'){S.s.cat.splice(i,1);renderCat()}
+  if(a==='roomsToPos'){
+    let W=0,D=0;S.offerte.raeume.forEach(r=>{const c=roomCalc(r);W+=c.wand;D+=c.decke});
+    const find=s=>S.s.cat.find(c=>c.t.startsWith(s))||{t:s,e:'m²',p:0};
+    const n=num(S.offerte.anstriche)||2;
+    const w=find('Wände:'),dk=find('Decken:'),ab=find('Böden mit Abdeckvlies');
+    S.offerte.positionen.push(markAuto({t:ab.t,m:floorArea(),e:'m²',p:ab.p}),{t:w.t.replace(/\d+ Anstriche/,n+' Anstriche'),m:r2(W),e:'m²',p:w.p},{t:dk.t.replace(/\d+ Anstriche/,n+' Anstriche'),m:r2(D),e:'m²',p:dk.p});
+    renderPos();recalc();
+  }
+  if(a==='toInvoice'){
+    const o=S.offerte,r=S.rechnung;
+    r.kunde=o.kunde;r.objekt=o.objekt;r.rabatt=o.rabatt;
+    r.positionen=o.positionen.map(p=>({...p}));
+    bindStatic();renderPos();showTab('rechnung');
+  }
+  if(a==='sendPdf'){try{parent.postMessage({kk:'pdf',kind:doc,s:S},'*')}catch(e){}return}
+  if(a==='copy'){copy(doc);return}
+  if(a==='reset'){
+    const id=doc==='offerte'?'#o-toast':'#r-toast';
+    if(resetArm!==doc){resetArm=doc;b.textContent='Wirklich leeren?';setTimeout(()=>{resetArm=null;b.textContent=doc==='offerte'?'Neue Offerte':'Neue Rechnung'},3000);return}
+    resetArm=null;b.textContent=doc==='offerte'?'Neue Offerte':'Neue Rechnung';
+    const old=S[doc].nr,oo=S[doc];S[doc]=doc==='offerte'?blankOfferte():blankRechnung();if(doc==='offerte')['tuer','fenster','grenze','hoehe','fw','fd','fer'].forEach(k=>{S.offerte[k]=oo[k]});
+    const m=String(old).match(/^(.*?)(\d+)$/);if(m)S[doc].nr=m[1]+String(+m[2]+1).padStart(m[2].length,'0');
+    renderAll();toast(id,'Geleert');
+  }
+  recalc();save();
+});
+function showTab(t){
+  S.tab=t;
+  document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
+  ['offerte','rechnung','einst'].forEach(x=>$('#p-'+x).hidden=x!==t);if(t==='einst')renderCat();
+  fitAll();save();
+}
+if(window.parent!==window)document.querySelectorAll('.app-only').forEach(e=>e.hidden=false);
+renderAll();showTab(S.tab||'offerte');
+</script>
+
+</body></html>
