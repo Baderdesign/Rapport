@@ -1452,14 +1452,16 @@ h1 { color: #2c2166; }
       try {
         if (!window.Tesseract) await new Promise(function (ok, no) { var sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; sc.onload = ok; sc.onerror = function () { no(new Error("load")); }; document.head.appendChild(sc); });
         var img = await new Promise(function (ok, no) { var u = URL.createObjectURL(f), im = new Image(); im.onload = function () { URL.revokeObjectURL(u); ok(im); }; im.onerror = function () { no(new Error("img")); }; im.src = u; });
-        var sc2 = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight)), cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * sc2); cv.height = Math.round(img.naturalHeight * sc2);
-        var cx = cv.getContext("2d"); cx.filter = "grayscale(1) contrast(1.6)"; cx.drawImage(img, 0, 0, cv.width, cv.height);
-        var r = await window.Tesseract.recognize(cv, "deu", { logger: function (m) { if (m && m.status === "recognizing text") say("Texterkennung \u2026 " + Math.round((m.progress || 0) * 100) + " %"); } });
-        var d = (r && r.data) || {}, ls = [];
-        if (d.lines && d.lines.length) d.lines.forEach(function (ln) {
-          var ws = (ln.words || []).filter(function (w) { var tx = String(w.text || ""), al = (tx.match(/[A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00e9\u00e8\u00e0\u00df0-9]/g) || []).length; return w.confidence >= 75 && al >= 2 && al / tx.length >= 0.7; });
-          if (ws.length) ls.push(ws.map(function (w) { return w.text; }).join(" "));
-        }); else ls = String(d.text || "").split(/\r?\n/);
+        var sc2 = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight)), W = Math.round(img.naturalWidth * sc2), H = Math.round(img.naturalHeight * sc2);
+        var mk = function (inv) { var cv = document.createElement("canvas"); cv.width = W; cv.height = H; var cx = cv.getContext("2d"); cx.filter = "grayscale(1) contrast(1.6)" + (inv ? " invert(1)" : ""); cx.drawImage(img, 0, 0, W, H); return cv; };
+        var wk = await window.Tesseract.createWorker("deu", 1, { logger: function (m) { if (m && m.status === "recognizing text") say("Texterkennung \u2026 " + Math.round((m.progress || 0) * 100) + " %"); } });
+        var seen = {}, ls = [];
+        var okw = function (w) { var tx = String(w.text || ""), al = (tx.match(/[A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00e9\u00e8\u00e0\u00df0-9]/g) || []).length; return w.confidence >= 75 && al >= 2 && al / tx.length >= 0.7; };
+        var pass = async function (cv) {
+          var r = await wk.recognize(cv), d = (r && r.data) || {}, rows = d.lines && d.lines.length ? d.lines : String(d.text || "").split(/\r?\n/).map(function (x) { return { words: [{ text: x, confidence: 99 }] }; });
+          rows.forEach(function (ln) { var ws = (ln.words || []).filter(okw).filter(function (w) { var k = String(w.text).toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; }); if (ws.length) ls.push(ws.map(function (w) { return w.text; }).join(" ")); });
+        };
+        try { await pass(mk(true)); await pass(mk(false)); } finally { try { await wk.terminate(); } catch (e) { } }
         var t = ls.map(function (x) { return x.replace(/\s+/g, " ").trim(); }).filter(function (x) { return x.length > 1; }).join(" ");
         if (!t) say("Es wurde kein Text erkannt. Bitte n\u00e4her und gerade fotografieren.", "bad");
         else {
