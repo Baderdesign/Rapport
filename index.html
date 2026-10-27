@@ -1440,6 +1440,9 @@ h1 { color: #2c2166; }
     var fn1 = el("input", { type: "text", placeholder: "Name / Adresse", autocomplete: "off", "aria-label": "Name oder Adresse" });
     var fn2 = el("input", { "class": "full", type: "text", placeholder: "2. Zeile (optional)", autocomplete: "off", "aria-label": "Zweite Zeile" });
     var ffa = el("textarea", { "class": "bulk full", placeholder: "Farbtöne und Hersteller (optional), z. B.\nWand: NCS S 1005-Y20R, Caparol\nDecke: Weiss, Brillux", "aria-label": "Farbtöne und Hersteller", maxlength: "2000" }); ffa.style.minHeight = "90px";
+    function grow() { ffa.style.height = "auto"; ffa.style.height = Math.min(ffa.scrollHeight + 4, Math.round(window.innerHeight * 0.5)) + "px"; }
+    ffa.addEventListener("focus", function () { grow(); setTimeout(function () { try { ffa.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { } }, 300); });
+    ffa.addEventListener("input", grow);
     var ocrBtn = el("button", { type: "button", "class": "btn", text: "Foto \u2192 Text" }), ocrIn = el("input", { type: "file", accept: "image/*", capture: "environment", hidden: "" });
     ocrBtn.addEventListener("click", function () { ocrIn.value = ""; ocrIn.click(); });
     ocrIn.addEventListener("change", async function () {
@@ -1457,9 +1460,19 @@ h1 { color: #2c2166; }
           var ws = (ln.words || []).filter(function (w) { var tx = String(w.text || ""), al = (tx.match(/[A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00e9\u00e8\u00e0\u00df0-9]/g) || []).length; return w.confidence >= 75 && al >= 2 && al / tx.length >= 0.7; });
           if (ws.length) ls.push(ws.map(function (w) { return w.text; }).join(" "));
         }); else ls = String(d.text || "").split(/\r?\n/);
-        var t = ls.map(function (x) { return x.replace(/\s+/g, " ").trim(); }).filter(function (x) { return x.length > 1; }).join("\n");
+        var t = ls.map(function (x) { return x.replace(/\s+/g, " ").trim(); }).filter(function (x) { return x.length > 1; }).join(" ");
         if (!t) say("Es wurde kein Text erkannt. Bitte n\u00e4her und gerade fotografieren.", "bad");
-        else { ffa.value = (ffa.value ? ffa.value.replace(/\s+$/, "") + "\n" : "") + t; ffa.value = ffa.value.slice(0, 2000); say("Text eingef\u00fcgt. Bitte pr\u00fcfen und korrigieren. Das Foto wird nicht gespeichert.", "ok"); }
+        else {
+          say("");
+          var pv = el("textarea", { "class": "bulk full", "aria-label": "Erkannter Text", maxlength: "2000" }); pv.value = t; pv.style.minHeight = "120px";
+          var okb = el("button", { type: "button", "class": "btn primary", text: "\u00dcbernehmen" }), nob = el("button", { type: "button", "class": "btn", text: "Verwerfen" });
+          var shp = el("div", { "class": "sheet bil" }, [el("h2", { text: "Erkannter Text" }), el("p", { text: "Pr\u00fcfe den Vorschlag und korrigiere ihn bei Bedarf. Mit \u00abÜbernehmen\u00bb kommt er ins Feld. Das Foto wird nicht gespeichert." }), pv, el("div", { "class": "actions" }, [okb, nob])]);
+          var pov = el("div", { "class": "overlay sites", role: "dialog", "aria-modal": "true", "aria-label": "Erkannter Text", style: "z-index:80" }, [shp]);
+          var cls = function () { if (pov.parentNode) pov.parentNode.removeChild(pov); };
+          nob.addEventListener("click", cls);
+          okb.addEventListener("click", function () { var v = pv.value.replace(/\s+/g, " ").trim(); if (v) { ffa.value = ((ffa.value ? ffa.value.replace(/\s+$/, "") + " " : "") + v).slice(0, 2000); grow(); say("Text \u00fcbernommen.", "ok"); } cls(); });
+          document.body.appendChild(pov);
+        }
       } catch (e) { say("Texterkennung nicht m\u00f6glich (keine Verbindung?). Bitte Text von Hand eingeben.", "bad"); }
       ocrBtn.disabled = false; ocrIn.value = "";
     });
