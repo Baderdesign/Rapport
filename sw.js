@@ -1,5 +1,5 @@
 /* Service Worker: macht die App installierbar und startet sie auch ohne Netz. Liegt im selben Ordner wie index.html. */
-var CACHE = "wochenrapport-v3-170";
+var CACHE = "wochenrapport-v3-171";
 var CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 var LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
@@ -31,6 +31,11 @@ self.addEventListener("fetch", function (e) {
       return caches.match(req, { ignoreSearch: true }).then(function (m) {
         return m || (req.mode === "navigate" ? caches.match("index.html") : undefined) || fetch(req);
       });
+    }));
+  } else if (/^https:\/\/cdn\.jsdelivr\.net\/npm\/(tesseract\.js|@tesseract\.js-core|@tesseract\.js-data)/.test(req.url)) {
+    /* Texterkennung (nur bei Bedarf geladen): zuerst gespeicherte Kopie, sonst Netz ohne Zeitlimit */
+    e.respondWith(caches.match(req).then(function (m) {
+      return m || fetch(req).then(function (r) { if (r && r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); } return r; });
     }));
   } else if (LIBS.indexOf(req.url) >= 0 || /^https:\/\/fonts\.(googleapis|gstatic)\.com\//.test(req.url)) {
     /* PDF-, Cloud-Bibliothek und Schriften: zuerst gespeicherte Kopie; ohne Kopie max. 3 s warten, damit die App nie haengt */
