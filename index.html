@@ -1443,45 +1443,10 @@ h1 { color: #2c2166; }
     function grow() { ffa.style.height = "auto"; ffa.style.height = Math.min(ffa.scrollHeight + 4, Math.round(window.innerHeight * 0.5)) + "px"; }
     ffa.addEventListener("focus", function () { grow(); setTimeout(function () { try { ffa.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { } }, 300); });
     ffa.addEventListener("input", grow);
-    var ocrBtn = el("button", { type: "button", "class": "btn", text: "Foto \u2192 Text" }), ocrIn = el("input", { type: "file", accept: "image/*", capture: "environment", hidden: "" });
-    ocrBtn.addEventListener("click", function () { ocrIn.value = ""; ocrIn.click(); });
-    ocrIn.addEventListener("change", async function () {
-      var f = ocrIn.files && ocrIn.files[0]; if (!f) return;
-      if (!navigator.onLine && !window.Tesseract) { say("F\u00fcr die Texterkennung braucht es beim ersten Mal Internet.", "bad"); return; }
-      ocrBtn.disabled = true; say("Texterkennung l\u00e4uft \u2026 (beim ersten Mal wird sie geladen, das dauert etwas)");
-      try {
-        if (!window.Tesseract) await new Promise(function (ok, no) { var sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; sc.onload = ok; sc.onerror = function () { no(new Error("load")); }; document.head.appendChild(sc); });
-        var img = await new Promise(function (ok, no) { var u = URL.createObjectURL(f), im = new Image(); im.onload = function () { URL.revokeObjectURL(u); ok(im); }; im.onerror = function () { no(new Error("img")); }; im.src = u; });
-        var sc2 = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight)), W = Math.round(img.naturalWidth * sc2), H = Math.round(img.naturalHeight * sc2);
-        var mk = function (inv) { var cv = document.createElement("canvas"); cv.width = W; cv.height = H; var cx = cv.getContext("2d"); cx.filter = "grayscale(1) contrast(1.6)" + (inv ? " invert(1)" : ""); cx.drawImage(img, 0, 0, W, H); return cv; };
-        var wk = await window.Tesseract.createWorker("deu", 1, { logger: function (m) { if (m && m.status === "recognizing text") say("Texterkennung \u2026 " + Math.round((m.progress || 0) * 100) + " %"); } });
-        var seen = {}, ls = [];
-        var okw = function (w) { var tx = String(w.text || ""), al = (tx.match(/[A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00e9\u00e8\u00e0\u00df0-9]/g) || []).length; return w.confidence >= 75 && al >= 2 && al / tx.length >= 0.7; };
-        var pass = async function (cv) {
-          var r = await wk.recognize(cv), d = (r && r.data) || {}, rows = d.lines && d.lines.length ? d.lines : String(d.text || "").split(/\r?\n/).map(function (x) { return { words: [{ text: x, confidence: 99 }] }; });
-          rows.forEach(function (ln) { var ws = (ln.words || []).filter(okw).filter(function (w) { var k = String(w.text).toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; }); if (ws.length) ls.push(ws.map(function (w) { return w.text; }).join(" ")); });
-        };
-        try { await pass(mk(true)); await pass(mk(false)); } finally { try { await wk.terminate(); } catch (e) { } }
-        var t = ls.map(function (x) { return x.replace(/\s+/g, " ").trim(); }).filter(function (x) { return x.length > 1; }).join(" ");
-        if (!t) say("Es wurde kein Text erkannt. Bitte n\u00e4her und gerade fotografieren.", "bad");
-        else {
-          say("");
-          var pv = el("textarea", { "class": "bulk full", "aria-label": "Erkannter Text", maxlength: "2000" }); pv.value = t; pv.style.minHeight = "120px";
-          var okb = el("button", { type: "button", "class": "btn primary", text: "\u00dcbernehmen" }), nob = el("button", { type: "button", "class": "btn", text: "Verwerfen" });
-          var shp = el("div", { "class": "sheet bil" }, [el("h2", { text: "Erkannter Text" }), el("p", { text: "Pr\u00fcfe den Vorschlag und korrigiere ihn bei Bedarf. Mit \u00abÜbernehmen\u00bb kommt er ins Feld. Das Foto wird nicht gespeichert." }), pv, el("div", { "class": "actions" }, [okb, nob])]);
-          var pov = el("div", { "class": "overlay sites", role: "dialog", "aria-modal": "true", "aria-label": "Erkannter Text", style: "z-index:80" }, [shp]);
-          var cls = function () { if (pov.parentNode) pov.parentNode.removeChild(pov); };
-          nob.addEventListener("click", cls);
-          okb.addEventListener("click", function () { var v = pv.value.replace(/\s+/g, " ").trim(); if (v) { ffa.value = ((ffa.value ? ffa.value.replace(/\s+$/, "") + " " : "") + v).slice(0, 2000); grow(); say("Text \u00fcbernommen.", "ok"); } cls(); });
-          document.body.appendChild(pov);
-        }
-      } catch (e) { say("Texterkennung nicht m\u00f6glich (keine Verbindung?). Bitte Text von Hand eingeben.", "bad"); }
-      ocrBtn.disabled = false; ocrIn.value = "";
-    });
     var fth = el("input", { type: "text", inputmode: "numeric", placeholder: "Fahrt hin (Min.)", autocomplete: "off", "aria-label": "Fahrzeit hin in Minuten" });
     var ftz = el("input", { type: "text", inputmode: "numeric", placeholder: "Fahrt zurück (Min.)", autocomplete: "off", "aria-label": "Fahrzeit zurück in Minuten" });
     var save = el("button", { type: "button", "class": "btn primary", text: "Hinzufügen" }), cancel = el("button", { type: "button", "class": "btn", text: "Abbrechen", hidden: "" });
-    var form = el("div", { "class": "sform" }, [fnr, fn1, fn2, ffa, el("div", { "class": "actions full" }, [ocrBtn, ocrIn]), el("div", { "class": "trv full" }, [fth, ftz]), el("div", { "class": "status full", text: "Fahrzeit pro Weg in Minuten. Leer lassen bei «zurück», wenn der Rückweg gleich lang ist." }), el("div", { "class": "actions full" }, [save, cancel])]);
+    var form = el("div", { "class": "sform" }, [fnr, fn1, fn2, ffa, el("div", { "class": "trv full" }, [fth, ftz]), el("div", { "class": "status full", text: "Fahrzeit pro Weg in Minuten. Leer lassen bei «zurück», wenn der Rückweg gleich lang ist." }), el("div", { "class": "actions full" }, [save, cancel])]);
     var seedBtn = el("button", { type: "button", "class": "btn", text: "Meine Baustellen aus dem Ordner laden (26001–26017)" });
     var upBtn = el("button", { type: "button", "class": "btn", text: "" });
     var ta = el("textarea", { "class": "bulk", placeholder: "26018 Garantie Müller, Dorfstrasse 4\n26019 Familie Huber, Seeweg 2; Küche", "aria-label": "Mehrere Baustellen einfügen" });
