@@ -1,5 +1,5 @@
 /* Service Worker: macht die App installierbar und startet sie auch ohne Netz. Liegt im selben Ordner wie index.html. */
-var CACHE = "wochenrapport-v3-177";
+var CACHE = "wochenrapport-v3-178";
 var CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 var LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
@@ -23,14 +23,14 @@ self.addEventListener("fetch", function (e) {
   if (req.method !== "GET") return;
   var url = new URL(req.url);
   if (url.origin === self.location.origin) {
-    /* eigene Dateien: Netz (max. 2 s, damit schwaches Netz nicht zum weissen Bildschirm fuehrt), sonst gespeicherte Kopie */
-    e.respondWith(tmo(fetch(req), 2000).then(function (r) {
-      if (r && r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); return r; }
-      return caches.match(req, { ignoreSearch: true }).then(function (m) { return m || r; });
-    }).catch(function () {
-      return caches.match(req, { ignoreSearch: true }).then(function (m) {
-        return m || (req.mode === "navigate" ? caches.match("index.html") : undefined) || fetch(req);
+    /* eigene Dateien: sofort die gespeicherte Kopie zeigen (kein weisser Bildschirm bei schwachem Netz) und im Hintergrund die neueste Version holen */
+    e.respondWith(caches.match(req, { ignoreSearch: true }).then(function (m) {
+      var upd = fetch(new Request(req.url, { cache: "reload" })).then(function (r) {
+        if (r && r.ok) { var copy = r.clone(); e.waitUntil(caches.open(CACHE).then(function (c) { return c.put(req, copy); }).catch(function () { })); }
+        return r;
       });
+      if (m) { e.waitUntil(upd.catch(function () { })); return m; }
+      return upd.catch(function () { return req.mode === "navigate" ? caches.match("index.html") : undefined; });
     }));
   } else if (LIBS.indexOf(req.url) >= 0 || /^https:\/\/fonts\.(googleapis|gstatic)\.com\//.test(req.url)) {
     /* PDF-, Cloud-Bibliothek und Schriften: zuerst gespeicherte Kopie; ohne Kopie max. 3 s warten, damit die App nie haengt */
