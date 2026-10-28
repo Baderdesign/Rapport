@@ -538,6 +538,7 @@ h1 { color: #2c2166; }
       <div class="status" id="status" role="status"></div>
     </div>
     <button class="btn primary" id="pdf" type="button">Woche speichern und PDF erstellen</button>
+    <button class="btn" id="pdf2" type="button">PDF für E-Mail (Gmail) öffnen</button>
   </div>
 
   <div class="foot">
@@ -1228,7 +1229,7 @@ h1 { color: #2c2166; }
     close.addEventListener("click", closeSheet); actions.appendChild(close);
     var sheet = el("div", { "class": "sheet" }, [
       el("h2", { text: label + " ist fertig" }),
-      el("p", { text: "Direktes Speichern ist hier nicht möglich. Tippe auf «" + label + " öffnen», dann auf das Teilen-Symbol und wähle «In Dateien sichern». " + fn }),
+      el("p", { text: "Tippe auf «" + label + " öffnen», dann unten auf das Teilen-Symbol. Dort wählst du Gmail oder Mail (das PDF hängt dann an der E-Mail) oder «In Dateien sichern». " + fn }),
       actions, holder]);
     var ov = el("div", { "class": "overlay", id: "sheet", role: "dialog", "aria-modal": "true", "aria-label": label + " sichern" }, [sheet]);
     if (url) ov.dataset.url = url;
@@ -1241,9 +1242,10 @@ h1 { color: #2c2166; }
     var mobile = isMobile(), file = null;
     try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
     /* 1. Handy: Teilen-Menü (direkt nach dem Tippen, ohne vorheriges Warten) */
-    if (mobile && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    var viaSheet = !!window.__pdfSheet; window.__pdfSheet = false;
+    if (!viaSheet && mobile && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       try {
-        await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") });
+        await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, ""), text: fn.replace(/\.pdf$/, "").replace(/_/g, " ") });
         markSent(wkSent); await saved; setStatus("Woche gespeichert. PDF geteilt: " + fn, "ok"); return;
       } catch (e) {
         if (e && e.name === "AbortError") { await saved; setStatus("Teilen abgebrochen. Die Woche ist gespeichert. Tippe nochmals auf den Knopf, um das PDF zu teilen.", ""); return; }
@@ -1254,6 +1256,7 @@ h1 { color: #2c2166; }
     await saved; setStatus("Woche gespeichert. Das PDF liegt in der Vorschau bereit.", "ok");
   }
 
+  $("pdf2").addEventListener("click", function () { window.__pdfSheet = true; $("pdf").click(); });
   $("pdf").addEventListener("click", function () {
     var btn = $("pdf"); btn.disabled = true;
     var saved = persist(true).catch(function () { }); /* nicht abwarten: Teilen muss direkt auf das Tippen folgen */
