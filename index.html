@@ -2413,6 +2413,9 @@ function openReport(pre) {
     if (Array.isArray(d.mat)) b.mat = d.mat.slice(0, RG_MAT).map(function (m) { m = m || {}; return { b: String(m.b || ""), e: String(m.e || ""), t: String(m.t || "") }; });
     return b;
   }
+  function rgSentKey(site, nr) { return "wr2:rsent:" + site + "|" + nr; }
+  function rgSentGet(site, nr) { return nr ? (lsGet(rgSentKey(site, nr)) || "") : ""; }
+  function rgSentSet(site, nr, on) { if (!nr) return; try { if (on) lsSet(rgSentKey(site, nr), dm(new Date()) + pad(new Date().getFullYear() % 100)); else localStorage.removeItem(rgSentKey(site, nr)); } catch (e) { } }
   function rgSum(h) { var s = 0; h.forEach(function (x) { s += num(x); }); return s; }
   function rgFmt(v) { return v ? (Math.round(v * 100) / 100).toFixed(2) : ""; }
   function rgDayHead(montag) { /* "5.10" ... aus dem Montag */
@@ -2524,7 +2527,7 @@ function openReport(pre) {
       rows.forEach(function (r) {
         var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
-        t.appendChild(el("small", { text: (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig || d.sigU ? " · ✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "") }));
+        t.appendChild(el("small", { text: (rgSentGet(site, r.nr) ? "✓ verschickt " + rgSentGet(site, r.nr) + " · " : "") + (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig || d.sigU ? " · ✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "") }));
         list.appendChild(tapRow(t, function () { edit(r.nr, d); }));
       });
       if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isStaff() ? "" : " Du siehst nur deine eigenen."), "");
@@ -2597,8 +2600,12 @@ function openReport(pre) {
       ed.appendChild(field("Ausgeführte Arbeiten", fw)); ed.appendChild(field("Stunden", grid)); ed.appendChild(field("Transporte", ftr));
       ed.appendChild(field("Material (Bezeichnung · Einheit · Total)", matBox)); ed.appendChild(addM); ed.appendChild(field("Total", ft));
       ed.appendChild(fcR.node); ed.appendChild(sigBox);
+      var sentBtn = el("button", { type: "button", "class": "btn" });
+      function sentSync() { var v = editing && editing.nr ? rgSentGet(site, editing.nr) : ""; sentBtn.hidden = !(editing && editing.nr); sentBtn.textContent = v ? "✓ Verschickt " + v + " (Markierung entfernen)" : "Als verschickt markieren"; sentBtn.setAttribute("aria-pressed", v ? "true" : "false"); }
+      sentBtn.addEventListener("click", function () { var on = !rgSentGet(site, editing.nr); rgSentSet(site, editing.nr, on); sentSync(); });
+      ed.appendChild(sentBtn);
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
-      sigDraw();
+      sigDraw(); sentSync();
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
       sv.addEventListener("click", async function () {
         if (isDemo()) { es(DEMO_MSG, "bad"); return; }
@@ -2619,9 +2626,9 @@ function openReport(pre) {
         var fn = "Regie-Rapport_" + site + "_Nr" + (editing.nr || "neu") + ".pdf", blob = doc.output("blob"), file = null;
         try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
         if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-          try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+          try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); rgSentSet(site, editing && editing.nr, true); sentSync(); return; } catch (e) { if (e && e.name === "AbortError") return; }
         }
-        showFallback(blob, doc, fn, file, "Regie-Rapport");
+        showFallback(blob, doc, fn, file, "Regie-Rapport"); rgSentSet(site, editing && editing.nr, true); sentSync();
       });
       del.addEventListener("click", async function () {
         if (!editing.nr || !confirm("Regie-Rapport Nr. " + editing.nr + " löschen?")) return;
