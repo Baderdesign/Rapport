@@ -2346,7 +2346,7 @@ function openReport(pre) {
   var RG_ROWS = ["Polier / Meister", "Vorarbeiter: ", "Kundenmaler", "Maler: ", "Verputzer / Grundeur", "Hilfsarbeiter", "Maler: ", "Maler: ", "Lehrling    Lehrjahr", "", ""];
   var RG_MAT = 8, RG_DAYS = ["Mo", "Di", "Mi", "Do", "Fr"];
   function rgBlank() {
-    return { datum: "", auftraggeber: "", baustelle: "", montag: "", arbeiten: "", transporte: "", total: "",
+    return { sent: "", rnr: "", datum: "", auftraggeber: "", baustelle: "", montag: "", arbeiten: "", transporte: "", total: "",
       rows: RG_ROWS.map(function (l) { return { l: l, h: ["", "", "", "", ""] }; }), mat: [{ b: "Kleinmaterial", e: "", t: "" }] };
   }
   /* ---------- Unterschrift mit dem Finger (Vollbild, Handy quer halten) ---------- */
@@ -2407,7 +2407,7 @@ function openReport(pre) {
   }
   function rgNorm(d) {
     var b = rgBlank(); d = d || {};
-    ["datum", "auftraggeber", "baustelle", "montag", "arbeiten", "transporte", "total"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k]; });
+    ["sent", "rnr", "datum", "auftraggeber", "baustelle", "montag", "arbeiten", "transporte", "total"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k]; });
     if (Array.isArray(d.rows)) b.rows = RG_ROWS.map(function (l, i) { var r = d.rows[i] || {}; var h = Array.isArray(r.h) ? r.h : []; return { l: typeof r.l === "string" ? r.l : l, h: [0, 1, 2, 3, 4].map(function (k) { return String(h[k] == null ? "" : h[k]); }) }; });
     ["sig", "sigU"].forEach(function (k) { var g = d[k]; if (g && typeof g === "object" && typeof g.img === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(g.img) && g.img.length < 40000) b[k] = { img: g.img, name: String(g.name || "").slice(0, 80), ts: String(g.ts || "").slice(0, 40), w: +g.w || 0, h: +g.h || 0 }; });
     if (Array.isArray(d.mat)) b.mat = d.mat.slice(0, RG_MAT).map(function (m) { m = m || {}; return { b: String(m.b || ""), e: String(m.e || ""), t: String(m.t || "") }; });
@@ -2436,7 +2436,7 @@ function openReport(pre) {
         if (o.right) doc.text(t, cx[j + 1] - 1.2, y + 3.6, { align: "right" }); else doc.text(t, cx[i] + 1.2, y + 3.6); }
     }
     doc.setFont("helvetica", "bold"); doc.setFontSize(17); doc.text("Taglohn-Rapport", 105, y + 12, { align: "center" });
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Nr." + nr, 196, y + 7, { align: "right" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Nr." + (String(d.rnr || "").trim() || nr), 196, y + 7, { align: "right" });
     doc.setFontSize(9); y += 20;
     doc.text("Datum:", 78, y); doc.text(String(d.datum || ""), 100, y);
     doc.text("Auftraggeber:", 78, y + 4.2); doc.text(String(d.auftraggeber || ""), 100, y + 4.2);
@@ -2522,12 +2522,13 @@ function openReport(pre) {
       if (/regie_/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Regie-Rapporte sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt). Technische Meldung: " + m.slice(0, 140);
       return sharedMsg(er);
     }
+    function nextNr() { var m = 0; (rows || []).forEach(function (r) { if (r.nr > m) m = r.nr; }); return m + 1; }
     function drawList() {
       list.textContent = ""; list.hidden = !rows.length;
       rows.forEach(function (r) {
         var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
-        t.appendChild(el("small", { text: (rgSentGet(site, r.nr) ? "✓ verschickt " + rgSentGet(site, r.nr) + " · " : "") + (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig || d.sigU ? " · ✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "") }));
+        t.appendChild(el("small", { text: ((d.sent || rgSentGet(site, r.nr)) ? "✓ verschickt " + (d.sent || rgSentGet(site, r.nr)) + " · " : "") + (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig || d.sigU ? " · ✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "") }));
         list.appendChild(tapRow(t, function () { edit(r.nr, d); }));
       });
       if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isStaff() ? "" : " Du siehst nur deine eigenen."), "");
@@ -2537,7 +2538,7 @@ function openReport(pre) {
       d = rgNorm(d); editing = { nr: nr };
       main.hidden = true; ed.hidden = false; $("regclose").hidden = true; ed.textContent = "";
       var tx = function (v, ph, al) { return el("input", { type: "text", value: v, placeholder: ph || "", "aria-label": al || ph || "" }); };
-      var fd = tx(d.datum, "z. B. 5.10.2026", "Datum"), fa = tx(d.auftraggeber, "Auftraggeber", "Auftraggeber"), fb = tx(d.baustelle, "Baustelle (Text für das PDF)", "Baustelle");
+      var fnr = tx(d.rnr, editing.nr ? "Nr. " + editing.nr + " (automatisch)" : "automatisch: Nr. " + nextNr(), "Regie-Nr."), fd = tx(d.datum, "z. B. 5.10.2026", "Datum"), fa = tx(d.auftraggeber, "Auftraggeber", "Auftraggeber"), fb = tx(d.baustelle, "Baustelle (Text für das PDF)", "Baustelle");
       var fm = el("input", { type: "date", "aria-label": "Montag der Woche" }); fm.value = d.montag || "";
       var fw = el("textarea", { "class": "bulk", "aria-label": "Ausgeführte Arbeiten", maxlength: "5000" }); fw.value = d.arbeiten; fw.style.minHeight = "130px";
       var grid = el("div", { "class": "rg" });
@@ -2570,6 +2571,8 @@ function openReport(pre) {
       var addM = el("button", { type: "button", "class": "btn", text: "+ Material-Zeile" }); addM.addEventListener("click", function () { addMat(); });
       var ft = tx(d.total, "Total (Text)", "Total");
       var fcR = fotoCtl("regie", site + "|" + (editing.nr || "n" + fotoRid())); if (editing.nr) fcR.load();
+      var sentVal = d.sent || (editing.nr ? rgSentGet(site, editing.nr) : "");
+      function setSent(on) { sentVal = on ? dm(new Date()) + pad(new Date().getFullYear() % 100) : ""; rgSentSet(site, editing.nr, on); }
       var emsg = el("div", { "class": "status", role: "status" });
       var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), pf = el("button", { type: "button", "class": "btn", text: "Als PDF" });
       var del = el("button", { type: "button", "class": "btn", text: "Löschen" }); del.hidden = !(isStaff() && nr);
@@ -2601,24 +2604,33 @@ function openReport(pre) {
       });
       rm.addEventListener("click", function () { if (!confirm("Unterschrift entfernen? Der Rapport kann danach wieder geändert werden.")) return; SL[curK].st = null; sigDraw(); });
       function collect() {
-        return { datum: fd.value.trim(), auftraggeber: fa.value.trim(), baustelle: fb.value.trim(), montag: fm.value, arbeiten: fw.value, transporte: ftr.value.trim(), total: ft.value.trim(),
+        return { sent: sentVal, rnr: fnr.value.trim().slice(0, 12), datum: fd.value.trim(), auftraggeber: fa.value.trim(), baustelle: fb.value.trim(), montag: fm.value, arbeiten: fw.value, transporte: ftr.value.trim(), total: ft.value.trim(),
           rows: rin.map(function (r) { return { l: r.l.value, h: r.hs.map(function (h) { return h.value.trim(); }) }; }),
           mat: mrows.map(function (m) { return { b: m.b.value.trim(), e: m.e.value.trim(), t: m.t.value.trim() }; }).filter(function (m) { return m.b || m.e || m.t; }), sig: SL.A.st, sigU: SL.U.st };
       }
       var title = el("h3", { text: "Regie-Rapport " + (editing.nr ? "Nr. " + editing.nr : "(neu)") + " · Baustelle " + site });
       ed.appendChild(title);
-      ed.appendChild(field("Datum", fd)); ed.appendChild(field("Auftraggeber", fa)); ed.appendChild(field("Baustelle", fb));
+      ed.appendChild(field("Regie-Nr. (leer lassen = automatisch)", fnr)); ed.appendChild(field("Datum", fd)); ed.appendChild(field("Auftraggeber", fa)); ed.appendChild(field("Baustelle", fb));
       ed.appendChild(field("Montag der Woche (füllt die Datumszeile)", fm));
       ed.appendChild(field("Ausgeführte Arbeiten", fw)); ed.appendChild(field("Stunden", grid)); ed.appendChild(field("Transporte", ftr));
       ed.appendChild(field("Material (Bezeichnung · Einheit · Total)", matBox)); ed.appendChild(addM); ed.appendChild(field("Total", ft));
       ed.appendChild(fcR.node); ed.appendChild(sigBox);
       var sentBtn = el("button", { type: "button", "class": "btn" });
-      function sentSync() { var v = editing && editing.nr ? rgSentGet(site, editing.nr) : ""; sentBtn.hidden = !(editing && editing.nr); sentBtn.textContent = v ? "✓ Verschickt " + v + " (Markierung entfernen)" : "Als verschickt markieren"; sentBtn.setAttribute("aria-pressed", v ? "true" : "false"); }
-      sentBtn.addEventListener("click", function () { var on = !rgSentGet(site, editing.nr); rgSentSet(site, editing.nr, on); sentSync(); });
+      function sentSync() { var v = sentVal; sentBtn.hidden = false; sentBtn.textContent = v ? "✓ Verschickt " + v + " (Markierung entfernen)" : "Als verschickt markieren"; sentBtn.setAttribute("aria-pressed", v ? "true" : "false"); }
+      sentBtn.addEventListener("click", async function () { setSent(!sentVal); sentSync(); if (editing.nr) { await silentSave(); es(sentVal ? "Als verschickt markiert." : "Markierung entfernt.", "ok"); } else es(sentVal ? "Wird beim Speichern als verschickt markiert." : "", ""); });
       ed.appendChild(sentBtn);
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
       sigDraw(); sentSync();
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
+      async function silentSave() { try { if (sb && user && navigator.onLine && !isDemo() && editing.nr) await sb.rpc("regie_save", { p_site: site, p_nr: editing.nr, p_data: collect() }); } catch (e) { } }
+      async function ensureSaved() {
+        if (editing.nr) return true;
+        if (!sb || !user || !navigator.onLine || isDemo()) return false;
+        var r = await sb.rpc("regie_save", { p_site: site, p_nr: null, p_data: collect() });
+        if (r.error) { es(regieMsg(r.error), "bad"); return false; }
+        await fcR.move(site + "|" + r.data); editing.nr = r.data; title.textContent = "Regie-Rapport Nr. " + r.data + " · Baustelle " + site; sentSync();
+        return true;
+      }
       sv.addEventListener("click", async function () {
         if (isDemo()) { es(DEMO_MSG, "bad"); return; }
         if (!sb || !user || !navigator.onLine) { es("Keine Verbindung. Zum Speichern brauchst du Internet.", "bad"); return; }
@@ -2631,16 +2643,18 @@ function openReport(pre) {
         } catch (e) { es(regieMsg(e), "bad"); }
       });
       pf.addEventListener("click", async function () {
+        es("Einen Moment …");
+        try { await ensureSaved(); } catch (e) { }
         var doc = null; try { doc = buildRegiePdf(editing.nr || "", collect()); } catch (e) { }
         if (!doc) { es("Das PDF konnte nicht erstellt werden.", "bad"); return; }
         try { fotoPdf(doc, await fcR.all(), "Regie-Rapport " + (editing.nr ? "Nr. " + editing.nr : "") + " · " + site); } catch (e) { }
         if (isDemo()) { demoPdf(doc, "Regie-Rapport"); return; }
-        var fn = "Regie-Rapport_" + site + "_Nr" + (editing.nr || "neu") + ".pdf", blob = doc.output("blob"), file = null;
+        var fn = "Regie-Rapport_" + site + "_Nr" + (fnr.value.trim().replace(/[^\w\-]+/g, "") || editing.nr || "neu") + ".pdf", blob = doc.output("blob"), file = null;
         try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
         if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-          try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); rgSentSet(site, editing && editing.nr, true); sentSync(); return; } catch (e) { if (e && e.name === "AbortError") return; }
+          try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); setSent(true); sentSync(); await silentSave(); es("Als verschickt markiert.", "ok"); return; } catch (e) { if (e && e.name === "AbortError") return; }
         }
-        showFallback(blob, doc, fn, file, "Regie-Rapport"); rgSentSet(site, editing && editing.nr, true); sentSync();
+        showFallback(blob, doc, fn, file, "Regie-Rapport"); setSent(true); sentSync(); await silentSave(); es("");
       });
       del.addEventListener("click", async function () {
         if (!editing.nr || !confirm("Regie-Rapport Nr. " + editing.nr + " löschen?")) return;
