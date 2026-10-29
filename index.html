@@ -2555,6 +2555,18 @@ function openReport(pre) {
         matBox.appendChild(b); matBox.appendChild(e); matBox.appendChild(t); mrows.push({ b: b, e: e, t: t });
       }
       d.mat.forEach(addMat); if (!d.mat.length) addMat();
+      /* Kleinmaterial: Total = alle Stunden aller Zeilen zusammen (bleibt von Hand änderbar) */
+      function kmSum() { var t = 0; rin.forEach(function (r) { t += rgSum(r.hs.map(function (h) { return h.value; })); }); return t; }
+      function kmSync(ev) {
+        mrows.forEach(function (m) {
+          if (!/kleinmaterial/i.test(m.b.value)) return;
+          if (ev && ev.target === m.t) { m.t.dataset.man = "1"; return; }
+          if (m.t.dataset.man === "1") return;
+          var v = rgFmt(kmSum()); m.t.value = v; if (v && !m.e.value.trim()) m.e.value = "Std.";
+        });
+      }
+      mrows.forEach(function (m) { if (/kleinmaterial/i.test(m.b.value) && m.t.value.trim() && m.t.value.trim() !== rgFmt(kmSum())) m.t.dataset.man = "1"; });
+      ed.addEventListener("input", kmSync); kmSync();
       var addM = el("button", { type: "button", "class": "btn", text: "+ Material-Zeile" }); addM.addEventListener("click", function () { addMat(); });
       var ft = tx(d.total, "Total (Text)", "Total");
       var fcR = fotoCtl("regie", site + "|" + (editing.nr || "n" + fotoRid())); if (editing.nr) fcR.load();
