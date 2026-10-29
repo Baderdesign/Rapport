@@ -2241,7 +2241,10 @@ function openReport(pre) {
         cell(h);
         doc.setFont("helvetica", "normal"); doc.setFontSize(9);
         doc.text(dm(fromKey(d.day)) + String(fromKey(d.day).getFullYear()).slice(2), x0[0] + 2, y + 4.8);
-        if (bk.r && cwR) { doc.setFont("helvetica", "bold"); doc.text("R", xR + cwR / 2, y + 4.8, { align: "center" }); doc.setFont("helvetica", "normal"); }
+        if (bk.r && cwR) {
+          var snt = !!d.rSent; doc.setFont("helvetica", "bold"); doc.text("R", xR + (snt ? 1.9 : cwR / 2), y + 4.8, { align: "center" }); doc.setFont("helvetica", "normal");
+          if (snt) { doc.setLineWidth(0.4); doc.line(xR + 3.5, y + 3.6, xR + 4.2, y + 4.5); doc.line(xR + 4.2, y + 4.5, xR + 5.5, y + 2.4); doc.setLineWidth(0.15); }
+        }
         lines.forEach(function (t, k) { doc.text(t, x0[1] + 2, y + 4.8 + k * 4); });
         res.cols.forEach(function (e, k) { if (bk.hours[e]) doc.text(hm(bk.hours[e]), xs[k] + cwP / 2, y + 4.8, { align: "center" }); });
         doc.text(bk.sum ? hm(bk.sum) : "", xg + cwG / 2, y + 4.8, { align: "center" });
@@ -2287,6 +2290,13 @@ function openReport(pre) {
       var r = await sb.rpc("firma_reports", { p_von: a, p_bis: b });
       if (r.error) { msg.textContent = rpMsg(r.error); msg.className = "status bad"; return; }
       res = rpBuild(nr, a, b, wochen, r.data || []); msg.textContent = "";
+      try { /* verschickte Regie-Rapporte: Haken beim R (Woche des Regie-Rapports) */
+        var rl = await sb.rpc("regie_list", { p_site: nr });
+        if (!rl.error && Array.isArray(rl.data)) {
+          var mons = []; rl.data.forEach(function (x) { var dd = rgNorm(x.data); if ((dd.sent || rgSentGet(nr, x.nr)) && dd.montag) mons.push(dd.montag); });
+          res.rows.forEach(function (d) { d.rSent = mons.some(function (m) { return d.day >= m && d.day <= key(addDays(fromKey(m), 6)); }); });
+        }
+      } catch (e) { }
       (async function () { try { var fl = await sb.rpc("foto_list_site", { p_kind: "rapport", p_site: nr }); if (!fl.error && Array.isArray(fl.data)) { for (var q = 0; q < fl.data.length; q++) { var x = fl.data[q], pr = String(x.ref).split("|"); if (pr[2] < a || pr[2] > b) continue; try { var g = await sb.rpc("foto_get", { p_id: x.id }); if (!g.error && g.data && g.data[0]) rFotos.push({ day: pr[2], data: g.data[0].data, w: g.data[0].w, h: g.data[0].h, created: null, note: dmy(fromKey(pr[2])) + " · " + (res.people && res.people[pr[0]] ? res.people[pr[0]] : pr[0]) + (x.note ? " · " + x.note : "") }); } catch (e) { } } rFotos.sort(function (p1, p2) { return p1.day < p2.day ? -1 : p1.day > p2.day ? 1 : 0; }); } } catch (e) { } rFotosOk = true; })();
       body.hidden = !res.rows.length;
       if (!res.rows.length) { msg.textContent = "Für diese Baustelle gibt es im Zeitraum keine Stunden und keine Rapporte."; return; }
@@ -2617,7 +2627,15 @@ function openReport(pre) {
       ed.appendChild(fcR.node); ed.appendChild(sigBox);
       var sentBtn = el("button", { type: "button", "class": "btn" });
       function sentSync() { var v = sentVal; sentBtn.hidden = false; sentBtn.textContent = v ? "✓ Verschickt " + v + " (Markierung entfernen)" : "Als verschickt markieren"; sentBtn.setAttribute("aria-pressed", v ? "true" : "false"); }
-      sentBtn.addEventListener("click", async function () { setSent(!sentVal); sentSync(); if (editing.nr) { await silentSave(); es(sentVal ? "Als verschickt markiert." : "Markierung entfernt.", "ok"); } else es(sentVal ? "Wird beim Speichern als verschickt markiert." : "", ""); });
+      sentBtn.addEventListener("click", async function () {
+        setSent(!sentVal); sentSync();
+        if (editing.nr) { await silentSave(); es(sentVal ? "Als verschickt markiert." : "Markierung entfernt.", "ok"); return; }
+        if (!sentVal) { es(""); return; }
+        es("Einen Moment …");
+        var okS = false; try { okS = await ensureSaved(); } catch (e) { }
+        if (okS) { rgSentSet(site, editing.nr, true); es("Gespeichert als Nr. " + editing.nr + " und als verschickt markiert.", "ok"); }
+        else { setSent(false); sentSync(); es("Nicht markiert: Das Rapport konnte nicht gespeichert werden (Internet?).", "bad"); }
+      });
       ed.appendChild(sentBtn);
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
       sigDraw(); sentSync();
