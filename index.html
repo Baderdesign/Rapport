@@ -2538,7 +2538,7 @@ function openReport(pre) {
       rows.forEach(function (r) {
         var d = rgNorm(r.data), u = r.updated ? new Date(r.updated) : null;
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: "Nr. " + r.nr }));
-        t.appendChild(el("small", { text: ((d.sent || rgSentGet(site, r.nr)) ? "✓ verschickt " + (d.sent || rgSentGet(site, r.nr)) + " · " : "") + (d.datum ? d.datum + " · " : "") + (d.auftraggeber || "") + (u ? " · geändert " + dm(u) + pad(u.getFullYear() % 100) : "") + (isStaff() && r.autor ? " · " + r.autor : "") + (d.sig || d.sigU ? " · ✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "") }));
+        t.appendChild(el("small", { text: [((d.sent || rgSentGet(site, r.nr)) ? "✓ verschickt " + (d.sent || rgSentGet(site, r.nr)) : ""), d.datum || "", d.auftraggeber || "", (u ? "geändert " + dm(u) + pad(u.getFullYear() % 100) : ""), (isStaff() && r.autor ? r.autor : ""), (d.sig || d.sigU ? "✍ " + (d.sig && d.sigU ? "beide unterschrieben" : d.sig ? "Auftraggeber unterschrieben" : "Unternehmung unterschrieben") : "")].filter(Boolean).join(" · ") }));
         list.appendChild(tapRow(t, function () { edit(r.nr, d); }));
       });
       if (!rows.length) say("Für diese Baustelle gibt es noch keinen Regie-Rapport." + (isStaff() ? "" : " Du siehst nur deine eigenen."), "");
@@ -4220,11 +4220,11 @@ function openReport(pre) {
     closeRegieGen(); var busy = false, res = null, mon = mondayOf(new Date());
     var wk = el("input", { type: "date", "aria-label": "Montag der Woche" }); wk.value = key(mon);
     var prev = el("button", { type: "button", "class": "btn", text: "‹", "aria-label": "Vorherige Woche" }), next = el("button", { type: "button", "class": "btn", text: "›", "aria-label": "Nächste Woche" });
-    var msg = el("div", { "class": "status", role: "status" }), pbox = el("div", {}), lbox = el("div", {}), tot = el("div", { "class": "status" });
+    var msg = el("div", { "class": "status", role: "status" }), pbox = el("div", {}), lbox = el("div", {}), tot = el("div", { "class": "status" }), sentBox = el("div", { role: "status" }), wkRg = [];
     var go = el("button", { type: "button", "class": "btn primary", text: "Regie-Rapport erstellen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var info = siteByNr(nr), pers = [], lines = [], extra = [];
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Regie-Rapport aus Rapporten" }), el("p", { text: nr + (info && info.n ? " · " + info.n : "") }),
-      el("div", { style: "display:flex;gap:6px;align-items:center" }, [prev, wk, next]), msg,
+      el("div", { style: "display:flex;gap:6px;align-items:center" }, [prev, wk, next]), sentBox, msg,
       el("div", { "class": "lbl", text: "Mitarbeitende (Stunden aus den Wochenrapporten)" }), pbox,
       el("div", { "class": "lbl", text: "Ausgeführte Arbeiten (aus den Baustellenrapporten)" }), lbox, tot, el("div", { "class": "actions" }, [go, cl]),
       el("div", { "class": "status", text: "Der Regie-Rapport öffnet sich zum Prüfen und Ändern. Erst mit «Speichern» wird er abgelegt." })]);
@@ -4271,12 +4271,28 @@ function openReport(pre) {
         var r = await sb.rpc("firma_reports", { p_von: a, p_bis: b }); var reps = r.error ? [] : (r.data || []);
         res = rpBuild(nr, a, b, w.data || [], reps); msg.textContent = ""; draw();
       } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+      /* gibt es für diese Woche schon ein Regie-Rapport? (Warnung gegen doppeltes Erstellen oder Verschicken) */
+      wkRg = []; sentBox.textContent = ""; sentBox.className = "";
+      try {
+        var rl = await sb.rpc("regie_list", { p_site: nr });
+        if (!rl.error && Array.isArray(rl.data)) {
+          rl.data.forEach(function (x) { var dd = rgNorm(x.data); if (dd.montag === key(m0)) wkRg.push({ nr: x.nr, sent: dd.sent || rgSentGet(nr, x.nr) }); });
+          if (wkRg.length) {
+            var sn = wkRg.filter(function (q) { return q.sent; });
+            sentBox.className = "status " + (sn.length ? "ok" : "warn");
+            sentBox.style.cssText = "font-weight:600;margin:8px 0";
+            sentBox.textContent = sn.length ? "✓ Verschickt am " + sn.map(function (q) { return q.sent; }).join(", ")
+              : "Für diese Woche gibt es schon: " + wkRg.map(function (q) { return "Nr. " + q.nr; }).join(", ") + " (noch nicht als verschickt markiert).";
+          }
+        }
+      } catch (e) { }
       busy = false;
     }
     function shift(n) { var m0 = mondayVal() || mondayOf(new Date()); wk.value = key(addDays(m0, n * 7)); load(); }
     prev.addEventListener("click", function () { shift(-1); }); next.addEventListener("click", function () { shift(1); }); wk.addEventListener("change", load);
     go.addEventListener("click", function () {
       var m0 = mondayVal(); if (!m0 || !res) return;
+      if (wkRg.length && !confirm("Für diese Woche gibt es schon " + wkRg.map(function (q) { return "Nr. " + q.nr + (q.sent ? " (verschickt " + q.sent + ")" : ""); }).join(", ") + ". Trotzdem ein neues Regie-Rapport erstellen?")) return;
       var rows = [], over = false;
       pers.forEach(function (p) { if (!p.cb.checked) return; rows.push({ l: p.fs.value + ": " + p.name, h: p.min.map(function (m) { return m ? hm(m) : ""; }) }); });
       extra.forEach(function (x) { if (x.cb.checked && x.nm.value.trim()) rows.push({ l: x.fs.value + ": " + x.nm.value.trim(), h: ["", "", "", "", ""] }); });
