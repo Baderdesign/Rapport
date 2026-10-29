@@ -699,7 +699,7 @@ a.btn.primary { color: #f3d98f !important; }
     if (/keine berechtigung/i.test(m)) return "Dafür brauchst du Administrator-Rechte.";
     if (/ungültige rolle|members_rolle_check/i.test(m)) return "Die Rolle «Temporär» ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/firma_wochen/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Auswertung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
-    if (/firma_code|member_passwort|firma_anlegen|code_gueltig|firma_frei/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Firmen-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
+    if (/firma_code|member_passwort|member_email_wechseln|firma_anlegen|code_gueltig|firma_frei/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Firmen-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/members_list|member_set|member_remove|pending_delete/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Mitarbeiter-Verwaltung ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt).";
     if (/my_member|sites_write|schema cache|does not exist|could not find/i.test(m)) return "Die Firmenliste ist in Supabase noch nicht eingerichtet (SQL fehlt).";
     if (/fetch|network|load failed/i.test(m)) return "Keine Verbindung. Zum Ändern der Liste brauchst du Internet.";
@@ -1679,7 +1679,17 @@ a.btn.primary { color: #f3d98f !important; }
               run(function () { return call("member_passwort", { p_email: r.email, p_pw: v }); }, "Neues Passwort für " + r.email + " gesetzt. Gib es der Person weiter. Sie kann es danach selbst ändern (Konto → Passwort ändern).");
             });
           }
-          if (!isBuero()) kids.push(tog); if (bu) kids.push(bu); if (tmp) kids.push(tmp); if (pwb) kids.push(pwb); kids.push(del);
+          var emb = null;
+          if (isAdmin()) {
+            emb = el("button", { type: "button", text: "E-Mail ändern" });
+            emb.addEventListener("click", function () {
+              var v = window.prompt("Neue E-Mail-Adresse für " + r.email + ". Alle Daten (Rapporte, Konto) bleiben erhalten. Die Person meldet sich danach mit der neuen Adresse und dem bisherigen Passwort an.", "");
+              if (v === null) return; v = v.trim().toLowerCase();
+              if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { say("Bitte eine gültige E-Mail-Adresse eingeben.", "bad"); return; }
+              run(function () { return call("member_email_wechseln", { p_alt: r.email, p_neu: v }); }, "E-Mail geändert: " + r.email + " → " + v + ". Die Person meldet sich mit der neuen Adresse an (Passwort bleibt gleich).");
+            });
+          }
+          if (!isBuero()) kids.push(tog); if (bu) kids.push(bu); if (tmp) kids.push(tmp); if (pwb) kids.push(pwb); if (emb) kids.push(emb); kids.push(del);
         }
         list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, kids.length > 1 ? [kids[0], el("div", { "class": "acts" }, kids.slice(1))] : kids));
       });
