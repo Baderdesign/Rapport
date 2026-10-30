@@ -302,6 +302,7 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .f-time .tw { flex: 0 0 100%; display: flex; gap: 8px; }
 .f-time .tw .f { flex: 1; }
 .f-time .tw[hidden], .tw-add[hidden] { display: none; }
+.f-time .tw-del { flex: 0 0 42px; width: 42px; height: 42px; align-self: flex-end; font-size: 1.4rem; line-height: 1; padding: 0; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
 .f-time .tw-add { flex: 0 0 100%; height: auto; min-height: 34px; font-size: .85rem; }
 .f-pause { grid-column: span 2; order: 4; }
 .f-hin { order: 5; } .f-zur { order: 6; } .f-abs { order: 7; }
@@ -1003,7 +1004,7 @@ a.btn.primary { color: #f3d98f !important; }
     return '<label class="f ' + cls + '" for="' + id + '"><span>' + label + '</span><input id="' + id + '" ' + attrs + ' value="' + String(val).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;") + '"></label>';
   }
   function twHtml(p, e, k) { var has = !!(e["von" + k] || e["bis" + k]);
-    return '<div class="tw" data-tw="' + k + '"' + (has ? "" : " hidden") + '>' + fieldInput(p + "von" + k, "", k + ". Zeitfenster von", 'type="text" inputmode="decimal" data-k="von' + k + '" autocomplete="off" placeholder="12.30"', e["von" + k]) + fieldInput(p + "bis" + k, "", "bis", 'type="text" inputmode="decimal" data-k="bis' + k + '" autocomplete="off" placeholder="14.50"', e["bis" + k]) + '</div>';
+    return '<div class="tw" data-tw="' + k + '"' + (has ? "" : " hidden") + '>' + fieldInput(p + "von" + k, "", k + ". Zeitfenster von", 'type="text" inputmode="decimal" data-k="von' + k + '" autocomplete="off" placeholder="12.30"', e["von" + k]) + fieldInput(p + "bis" + k, "", "bis", 'type="text" inputmode="decimal" data-k="bis' + k + '" autocomplete="off" placeholder="14.50"', e["bis" + k]) + '<button type="button" class="tw-del" data-tw-del="' + k + '" aria-label="' + k + '. Zeitfenster entfernen" title="Zeitfenster entfernen">\u2212</button></div>';
   }
   function rowHtml(di, ri, e) {
     var p = "d" + di + "r" + ri + "-";
@@ -1087,6 +1088,13 @@ a.btn.primary { color: #f3d98f !important; }
     recalc(); persist();
   });
   $("days").addEventListener("click", function (ev) {
+    var twd = ev.target.closest ? ev.target.closest("[data-tw-del]") : null;
+    if (twd) {
+      var rw2 = twd.closest(".row"), en = state.days[+rw2.dataset.d][+rw2.dataset.r], kk = twd.dataset.twDel;
+      if (kk === "2") { en.von2 = en.von3 || ""; en.bis2 = en.bis3 || ""; }
+      en.von3 = ""; en.bis3 = "";
+      renderAll(); persist(); return;
+    }
     var twb = ev.target.closest ? ev.target.closest("[data-tw-add]") : null;
     if (twb) { var rw = twb.closest(".row"), hid = rw.querySelector(".tw[hidden]"); if (hid) { hid.hidden = false; var fi = hid.querySelector("input"); if (fi) fi.focus(); } if (!rw.querySelector(".tw[hidden]")) twb.hidden = true; return; }
     var add = ev.target.closest("[data-add]"), del = ev.target.closest("[data-del]");
