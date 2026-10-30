@@ -1442,8 +1442,8 @@ a.btn.primary { color: #f3d98f !important; }
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     var fh = el("div", { "class": "lbl", text: "Neue Baustelle" });
     var fnr = el("input", { type: "text", inputmode: "numeric", placeholder: "Nr.", autocomplete: "off", "aria-label": "Baustellen-Nr." });
-    var fn1 = el("input", { type: "text", placeholder: "Name / Adresse", autocomplete: "off", "aria-label": "Name oder Adresse" });
-    var fn2 = el("input", { "class": "full", type: "text", placeholder: "2. Zeile (optional)", autocomplete: "off", "aria-label": "Zweite Zeile" });
+    var fn1 = el("textarea", { rows: "1", placeholder: "Name / Adresse", autocomplete: "off", "aria-label": "Name oder Adresse", maxlength: "200" });
+    var fn2 = el("textarea", { "class": "full", rows: "1", placeholder: "2. Zeile (optional)", autocomplete: "off", "aria-label": "Zweite Zeile", maxlength: "200" });
     var ffa = el("textarea", { "class": "bulk full", placeholder: "Farbtöne und Hersteller (optional), z. B.\nWand: NCS S 1005-Y20R, Caparol\nDecke: Weiss, Brillux", "aria-label": "Farbtöne und Hersteller", maxlength: "2000" }); ffa.style.minHeight = "90px";
     function grow() { ffa.style.height = "auto"; ffa.style.height = Math.min(ffa.scrollHeight + 4, Math.round(window.innerHeight * 0.5)) + "px"; }
     ffa.addEventListener("focus", function () { grow(); setTimeout(function () { try { ffa.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { } }, 300); });
@@ -1452,6 +1452,10 @@ a.btn.primary { color: #f3d98f !important; }
     var ftz = el("input", { type: "text", inputmode: "numeric", placeholder: "Fahrt zurück (Min.)", autocomplete: "off", "aria-label": "Fahrzeit zurück in Minuten" });
     var save = el("button", { type: "button", "class": "btn primary", text: "Hinzufügen" }), cancel = el("button", { type: "button", "class": "btn", text: "Abbrechen", hidden: "" });
     var form = el("div", { "class": "sform" }, [fnr, fn1, fn2, ffa, el("div", { "class": "trv full" }, [fth, ftz]), el("div", { "class": "status full", text: "Fahrzeit pro Weg in Minuten. Leer lassen bei «zurück», wenn der Rückweg gleich lang ist." }), el("div", { "class": "actions full" }, [save, cancel])]);
+    [fn1, fn2].forEach(function (t) { t.style.cssText = "resize:none;overflow:hidden;min-height:42px;line-height:1.3;padding-top:10px;padding-bottom:10px;font:inherit"; t.addEventListener("keydown", function (ev) { if (ev.key === "Enter") ev.preventDefault(); }); t.addEventListener("input", function () { fitTa(t); }); });
+    function fitTa(t) { t.style.height = "auto"; t.style.height = Math.max(42, t.scrollHeight + 2) + "px"; }
+    function gAll() { fitTa(fn1); fitTa(fn2); if (typeof grow === "function") try { } catch (e) { } }
+    form.addEventListener("focusin", function (ev) { var t = ev.target; setTimeout(function () { try { t.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { } }, 350); });
     var seedBtn = el("button", { type: "button", "class": "btn", text: "Meine Baustellen aus dem Ordner laden (26001–26017)" });
     var upBtn = el("button", { type: "button", "class": "btn", text: "" });
     var ta = el("textarea", { "class": "bulk", placeholder: "26018 Garantie Müller, Dorfstrasse 4\n26019 Familie Huber, Seeweg 2; Küche", "aria-label": "Mehrere Baustellen einfügen" });
@@ -1465,7 +1469,7 @@ a.btn.primary { color: #f3d98f !important; }
                          : [el("h2", { text: "Baustellen" }), intro, info, q, cnt, list, el("div", { "class": "actions" }, [close])];
     var ov = el("div", { "class": "overlay sites", id: "sites", role: "dialog", "aria-modal": "true", "aria-label": adminView ? "Baustelle hinzufügen" : "Baustellen" }, [el("div", { "class": "sheet" }, kids)]);
 
-    function reset() { editNr = null; fnr.value = ""; fn1.value = ""; fn2.value = ""; ffa.value = ""; fth.value = ""; ftz.value = ""; fh.textContent = "Neue Baustelle"; save.textContent = "Hinzufügen"; cancel.hidden = true; }
+    function reset() { editNr = null; fnr.value = ""; fn1.value = ""; fn2.value = ""; setTimeout(gAll, 0); ffa.value = ""; fth.value = ""; ftz.value = ""; fh.textContent = "Neue Baustelle"; save.textContent = "Hinzufügen"; cancel.hidden = true; }
     async function run(fn, okText) {
       if (busy) return false; busy = true; say("Einen Moment …");
       try {
@@ -1485,7 +1489,7 @@ a.btn.primary { color: #f3d98f !important; }
         var row = [t];
         if (can) {
           var ed = el("button", { type: "button", text: "Ändern" }), de = el("button", { type: "button", "class": "x", text: "Löschen" });
-          ed.addEventListener("click", function () { editNr = x.nr; fnr.value = x.nr; fn1.value = x.n; fn2.value = x.n2 || ""; ffa.value = x.f || ""; fth.value = x.h || ""; ftz.value = x.z || ""; fh.textContent = "Baustelle " + x.nr + " ändern"; save.textContent = "Änderung speichern"; cancel.hidden = false; say(""); fn1.focus(); });
+          ed.addEventListener("click", function () { editNr = x.nr; fnr.value = x.nr; fn1.value = x.n; fn2.value = x.n2 || ""; setTimeout(gAll, 0); ffa.value = x.f || ""; fth.value = x.h || ""; ftz.value = x.z || ""; fh.textContent = "Baustelle " + x.nr + " ändern"; save.textContent = "Änderung speichern"; cancel.hidden = false; say(""); fn1.focus(); });
           de.addEventListener("click", async function () { if (confirm("Baustelle " + x.nr + " löschen?")) { var ok = await run(function () { return sitesSave([], [x.nr]); }, "Gelöscht: " + x.nr); if (ok && editNr === x.nr) reset(); } });
           row.push(ed, de);
         }
