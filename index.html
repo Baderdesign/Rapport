@@ -298,6 +298,11 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .f-time { grid-column: span 6; order: 3; flex-direction: row; gap: 8px; }
 .f-time .f { flex: 1; }
 .f-time .f-hrs { flex: 0 0 4.6rem; }
+.f-time { flex-wrap: wrap; }
+.f-time .tw { flex: 0 0 100%; display: flex; gap: 8px; }
+.f-time .tw .f { flex: 1; }
+.f-time .tw[hidden], .tw-add[hidden] { display: none; }
+.f-time .tw-add { flex: 0 0 100%; height: auto; min-height: 34px; font-size: .85rem; }
 .f-pause { grid-column: span 2; order: 4; }
 .f-hin { order: 5; } .f-zur { order: 6; } .f-abs { order: 7; }
 .f-hin, .f-zur, .f-abs { grid-column: span 2; }
@@ -600,24 +605,34 @@ a.btn.primary { color: #f3d98f !important; }
   function num(s) { var v = parseFloat(String(s == null ? "" : s).replace(",", ".")); return isFinite(v) && v > 0 ? v : 0; }
   function hm(min) { min = Math.round(min); return Math.floor(min / 60) + "." + pad(min % 60); }
   function fmtAbs(v) { return v ? String(Math.round(v * 100) / 100).replace(".", ",") : ""; }
-  function effs(rows) { /* Überschneidungen: jede Minute zählt nur einmal, und zwar für den kürzesten (genauesten) Eintrag */
-    var R = rows.map(function (e) { var a = tmin(e.von), b = tmin(e.bis); return (a !== null && b !== null && b > a) ? { a: a, b: b } : null; });
+  function wins(e) { /* bis zu 3 Zeitfenster pro Eintrag: von/bis, von2/bis2, von3/bis3 */
+    var out = [];
+    ["", "2", "3"].forEach(function (k) {
+      var v = e["von" + k], bs = e["bis" + k]; if (!v && !bs) return;
+      var a = tmin(v), b = tmin(bs), bad = !!((v && a === null) || (bs && b === null) || (a !== null && b !== null && b <= a));
+      out.push({ a: a, b: b, bad: bad, ok: a !== null && b !== null && b > a });
+    });
+    return out;
+  }
+  function effs(rows) { /* Überschneidungen: jede Minute zählt nur einmal, und zwar für das kürzeste (genaueste) Zeitfenster */
+    var R = rows.map(function (e) { return wins(e).filter(function (x) { return x.ok; }); });
     var out = rows.map(function () { return { gross: 0, night: 0 }; }), pts = [];
-    R.forEach(function (x) { if (x) { pts.push(x.a, x.b); } });
+    R.forEach(function (l) { l.forEach(function (x) { pts.push(x.a, x.b); }); });
     pts = pts.filter(function (v, i) { return pts.indexOf(v) === i; }).sort(function (u, v) { return u - v; });
     for (var i = 0; i + 1 < pts.length; i++) {
-      var p = pts[i], q = pts[i + 1], best = -1;
-      R.forEach(function (x, k) { if (x && x.a <= p && x.b >= q && (best < 0 || (x.b - x.a) < (R[best].b - R[best].a))) best = k; });
+      var p = pts[i], q = pts[i + 1], best = -1, bl = 1e9;
+      R.forEach(function (l, k) { l.forEach(function (x) { if (x.a <= p && x.b >= q && (x.b - x.a) < bl) { bl = x.b - x.a; best = k; } }); });
       if (best >= 0) { out[best].gross += q - p; out[best].night += ovl(p, q, 0, 360) + ovl(p, q, 1200, 1440); out[best].n1 = (out[best].n1 || 0) + ovl(p, q, 0, 360); out[best].n2 = (out[best].n2 || 0) + ovl(p, q, 1200, 1440); }
     }
     return out;
   }
   function calcRow(e, ef) {
-    var a = tmin(e.von), b = tmin(e.bis), gross = 0, work = 0;
-    var invalid = !!((e.von && a === null) || (e.bis && b === null) || (a !== null && b !== null && b <= a));
-    if (a !== null && b !== null && b > a) { gross = ef ? ef.gross : b - a; work = Math.max(0, gross - num(e.pause)); }
+    var ws = wins(e), ok = ws.filter(function (x) { return x.ok; }), gross = 0, work = 0;
+    var invalid = ws.some(function (x) { return x.bad; });
+    var a = ok.length ? Math.min.apply(null, ok.map(function (x) { return x.a; })) : null, b = ok.length ? Math.max.apply(null, ok.map(function (x) { return x.b; })) : null;
+    if (ok.length) { gross = ef ? ef.gross : ok.reduce(function (t, x) { return t + x.b - x.a; }, 0); work = Math.max(0, gross - num(e.pause)); }
     var hin = num(e.hin), zur = num(e.zur);
-    return { gross: gross, work: work, pause: num(e.pause), hin: hin, zur: zur, reise: hin + zur, abs: num(e.abs), invalid: invalid, hasTime: a !== null && b !== null && !invalid, von: a, bis: b };
+    return { gross: gross, work: work, pause: num(e.pause), hin: hin, zur: zur, reise: hin + zur, abs: num(e.abs), invalid: invalid, hasTime: ok.length > 0 && !invalid, von: a, bis: b, wins: ok };
   }
   function rowTara(ds, c) { /* Reisezeit-Abzug gehört zur Baustelle, bei der die Reisezeit eingetragen ist (insgesamt höchstens der Tagesabzug) */
     return ds.reise > 0 ? Math.min(c.work, ds.tara * c.reise / ds.reise) : 0;
@@ -634,7 +649,7 @@ a.btn.primary { color: #f3d98f !important; }
     days.forEach(function (d) { var s = dayStats(d); Object.keys(t).forEach(function (k) { t[k] += s[k]; }); });
     return t;
   }
-  function blank() { return { nr: "", obj: "", obj2: "", von: "", bis: "", pause: "", hin: "", zur: "", abs: "" }; }
+  function blank() { return { nr: "", obj: "", obj2: "", von: "", bis: "", von2: "", bis2: "", von3: "", bis3: "", pause: "", hin: "", zur: "", abs: "" }; }
   function emptyWeek() { return DAYS.map(function () { return [blank()]; }); }
   function isEmptyEntry(e) { return !(e.nr || e.obj || e.von || e.bis || e.pause || e.hin || e.zur || e.abs); }
 
@@ -987,6 +1002,9 @@ a.btn.primary { color: #f3d98f !important; }
   function fieldInput(id, cls, label, attrs, val) {
     return '<label class="f ' + cls + '" for="' + id + '"><span>' + label + '</span><input id="' + id + '" ' + attrs + ' value="' + String(val).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;") + '"></label>';
   }
+  function twHtml(p, e, k) { var has = !!(e["von" + k] || e["bis" + k]);
+    return '<div class="tw" data-tw="' + k + '"' + (has ? "" : " hidden") + '>' + fieldInput(p + "von" + k, "", k + ". Zeitfenster von", 'type="text" inputmode="decimal" data-k="von' + k + '" autocomplete="off" placeholder="12.30"', e["von" + k]) + fieldInput(p + "bis" + k, "", "bis", 'type="text" inputmode="decimal" data-k="bis' + k + '" autocomplete="off" placeholder="14.50"', e["bis" + k]) + '</div>';
+  }
   function rowHtml(di, ri, e) {
     var p = "d" + di + "r" + ri + "-";
     return '<div class="row" data-d="' + di + '" data-r="' + ri + '">' +
@@ -994,7 +1012,7 @@ a.btn.primary { color: #f3d98f !important; }
       '<div class="f f-obj"><span>Baustelle / Objekt</span>' +
         '<input type="text" id="' + p + 'obj" data-k="obj" autocomplete="off" placeholder="Baustelle suchen" value="' + esc(e.obj) + '">' +
         '<input type="text" id="' + p + 'obj2" data-k="obj2" autocomplete="off" aria-label="Baustelle, zweite Zeile" placeholder="2. Zeile (optional)" value="' + esc(e.obj2) + '"></div>' +
-      '<div class="f f-time">' + fieldInput(p + "von", "", "Arbeitszeit von", 'type="text" inputmode="decimal" data-k="von" autocomplete="off" placeholder="6.25"', e.von) + fieldInput(p + "bis", "", "bis", 'type="text" inputmode="decimal" data-k="bis" autocomplete="off" placeholder="16.14"', e.bis) + '<div class="f f-hrs"><span>Stunden</span><div class="calc" data-c="gross"></div></div></div>' +
+      '<div class="f f-time">' + fieldInput(p + "von", "", "Arbeitszeit von", 'type="text" inputmode="decimal" data-k="von" autocomplete="off" placeholder="6.25"', e.von) + fieldInput(p + "bis", "", "bis", 'type="text" inputmode="decimal" data-k="bis" autocomplete="off" placeholder="16.14"', e.bis) + '<div class="f f-hrs"><span>Stunden</span><div class="calc" data-c="gross"></div></div>' + twHtml(p, e, "2") + twHtml(p, e, "3") + '<button type="button" class="add tw-add" data-tw-add' + ((e.von3 || e.bis3) ? " hidden" : "") + '>+ Zeitfenster (z. B. nach der Pause)</button></div>' +
       fieldInput(p + "pause", "f-pause", "Pause in Min.", 'type="text" inputmode="numeric" data-k="pause" autocomplete="off" placeholder="60"', e.pause) +
       '<div class="f f-total"><span>Total ohne Pausen</span><div class="calc" data-c="work"></div></div>' +
       fieldInput(p + "hin", "f-hin", "Reise hin (Min.)", 'type="text" inputmode="numeric" data-k="hin" autocomplete="off"', e.hin) +
@@ -1069,6 +1087,8 @@ a.btn.primary { color: #f3d98f !important; }
     recalc(); persist();
   });
   $("days").addEventListener("click", function (ev) {
+    var twb = ev.target.closest ? ev.target.closest("[data-tw-add]") : null;
+    if (twb) { var rw = twb.closest(".row"), hid = rw.querySelector(".tw[hidden]"); if (hid) { hid.hidden = false; var fi = hid.querySelector("input"); if (fi) fi.focus(); } if (!rw.querySelector(".tw[hidden]")) twb.hidden = true; return; }
     var add = ev.target.closest("[data-add]"), del = ev.target.closest("[data-del]");
     if (add) { var di = +add.dataset.add; if (state.days[di].length < MAXROWS) { state.days[di].push(blank()); renderAll(); var r = document.querySelectorAll('.day')[di].querySelectorAll('.row'); var f = r[r.length - 1].querySelector('input'); if (f) f.focus(); persist(); } }
     if (del) { var row = del.closest(".row"), d = +row.dataset.d, r2 = +row.dataset.r; if (state.days[d].length > 1) { state.days[d].splice(r2, 1); renderAll(); persist(); } }
@@ -1093,7 +1113,7 @@ a.btn.primary { color: #f3d98f !important; }
     renderAll(); persist();
   });
   $("days").addEventListener("focusout", function (ev) {
-    var inp = ev.target, row = inp.closest ? inp.closest(".row") : null; if (!row || (inp.dataset.k !== "von" && inp.dataset.k !== "bis")) return;
+    var inp = ev.target, row = inp.closest ? inp.closest(".row") : null; if (!row || !/^(von|bis)[23]?$/.test(inp.dataset.k || "")) return;
     var v = tmin(inp.value); if (v === null || !inp.value) return;
     var n = fmtT(v); if (n !== inp.value) { inp.value = n; state.days[+row.dataset.d][+row.dataset.r][inp.dataset.k] = n; recalc(); persist(); }
   });
@@ -1170,7 +1190,7 @@ a.btn.primary { color: #f3d98f !important; }
         if (e.nr) txt(1, y1, e.nr, 7.5, false, "c");
         if (e.obj) txt(2, y1, e.obj, 7.5);
         if (e.obj2) txt(2, y2, e.obj2, 7.5);
-        if (c.hasTime) { txt(3, y1, fmtT(c.von) + " Uhr bis " + fmtT(c.bis) + " Uhr = " + hm(c.gross), 7.5, false, "c"); txt(5, y1, hm(c.work), 7.5, false, "c"); }
+        if (c.hasTime) { txt(3, y1, c.wins.length > 1 ? c.wins.map(function (x) { return fmtT(x.a) + "-" + fmtT(x.b); }).join(" + ") + " = " + hm(c.gross) : fmtT(c.von) + " Uhr bis " + fmtT(c.bis) + " Uhr = " + hm(c.gross), c.wins.length > 1 ? 6.5 : 7.5, false, "c"); txt(5, y1, hm(c.work), 7.5, false, "c"); }
         if (num(e.pause)) txt(4, y1, Math.round(num(e.pause)), 7.5, false, "c");
         if (c.hin) txt(6, y1, Math.round(c.hin), 7.5, false, "c");
         if (c.zur) txt(7, y1, Math.round(c.zur), 7.5, false, "c");
@@ -2750,7 +2770,7 @@ function openReport(pre) {
     if (am) { o.frei = am; o.any = true; }
     var ef = effs(list), r1 = 0, r2 = 0;
     list.forEach(function (e, ei) {
-      var a = tmin(e.von), b = tmin(e.bis); if (a === null || b === null || b <= a) return;
+      if (!calcRow(e, ef[ei]).hasTime) return;
       var N = ef[ei].night, D = ef[ei].gross - N, p = num(e.pause), pD = Math.min(p, D), pN = Math.min(Math.max(0, p - pD), N);
       o.tag += D - pD; o.night += N - pN; r1 += ef[ei].n1 || 0; r2 += ef[ei].n2 || 0;
     });
