@@ -257,7 +257,12 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .weeknav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 #splash { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: linear-gradient(#23262d, #0c0d10); transition: opacity .65s ease; }
+#splash { flex-direction: column; gap: 0; }
 #splash.off { opacity: 0; pointer-events: none; }
+#splash .sbar { position: relative; width: 240px; max-width: 64vw; height: 4px; margin-top: 34px; border-radius: 3px; background: #2e2a1c; overflow: hidden; }
+#splash .sbar i { position: absolute; top: 0; bottom: 0; left: 0; width: 40%; border-radius: 3px; background: linear-gradient(90deg, #c9a13a, #f0cf6a, #c9a13a); animation: sbar 1.3s ease-in-out infinite; }
+@keyframes sbar { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+#splash .stx { margin-top: 22px; font: 500 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .2em; color: #c9a84c; text-transform: uppercase; opacity: .9; }
 #splash img { width: 150px; height: 150px; border-radius: 34px; box-shadow: 0 10px 40px rgba(0,0,0,.5); animation: spl 1.4s ease-out both; }
 @keyframes spl { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -492,7 +497,7 @@ a.btn.primary { color: #f3d98f !important; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .thbtn { color: #e9cd82; box-shadow: 0 6px 16px rgba(0,0,0,.6), 0 0 12px rgba(205,174,106,.25), inset 0 1px 0 rgba(255,255,255,.1); } }
 </style>
 </head><body>
-<div id="splash" aria-hidden="true"><img id="splashImg" alt=""></div>
+<div id="splash" aria-hidden="true"><img id="splashImg" alt=""><div class="sbar"><i></i></div><div class="stx">Rapport wird geladen</div></div>
 <script>(function(){try{var l=document.querySelector('link[rel="apple-touch-icon"]');document.getElementById("splashImg").src=l.href;window.__ico=l.href}catch(e){}setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},6000)})();</script>
 
 <div class="wrap">
