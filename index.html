@@ -530,9 +530,11 @@ a.btn.primary { color: #f3d98f !important; }
           <label id="regKtBox" for="regKt"><span class="lbl">Sitz der Firma (Kanton, für die Feiertage)</span><select id="regKt"><option value="ZH">Zürich</option><option value="AG">Aargau</option><option value="ZG">Zug</option><option value="OW">Obwalden</option></select></label>
           <label for="regFeld"><span class="lbl" id="regLbl">Firmenname</span><input type="text" id="regFeld" autocomplete="off" autocapitalize="characters" placeholder="z. B. Maler Muster AG"></label>
           <div class="status" id="regHint"></div>
+          <label for="regOk" style="display:flex;gap:10px;align-items:flex-start;flex-direction:row;font-size:14px;line-height:1.4"><input type="checkbox" id="regOk" style="width:22px;height:22px;flex:0 0 auto;margin:1px 0 0"><span>Ich habe die <a href="#" id="regLegal">Nutzungsbedingungen und die Datenschutzerklärung</a> gelesen und bin einverstanden. Mir ist bewusst, dass dies ein privater Test ist und der Entwickler alle Daten sehen kann.</span></label>
         </div>
         <div class="actions"><button type="submit" class="btn primary" id="doLogin">Anmelden</button><button type="button" class="btn" id="doSignup">Registrieren</button><button type="button" class="btn" id="regBack" hidden>Zurück zur Anmeldung</button></div>
       </div>
+      <p id="legalNote" style="margin:10px 0 0;font-size:12px;opacity:.8">Privater Test. Mit dem Anmelden gelten die <a href="#" id="legalLink">Nutzung &amp; Datenschutz</a>.</p>
       <div id="authIn" class="actions" hidden><button type="button" class="btn" id="syncNow">Jetzt synchronisieren</button><button type="button" class="btn" id="pwBtn">Passwort ändern</button><button type="button" class="btn" id="doLogout">Abmelden</button></div>
       <div id="pwBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden>
         <label for="pwNeu"><span class="lbl">Neues Passwort</span><input type="password" id="pwNeu" autocomplete="new-password" minlength="6" placeholder="mindestens 6 Zeichen"></label>
@@ -938,6 +940,7 @@ a.btn.primary { color: #f3d98f !important; }
     var meta = null;
     if (mode === "up") {
       var fv = $("regFeld").value.trim();
+      if (!$("regOk").checked) { authMsg("Bitte zuerst bestätigen, dass du die Nutzungsbedingungen und die Datenschutzerklärung gelesen hast (Häkchen setzen).", "bad"); return; }
       if (regMode === "neu" && fv.length < 2) { authMsg("Bitte den Firmennamen eingeben.", "bad"); return; }
       if (regMode === "code" && fv.replace(/[^A-Za-z0-9]/g, "").length !== 6) { authMsg("Bitte den Firmen-Code eingeben (6 Zeichen, z. B. K7M-2Q9).", "bad"); return; }
     }
@@ -978,7 +981,7 @@ a.btn.primary { color: #f3d98f !important; }
     $("regHint").textContent = m === "neu" ? "Du wirst Administrator dieser Firma und siehst danach den Firmen-Code für deine Mitarbeiter." : "Den Code bekommst du vom Chef. Er nimmt dich danach in der App auf.";
   }
   function regShow(on) {
-    $("regBox").hidden = !on; $("doLogin").hidden = on; $("regBack").hidden = !on; authMsg("");
+    $("regBox").hidden = !on; $("legalNote").hidden = on; $("doLogin").hidden = on; $("regBack").hidden = !on; authMsg("");
     if (on) { regSet(regMode); $("regFeld").focus(); }
   }
   $("regNeu").addEventListener("click", function () { regSet("neu"); });
@@ -3106,6 +3109,30 @@ function openReport(pre) {
     }).sort(function (a, b) { return (a.name || a.em).localeCompare(b.name || b.em); });
   }
   function closeFeier() { var o = $("feier"); if (o) o.remove(); }
+  function openLegal() {
+    var old = $("legal"); if (old) old.remove();
+    var T = [
+      ["Privater Testbetrieb", "«Wochenrapport» von Bader Design (David Bader, Stüdlerstrasse 23, 8913 Ottenbach, Tel. 079 889 89 46, davidbader@gmx.ch) ist ein privater Test mit einem kleinen, persönlich eingeladenen Personenkreis. Es gibt keinen Anspruch auf Verfügbarkeit, Richtigkeit, Support oder Weiterbetrieb. Die Nutzung erfolgt auf eigenes Risiko. Die App kann jederzeit geändert, unterbrochen oder eingestellt werden."],
+      ["Berechnungen sind unverbindlich", "Stunden, Pausen, Reisezeiten, Überstunden, Saldi, Regie-Auswertungen und Kalkulationen sind Hilfsmittel und nicht rechtsverbindlich. Massgebend sind die offiziellen Unterlagen des Arbeitgebers. Bitte Eingaben prüfen, bevor ein Rapport oder PDF weitergegeben wird, und wichtige Daten zusätzlich über «Sicherung» speichern."],
+      ["Haftung", "Der Anbieter haftet, soweit gesetzlich zulässig, nicht für Schäden aus der Nutzung oder Nichtnutzung der App. Dazu zählen falsche oder fehlende Berechnungen, Datenverlust, Ausfälle, weitergegebene Rapporte und PDFs, Ausfälle von Drittdiensten sowie indirekte Schäden. Vorbehalten bleiben Absicht und grobe Fahrlässigkeit."],
+      ["Pflichten", "Zugangsdaten geheim halten, keine fremden Konten oder Daten nutzen, keine unnötigen Personendaten Dritter erfassen. Der Zugang kann jederzeit gesperrt oder gelöscht werden. Es gilt Schweizer Recht, Gerichtsstand Zürich."],
+      ["Datenschutz: welche Daten", "Konto (E-Mail, Name, Rolle, Passwort nur verschlüsselt), Arbeitszeiten, Absenzen, Baustellen, Wochen- und Regie-Rapporte, Fotos und Belege, Unterschriften, Kalkulationen sowie technische Angaben beim Aufruf (z. B. IP-Adresse). Keine Werbung, kein Tracking, keine Standortdaten."],
+      ["Wer die Daten sieht", "Sie sehen Ihre eigenen Daten. Büro, Admin und Inhaber sehen je nach Rolle die Daten der Mitarbeitenden ihrer Firma. Der Anbieter hat als Entwickler und Betreiber technisch Zugriff auf alle Daten. Er nutzt ihn nur für Betrieb, Support und Fehlerbehebung und gibt die Daten nicht weiter. Rapporte und PDFs geben Sie selbst weiter."],
+      ["Dienstleister", "Supabase (Datenbank und Anmeldung, Standort Zürich), GitHub Pages (Bereitstellung der App), cdnjs und jsDelivr (Hilfsbibliotheken). Dabei können Daten ins Ausland gelangen. Auf Ihrem Gerät speichert die App Einträge und einen Zwischenspeicher, damit sie auch ohne Empfang startet."],
+      ["Ihre Rechte", "Auskunft, Berichtigung, Löschung und Herausgabe Ihrer Daten sowie Widerruf einer Einwilligung: Mail an davidbader@gmx.ch. Beschwerde ist beim Eidg. Datenschutz- und Öffentlichkeitsbeauftragten (EDÖB) möglich. Bei Ende des Tests oder auf Verlangen werden die Daten gelöscht, soweit keine Aufbewahrungspflicht des Arbeitgebers besteht."]
+    ];
+    var kids = [el("h2", { text: "Nutzung & Datenschutz" })];
+    T.forEach(function (t) { kids.push(el("h3", { text: t[0], style: "margin:14px 0 4px;font-size:15px" })); kids.push(el("p", { text: t[1], style: "margin:0;font-size:14px;line-height:1.5" })); });
+    kids.push(el("p", { text: "Stand: 31. Oktober 2026", style: "margin:14px 0 0;font-size:12px;opacity:.7" }));
+    var cl = el("button", { type: "button", "class": "btn primary", text: "Schliessen" });
+    kids.push(el("div", { "class": "actions", style: "margin-top:14px" }, [cl]));
+    var ov = el("div", { "class": "overlay sites", id: "legal", role: "dialog", "aria-modal": "true", "aria-label": "Nutzung und Datenschutz" }, [el("div", { "class": "sheet", style: "max-height:88vh;overflow:auto" }, kids)]);
+    ov.style.zIndex = "70";
+    function shut() { ov.remove(); }
+    cl.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+    document.body.appendChild(ov);
+  }
+  window.__openLegal = openLegal;
   function openFeiertage(y) {
     closeFeier(); y = y || new Date().getFullYear();
     var WD = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
@@ -4492,6 +4519,7 @@ function openReport(pre) {
     if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", openKK]); items.push(["Novacolor", openNC]); items.push(["Naturofloor", openNF]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
+    items.push(["Nutzung & Datenschutz", openLegal]);
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
     items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
@@ -4499,6 +4527,8 @@ function openReport(pre) {
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
   }
   $("menuBtn").addEventListener("click", openMenu);
+  $("legalLink").addEventListener("click", function (e) { e.preventDefault(); openLegal(); });
+  $("regLegal").addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); openLegal(); });
 
   window.addEventListener("online", function () { rpFlush(); });
 
