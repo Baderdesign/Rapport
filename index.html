@@ -905,9 +905,30 @@ a.btn.primary { color: #f3d98f !important; }
   }
 
   /* ---------- Konto (Anmelden / Registrieren) ---------- */
+  var LEGAL_VER = "2026-10-31";
+  function legalOk() { return lsGet("wr2:legal") === LEGAL_VER; }
+  function legalGate() {
+    if (!user || legalOk() || $("legalGate")) return;
+    var ok = el("input", { type: "checkbox", id: "lgOk", style: "width:22px;height:22px;flex:0 0 auto;margin:1px 0 0" });
+    var lk = el("a", { href: "#", text: "Nutzungsbedingungen und Datenschutzerklärung" });
+    lk.addEventListener("click", function (e) { e.preventDefault(); openLegal(); });
+    var lb = el("label", { style: "display:flex;gap:10px;align-items:flex-start;flex-direction:row;font-size:14px;line-height:1.4;margin:14px 0" }, [ok, el("span", {}, [document.createTextNode("Ich habe die "), lk, document.createTextNode(" gelesen und bin einverstanden.")])]);
+    var go = el("button", { type: "button", "class": "btn primary", text: "Weiter" }); go.disabled = true;
+    ok.addEventListener("change", function () { go.disabled = !ok.checked; });
+    go.addEventListener("click", function () { if (!ok.checked) return; lsSet("wr2:legal", LEGAL_VER); ov.remove(); });
+    var sheet = el("div", { "class": "sheet", style: "max-height:88vh;overflow:auto" }, [
+      el("h2", { text: "Information" }),
+      el("p", { text: "Mitarbeiter: " + ((($("name") && $("name").value) || "").trim() || (user && user.email) || ""), style: "font-weight:700;margin:0 0 8px" }),
+      el("p", { text: "Die App ist ein privater Test von Bader Design. Es gibt keine Garantie und keine Haftung, Berechnungen sind unverbindlich. Der Entwickler kann alle Daten sehen. Die Daten liegen in einer Datenbank in Zürich und werden nachts gesichert." }),
+      lb, el("div", { "class": "actions" }, [go])]);
+    var ov = el("div", { "class": "overlay sites", id: "legalGate", role: "dialog", "aria-modal": "true", "aria-label": "Zustimmung" }, [sheet]);
+    ov.style.zIndex = "100000";
+    document.body.appendChild(ov);
+  }
   function authMsg(t, c) { var m = $("authMsg"); m.textContent = t || ""; m.className = "status" + (c ? " " + c : ""); }
   function renderAuth() {
     var hint = $("authHint");
+    if (user && !legalOk()) setTimeout(legalGate, 3100);
     $("authFields").hidden = !!user || !!cloudOff; $("authIn").hidden = !user; if (!user) $("pwBox").hidden = true;
     $("acctBtn").textContent = user ? (user.email || "Konto") : "Anmelden";
     var gate = gateOn();
@@ -941,6 +962,7 @@ a.btn.primary { color: #f3d98f !important; }
     if (mode === "up") {
       var fv = $("regFeld").value.trim();
       if (!$("regOk").checked) { authMsg("Bitte zuerst bestätigen, dass du die Nutzungsbedingungen und die Datenschutzerklärung gelesen hast (Häkchen setzen).", "bad"); return; }
+      lsSet("wr2:legal", LEGAL_VER);
       if (regMode === "neu" && fv.length < 2) { authMsg("Bitte den Firmennamen eingeben.", "bad"); return; }
       if (regMode === "code" && fv.replace(/[^A-Za-z0-9]/g, "").length !== 6) { authMsg("Bitte den Firmen-Code eingeben (6 Zeichen, z. B. K7M-2Q9).", "bad"); return; }
     }
@@ -3127,7 +3149,7 @@ function openReport(pre) {
     var cl = el("button", { type: "button", "class": "btn primary", text: "Schliessen" });
     kids.push(el("div", { "class": "actions", style: "margin-top:14px" }, [cl]));
     var ov = el("div", { "class": "overlay sites", id: "legal", role: "dialog", "aria-modal": "true", "aria-label": "Nutzung und Datenschutz" }, [el("div", { "class": "sheet", style: "max-height:88vh;overflow:auto" }, kids)]);
-    ov.style.zIndex = "70";
+    ov.style.zIndex = "100001";
     function shut() { ov.remove(); }
     cl.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
     document.body.appendChild(ov);
