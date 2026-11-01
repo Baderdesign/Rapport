@@ -2378,6 +2378,41 @@ function openReport(pre) {
 
   /* ---------- Farbtöne und Hersteller (Mitarbeiter lesen, Administratoren schreiben bei der Baustelle) ---------- */
   function closeColors() { var o = $("colors"); if (o) o.remove(); }
+  /* Farbtöne & Hersteller aller Baustellen als PDF (nur Baustellen mit Eintrag, aufsteigend nach Nummer) */
+  function buildColorsPdf() {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var sites = sitesList().filter(function (x) { return String(x.f || "").trim(); });
+    sites.sort(function (p, q) { return String(p.nr).localeCompare(String(q.nr), "de", { numeric: true }); });
+    if (!sites.length) return { empty: true };
+    var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" });
+    var mx = 16, W = 178, top = 24, bottom = 280, LH = 5, y = top;
+    function head() {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Farbtöne & Hersteller", mx, 16);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text("Stand " + dmy(new Date()) + "  ·  " + sites.length + " Baustellen", mx + W, 16, { align: "right" });
+      doc.setLineWidth(0.3); doc.line(mx, 19, mx + W, 19);
+    }
+    head();
+    sites.forEach(function (s) {
+      var lines = []; String(s.f).replace(/\r/g, "").split("\n").forEach(function (ln) { ln = ln.replace(/\s+$/, ""); if (!ln) { lines.push(""); return; } doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.splitTextToSize(ln, W - 4).forEach(function (p) { lines.push(p); }); });
+      while (lines.length && !lines[lines.length - 1]) lines.pop();
+      var h0 = 7 + (s.n2 ? 4.5 : 0), i = 0, first = true;
+      if (y + h0 + 3 * LH > bottom) { doc.addPage(); head(); y = top; }
+      function title(cont) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.text(String(s.nr) + "   " + (s.n || "") + (cont ? "  (Fortsetzung)" : ""), mx, y + 4.5);
+        y += 7;
+        if (s.n2 && !cont) { doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text(String(s.n2), mx, y + 3); y += 4.5; }
+      }
+      title(false);
+      while (i < lines.length) {
+        if (y + LH > bottom) { doc.addPage(); head(); y = top; title(true); }
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10); if (lines[i]) doc.text(lines[i], mx + 3, y + 3.6); y += LH; i++;
+      }
+      y += 2; doc.setLineWidth(0.15); doc.line(mx, y, mx + W, y); y += 5;
+    });
+    var n = doc.getNumberOfPages();
+    for (var p = 1; p <= n; p++) { doc.setPage(p); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text("Bader Design  ·  Farbtöne & Hersteller", mx, 289); doc.text("Seite " + p + " / " + n, mx + W, 289, { align: "right" }); }
+    return doc;
+  }
   function openColors(pre) {
     pre = (pre && pre.nr) ? pre : {};
     closeColors(); closeMenu(); closeSites(); closeMembers(); if (!pre.nr) closeBilanz(); closeReport(); hideSug();
@@ -2405,7 +2440,19 @@ function openReport(pre) {
     q.addEventListener("input", function () { sel = null; draw(); });
     q.addEventListener("focus", function () { list._f = 0; if (!sel) draw(); });
     close.addEventListener("click", closeColors);
-    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Farbtöne & Hersteller" }), el("p", { text: "Suche die Baustelle. Darunter steht, was der Administrator dazu hinterlegt hat." }), q, list, card, el("div", { "class": "actions" }, [close])]);
+    var pr = el("button", { type: "button", "class": "btn", text: "Alle ausdrucken (PDF)" }), prMsg = el("div", { "class": "status", role: "status" });
+    pr.addEventListener("click", async function () {
+      pr.disabled = true; prMsg.textContent = "Liste wird erstellt …"; prMsg.className = "status";
+      try {
+        if (user && navigator.onLine) { try { await pullSites(); } catch (e) { } }
+        var d = buildColorsPdf();
+        if (!d) { prMsg.textContent = "Die PDF-Bibliothek ist nicht geladen. Bitte Internet prüfen und nochmals versuchen."; prMsg.className = "status bad"; }
+        else if (d.empty) { prMsg.textContent = "Es ist noch bei keiner Baustelle etwas hinterlegt."; prMsg.className = "status warn"; }
+        else { prMsg.textContent = ""; var t = new Date(); await sharePdf(d, "Farbtoene_Hersteller_" + t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()) + ".pdf", "Farbtöne & Hersteller"); }
+      } catch (e) { prMsg.textContent = "Das PDF konnte nicht erstellt werden."; prMsg.className = "status bad"; }
+      pr.disabled = false;
+    });
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Farbtöne & Hersteller" }), el("p", { text: "Suche die Baustelle. Darunter steht, was der Administrator dazu hinterlegt hat." }), q, list, card, el("div", { "class": "actions" }, [pr, close]), prMsg]);
     var ov = el("div", { "class": "overlay sites", id: "colors", role: "dialog", "aria-modal": "true", "aria-label": "Farbtöne und Hersteller" }, [sheet]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeColors(); });
     document.body.appendChild(ov); card.hidden = true;
@@ -3204,19 +3251,162 @@ function openReport(pre) {
     });
     document.body.appendChild(ov); iu.focus();
   }
+  /* Stundenübersicht als PDF (gleiche Zahlen wie auf dem Bildschirm) */
+  function buildGleitPdf(L, firma) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" });
+    var mx = 16, W = 178, top = 26, bottom = 280, LH = 5.2, y = top, y0 = L.y, mo = L.mo;
+    function head() {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Stundenübersicht " + MNAME[mo] + " " + y0, mx, 16);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text((firma ? firma + "  ·  " : "") + "Stand " + dmy(new Date()), mx + W, 16, { align: "right" });
+      doc.setLineWidth(0.3); doc.line(mx, 19.5, mx + W, 19.5);
+    }
+    function row(l, v, b) { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(10); doc.text(String(l), mx + 3, y + 3.8); doc.text(String(v), mx + W - 3, y + 3.8, { align: "right" }); y += LH; }
+    function sec(t) { y += 1.5; doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(t.toUpperCase(), mx + 3, y + 3.5); y += LH; }
+    function tg(m) { return " (" + String(Math.round(m / 480 * 10) / 10).replace(".", ",") + " Tage)"; }
+    function sep() { y += 1.5; doc.setLineWidth(0.15); doc.line(mx, y, mx + W, y); y += 6; }
+    function title(o) { doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(o.name || o.em, mx, y + 4.5); y += 6.5; if (o.name && o.em) { doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text(String(o.em), mx, y + 3); y += 4.5; } }
+    function room(h) { if (y + h > bottom) { doc.addPage(); head(); y = top; } }
+    head();
+    var any = false;
+    L.res.forEach(function (o) {
+      any = true;
+      var K = L.kx[o.em] || {}, ue0 = pmin(K.ue_vorjahr), us0 = pmin(K.ue_start), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480), fer = o.fer || 0;
+      var kto = !!(o.has || ue0 || us0 || fa || fv0);
+      room(o.has ? (kto ? 100 : 56) : 22 + (kto ? 44 : 0));
+      title(o);
+      if (o.has && o.lim) { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.text("Gerechnet bis und mit KW " + isoWeek(o.lim).w + " (nur ganze Wochen, die laufende Woche zählt ab Samstag).", mx + 3, y + 3.3); y += 5; }
+      if (!o.has) { doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Noch keine Daten.", mx + 3, y + 3.8); y += LH; }
+      else [["Gearbeitet", hm(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hm(o.abs)], ["Zuschläge", hm(o.zus)], ["Feiertage bezahlt", hm(o.fth)], ["Ist-Konto", hm(o.ist), 1], ["Soll-Konto", hm(o.soll), 1], ["Saldo Monat +/−", hmS(o.saldo), 1], ["Saldo Jahr kumuliert", hmS(o.kum), 1]].forEach(function (x) { row(x[0], x[1], x[2]); });
+      if (kto) {
+        var frj = o.frj || 0, vjAb = Math.min(frj, Math.max(ue0, 0));
+        sec("Überstunden-Konto"); row("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1); row("Überstunden aktuelles Jahr", hmS(us0 + (o.kum || 0) - frj + vjAb), 1);
+        if (frj) row("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hmS(frj));
+        sec("Ferien-Konto"); row("Anspruch " + y0, hmS(fa) + tg(fa)); row("Übertrag letztes Jahr", hmS(fv0) + tg(fv0)); row("Bezogen", hmS(fer) + tg(fer)); row("Rest Ferien", hmS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1);
+      }
+      sep();
+    });
+    if (L.tmps.length) {
+      any = true; room(30); sec("Temporäre · nur Gesamtzeit im Monat"); y += 1;
+      L.tmps.forEach(function (o) { room(8); row(o.name || o.em, o.has ? hm(o.work) : "Noch keine Daten", 1); });
+    }
+    if (!any) return { empty: true };
+    var n = doc.getNumberOfPages();
+    for (var p = 1; p <= n; p++) { doc.setPage(p); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text("Bader Design  ·  Stundenübersicht  ·  unverbindliche Hilfsrechnung, es gelten die offiziellen Unterlagen des Arbeitgebers", mx, 289); doc.text("Seite " + p + " / " + n, mx + W, 289, { align: "right" }); }
+    return doc;
+  }
+  /* Stundenübersicht für das ganze Jahr als PDF: pro Mitarbeiter eine Seite mit allen Monaten (oder nur ein Mitarbeiter) */
+  function buildGleitYearPdf(Y, firma, only) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
+    var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" });
+    var mx = 16, W = 178, top = 26, bottom = 280, LH = 5.4, y = top, yr = Y.y;
+    var COLS = [["Monat", 34], ["Gearbeitet", 18], ["Absenzen", 18], ["Zuschläge", 18], ["Feiertage", 18], ["Ist", 18], ["Soll", 18], ["Saldo", 18], ["Kumuliert", 18]];
+    function head() {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Stundenübersicht " + yr, mx, 16);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text((firma ? firma + "  ·  " : "") + "Stand " + dmy(new Date()), mx + W, 16, { align: "right" });
+      doc.setLineWidth(0.3); doc.line(mx, 19.5, mx + W, 19.5);
+    }
+    function newPage() { doc.addPage(); head(); y = top; }
+    function title(name, em) { doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text(name || em, mx, y + 4.5); y += 7; if (name && em) { doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text(String(em), mx, y + 2.5); y += 5; } y += 1; }
+    function trow(cells, bold, line) {
+      var x = mx; doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(9);
+      COLS.forEach(function (c, i) { var v = cells[i] == null ? "" : String(cells[i]); if (i === 0) doc.text(v, x + 1, y + 3.8); else doc.text(v, x + c[1] - 1, y + 3.8, { align: "right" }); x += c[1]; });
+      y += LH; if (line) { doc.setLineWidth(line); doc.line(mx, y - 0.6, mx + W, y - 0.6); }
+    }
+    function row(l, v, b) { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(10); doc.text(String(l), mx + 3, y + 3.8); doc.text(String(v), mx + W - 3, y + 3.8, { align: "right" }); y += LH; }
+    function sec(t) { y += 2; doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(t.toUpperCase(), mx + 3, y + 3.5); y += LH; }
+    function tg(m) { return " (" + String(Math.round(m / 480 * 10) / 10).replace(".", ",") + " Tage)"; }
+    function room(h) { if (y + h > bottom) newPage(); }
+    function find(mo, em) { var a = Y.P[mo] || []; for (var i = 0; i < a.length; i++) { if (a[i].em === em) return a[i]; } return null; }
+    head();
+    var first = true, any = false;
+    Y.emps.forEach(function (e) {
+      if (only && e.em !== only) return;
+      any = true; if (!first) newPage(); first = false;
+      title(e.name, e.em);
+      trow(["Monat", "Gearbeitet", "Absenzen", "Zuschläge", "Feiertage", "Ist", "Soll", "Saldo", "Kumuliert"], true, 0.3);
+      var sw = 0, sa = 0, sz = 0, sf = 0, si = 0, ss = 0, sm = 0, kum = 0, lastO = null;
+      for (var mo = 0; mo < 12; mo++) {
+        var o = find(mo, e.em);
+        if (!o || !o.has || !(o.work || o.abs || o.zus || o.fth || o.soll)) { trow([MNAME[mo], "–"], false, 0.1); continue; }
+        lastO = o; sw += o.work; sa += o.abs; sz += o.zus; sf += o.fth; si += o.ist; ss += o.soll; sm += o.saldo; kum = o.kum;
+        trow([MNAME[mo], hm(o.work), hm(o.abs), hm(o.zus), hm(o.fth), hm(o.ist), hm(o.soll), hmS(o.saldo), hmS(o.kum)], false, 0.1);
+      }
+      trow(["Total " + yr, hm(sw), hm(sa), hm(sz), hm(sf), hm(si), hm(ss), hmS(sm), hmS(kum)], true, 0.3);
+      var K = Y.kx[e.em] || {}, ue0 = pmin(K.ue_vorjahr), us0 = pmin(K.ue_start), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480);
+      if (lastO || ue0 || us0 || fa || fv0) {
+        var o2 = lastO || {}, fer = o2.fer || 0, frj = o2.frj || 0;
+        var vjAb = Math.min(frj, Math.max(ue0, 0));
+        room(60); sec("Überstunden-Konto (Stand Ende des letzten Monats mit Daten)");
+        row("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1); row("Überstunden aktuelles Jahr", hmS(us0 + (o2.kum || 0) - frj + vjAb), 1);
+        if (frj) row("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hmS(frj));
+        sec("Ferien-Konto"); row("Anspruch " + yr, hmS(fa) + tg(fa)); row("Übertrag letztes Jahr", hmS(fv0) + tg(fv0)); row("Bezogen", hmS(fer) + tg(fer)); row("Rest Ferien", hmS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1);
+      }
+    });
+    if (!only && Y.tmps.length) {
+      if (!first) newPage(); first = false; any = true;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text("Temporäre · Gesamtzeit pro Monat", mx, y + 4.5); y += 9;
+      Y.tmps.forEach(function (e) {
+        room(12 * LH + 14);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(e.name || e.em, mx, y + 4); y += 6.5; var tot = 0;
+        for (var mo = 0; mo < 12; mo++) { var o = find(mo, e.em); if (o && o.has && o.work) { tot += o.work; row(MNAME[mo], hm(o.work)); } }
+        row("Total " + yr, hm(tot), 1); y += 3;
+      });
+    }
+    if (!any) return { empty: true };
+    var n = doc.getNumberOfPages();
+    for (var p = 1; p <= n; p++) { doc.setPage(p); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text("Bader Design  ·  Stundenübersicht " + yr + "  ·  unverbindliche Hilfsrechnung, es gelten die offiziellen Unterlagen des Arbeitgebers", mx, 289); doc.text("Seite " + p + " / " + n, mx + W, 289, { align: "right" }); }
+    return doc;
+  }
   function openGleit() {
     closeGleit(); var now = new Date(), busy = false, adm = isAdmin(), mine = memberGet(), meMail = String((user && user.email) || "").toLowerCase(), meTemp = !!(mine && mine.rolle === "temporaer");
     var mi = el("input", { type: "month", "aria-label": "Monat" }); mi.value = now.getFullYear() + "-" + pad(now.getMonth() + 1);
-    var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" }), pdfB = el("button", { type: "button", "class": "btn", text: "Monat als PDF" }), yB = el("button", { type: "button", "class": "btn", text: "Ganzes Jahr als PDF" }), selE = el("select", { "aria-label": "Mitarbeiter für das Jahres-PDF" }), last = null; selE.hidden = true;
     var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" }); list.style.maxHeight = "58vh";
-    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Stundenübersicht" }), el("p", { text: adm ? "Alle Mitarbeiter: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat." : (meTemp ? "Deine Gesamtzeit pro Monat." : "Deine Stunden: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten.") }), mi, el("div", { "class": "actions" }, [go, cl]), msg, list]);
+    yB.addEventListener("click", async function () {
+      if (!last) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; return; }
+      var yy = last.y; msg.textContent = "Das Jahr wird berechnet …"; yB.disabled = true;
+      try {
+        var rowsAll, tmpMail = {};
+        if (adm) {
+          if (!sb || !navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
+          var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(new Date(yy, 0, 1))), p_bis: key(new Date(yy, 11, 31)) });
+          if (r.error) { msg.textContent = sharedMsg(r.error); return; }
+          rowsAll = r.data || [];
+          try { var ml = await sb.rpc("members_list"); if (!ml.error && Array.isArray(ml.data)) ml.data.forEach(function (x) { if (x.rolle === "temporaer") tmpMail[String(x.email).toLowerCase()] = 1; }); } catch (e) { }
+        } else {
+          rowsAll = []; localKeys().forEach(function (wk) { var o = localWeek(wk); if (o) rowsAll.push({ email: meMail || "ich", week: wk, data: o }); });
+          if (meTemp) tmpMail[meMail || "ich"] = 1;
+        }
+        var kx = {};
+        if (sb && user && navigator.onLine) { try { var kr = await sb.rpc("konten_list", { p_jahr: yy }); if (!kr.error && Array.isArray(kr.data)) kr.data.forEach(function (x) { kx[String(x.email).toLowerCase()] = x; }); } catch (e) { } }
+        var P = [], emps = {}, tmps = {};
+        for (var mo = 0; mo < 12; mo++) {
+          var all = gleitCalc(rowsAll, yy, mo); P.push(all);
+          all.forEach(function (o) { var tgt = tmpMail[o.em] ? tmps : emps; if (!tgt[o.em]) tgt[o.em] = { em: o.em, name: o.name || "" }; if (o.name) tgt[o.em].name = o.name; });
+        }
+        function lst(m) { return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return String(a.name || a.em).localeCompare(String(b.name || b.em), "de"); }); }
+        var d = buildGleitYearPdf({ y: yy, P: P, emps: lst(emps), tmps: lst(tmps), kx: kx }, (memberGet() || {}).firma || "", selE.hidden ? "" : selE.value);
+        if (!d) { msg.textContent = "Die PDF-Bibliothek ist nicht geladen. Bitte Internet prüfen."; return; }
+        if (d.empty) { msg.textContent = "Für dieses Jahr gibt es keine Daten."; return; }
+        msg.textContent = ""; await sharePdf(d, "Stundenuebersicht_" + yy + (selE.hidden || !selE.value ? "" : "_" + selE.value.split("@")[0]) + ".pdf", "Stundenübersicht " + yy);
+      } catch (e) { msg.textContent = sharedMsg(e); } finally { yB.disabled = false; }
+    });
+    pdfB.addEventListener("click", async function () {
+      if (!last) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; return; }
+      var d = buildGleitPdf(last, (memberGet() || {}).firma || "");
+      if (!d) { msg.textContent = "Die PDF-Bibliothek ist nicht geladen. Bitte Internet prüfen."; return; }
+      if (d.empty) { msg.textContent = "Keine Daten für dieses PDF."; return; }
+      msg.textContent = ""; await sharePdf(d, "Stundenuebersicht_" + last.y + "-" + pad(last.mo + 1) + ".pdf", "Stundenübersicht");
+    });
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Stundenübersicht" }), el("p", { text: adm ? "Alle Mitarbeiter: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat." : (meTemp ? "Deine Gesamtzeit pro Monat." : "Deine Stunden: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten.") }), mi, el("div", { "class": "actions" }, [go, pdfB, yB, cl]), selE, msg, list]);
     var ov = el("div", { "class": "overlay sites", id: "gleit", role: "dialog", "aria-modal": "true", "aria-label": "Stundenübersicht" }, [sheet]);
     function line(l, v, b) { return el("div", { style: "display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums" + (b ? ";font-weight:700" : "") }, [el("span", { text: l }), el("span", { text: v })]); }
     async function load() {
       if (busy) return; var p = (mi.value || "").split("-"); if (p.length < 2) return; var y = +p[0], mo = +p[1] - 1;
       if (adm && !sb) { msg.textContent = "Bitte zuerst anmelden."; return; }
       if (adm && !navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
-      busy = true; msg.textContent = "Einen Moment …";
+      busy = true; msg.textContent = "Einen Moment …"; last = null;
       try {
         var rowsAll, tmpMail = {};
         if (adm) { /* Administrator: alle Mitarbeiter der Firma */
@@ -3232,6 +3422,8 @@ function openReport(pre) {
         if (sb && user && navigator.onLine) { try { var kr = await sb.rpc("konten_list", { p_jahr: y }); if (!kr.error && Array.isArray(kr.data)) kr.data.forEach(function (x) { kx[String(x.email).toLowerCase()] = x; }); } catch (e) { } }
         msg.textContent = ""; list.textContent = "";
         var allP = gleitCalc(rowsAll, y, mo), res = allP.filter(function (o) { return !tmpMail[o.em]; }), tmps = allP.filter(function (o) { return tmpMail[o.em]; });
+        last = { y: y, mo: mo, res: res, tmps: tmps, kx: kx };
+        (function () { var old = selE.value; selE.textContent = ""; selE.appendChild(el("option", { value: "", text: "Jahres-PDF: alle Mitarbeiter" })); res.forEach(function (o) { selE.appendChild(el("option", { value: o.em, text: "Jahres-PDF: nur " + (o.name || o.em) })); }); selE.value = old; if (selE.value !== old) selE.value = ""; selE.hidden = !(adm && res.length > 1); })();
         if (!res.length && !tmps.length) list.appendChild(el("div", { "class": "status", text: "Keine Daten." }));
         res.forEach(function (o) {
           var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
