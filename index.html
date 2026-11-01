@@ -4847,6 +4847,7 @@ function openReport(pre) {
       var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
       if (iS >= 0 && iU >= 0) { var fS = items[iS][1], fU = items[iU][1]; items[iS] = ["Stundenübersicht", null, [["Stunden pro Mitarbeiter", fS], ["Monats- / Jahresübersicht", fU]]]; items.splice(iU, 1); }
     })();
+    if (memberGet() && memberGet().rolle === "temporaer") items = items.filter(function (it) { return it[0] !== "Farbverbrauch-Rechner"; }); /* Temporäre brauchen den Farbverbrauch-Rechner nicht */
     items.push(["Nutzung & Datenschutz", openLegal]);
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
     items.forEach(function (it) {
