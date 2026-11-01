@@ -908,7 +908,7 @@ a.btn.primary { color: #f3d98f !important; }
   var LEGAL_VER = "2026-10-31";
   function legalOk() { return lsGet("wr2:legal") === LEGAL_VER; }
   function legalGate() {
-    if (!user || legalOk() || $("legalGate")) return;
+    if (!user || legalOk() || $("legalGate") || window.__demoAs || isDemo()) return;
     var ok = el("input", { type: "checkbox", id: "lgOk", style: "width:22px;height:22px;flex:0 0 auto;margin:1px 0 0" });
     var lk = el("a", { href: "#", text: "Nutzungsbedingungen und Datenschutzerklärung" });
     lk.addEventListener("click", function (e) { e.preventDefault(); openLegal(); });
@@ -4730,12 +4730,24 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", openKK]); items.push(["Novacolor", openNC]); items.push(["Naturofloor", openNF]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
+    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
     if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
+    (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
+      var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
+      if (iS >= 0 && iU >= 0) { var fS = items[iS][1], fU = items[iU][1]; items[iS] = ["Stundenübersicht", null, [["Stunden pro Mitarbeiter", fS], ["Monats- / Jahresübersicht", fU]]]; items.splice(iU, 1); }
+    })();
     items.push(["Nutzung & Datenschutz", openLegal]);
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
-    items.forEach(function (it) { var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b); });
+    items.forEach(function (it) {
+      if (it[2]) { /* Aufklappbar: Untermenü direkt darunter, es scrollt nach unten ins Bild */
+        var b2 = el("button", { type: "button", "class": "btn", text: it[0] + "  ▾", "aria-expanded": "false" }), sub = el("div", { style: "display:flex;flex-direction:column;gap:8px;margin:2px 0 4px 14px;padding-left:10px;border-left:3px solid var(--gold, #c9a13a)" }); sub.hidden = true;
+        it[2].forEach(function (x) { var sb2 = el("button", { type: "button", "class": "btn", text: x[0] }); sb2.addEventListener("click", function () { closeMenu(); x[1](); }); sub.appendChild(sb2); });
+        b2.addEventListener("click", function () { var open = sub.hidden; sub.hidden = !open; b2.setAttribute("aria-expanded", String(open)); b2.textContent = it[0] + (open ? "  ▴" : "  ▾"); if (open) setTimeout(function () { try { sub.lastChild.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) { } }, 30); });
+        box.appendChild(b2); box.appendChild(sub); return;
+      }
+      var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b);
+    });
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMenu(); });
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
