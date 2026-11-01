@@ -256,14 +256,14 @@ input[type=time] { padding-inline: 8px; }
 input[aria-invalid="true"] { border-color: var(--bad); }
 .weeknav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-#splash { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: linear-gradient(#23262d, #0c0d10); transition: opacity .65s ease; }
+#splash { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: linear-gradient(#23262d, #0c0d10); transition: opacity .35s ease; }
 #splash { flex-direction: column; gap: 0; }
 #splash.off { opacity: 0; pointer-events: none; }
 #splash .sbar { position: relative; width: 240px; max-width: 64vw; height: 4px; margin-top: 34px; border-radius: 3px; background: #2e2a1c; overflow: hidden; }
-#splash .sbar i { position: absolute; top: 0; bottom: 0; left: 0; width: 40%; border-radius: 3px; background: linear-gradient(90deg, #c9a13a, #f0cf6a, #c9a13a); animation: sbar 1.3s ease-in-out infinite; }
-@keyframes sbar { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+#splash .sbar i { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; border-radius: 3px; background: linear-gradient(90deg, #c9a13a, #f0cf6a, #c9a13a); transform-origin: 0 50%; transform: scaleX(0); animation: sfill .95s cubic-bezier(.25,.6,.3,1) forwards; }
+@keyframes sfill { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
 #splash .stx { margin-top: 22px; font: 500 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .2em; color: #c9a84c; text-transform: uppercase; opacity: .9; }
-#splash img { width: 150px; height: 150px; border-radius: 34px; box-shadow: 0 10px 40px rgba(0,0,0,.5); animation: spl 1.4s ease-out both; }
+#splash img { width: 150px; height: 150px; border-radius: 34px; box-shadow: 0 10px 40px rgba(0,0,0,.5); animation: spl .6s ease-out both; }
 @keyframes spl { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand .logo { width: 46px; height: 46px; border-radius: 11px; flex: 0 0 auto; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
@@ -928,7 +928,7 @@ a.btn.primary { color: #f3d98f !important; }
   function authMsg(t, c) { var m = $("authMsg"); m.textContent = t || ""; m.className = "status" + (c ? " " + c : ""); }
   function renderAuth() {
     var hint = $("authHint");
-    if (user && !legalOk()) setTimeout(legalGate, 3100);
+    if (user && !legalOk()) setTimeout(legalGate, 1700);
     $("authFields").hidden = !!user || !!cloudOff; $("authIn").hidden = !user; if (!user) $("pwBox").hidden = true;
     $("acctBtn").textContent = user ? (user.email || "Konto") : "Anmelden";
     var gate = gateOn();
@@ -4903,7 +4903,7 @@ function openReport(pre) {
   document.addEventListener("visibilitychange", function () { if (!document.hidden) { checkNewWeek(); if (user) pullAll(); setTimeout(dienstagCheck, 1500); setTimeout(feierCheck, 2500); } });
   window.addEventListener("pageshow", checkNewWeek); window.addEventListener("focus", checkNewWeek);
   setInterval(checkNewWeek, 60000);
-  setTimeout(function () { var s = document.getElementById("splash"); if (!s) return; s.classList.add("off"); setTimeout(function () { s.remove(); }, 700); }, 2300);
+  setTimeout(function () { var s = document.getElementById("splash"); if (!s) return; s.classList.add("off"); setTimeout(function () { s.remove(); }, 400); }, 1050);
   setInterval(function () { if (user && qGet().length) flush(); }, 30000);
 })();
 </script>
