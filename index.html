@@ -535,6 +535,7 @@ a.btn.primary { color: #f3d98f !important; }
         <div class="actions"><button type="submit" class="btn primary" id="doLogin">Anmelden</button><button type="button" class="btn" id="doSignup">Registrieren</button><button type="button" class="btn" id="regBack" hidden>Zurück zur Anmeldung</button></div>
       </div>
       <p id="legalNote" style="margin:10px 0 0;font-size:12px;opacity:.8">Privater Test. Mit dem Anmelden gelten die <a href="#" id="legalLink">Nutzung &amp; Datenschutz</a>.</p>
+      <div id="tempWrap" style="margin-top:12px"><button type="button" class="btn" id="tempToggle" aria-expanded="false">Temporärer Zugang (Code &amp; PIN)</button><div id="tempBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden><label for="tCode"><span class="lbl">Code</span><input type="text" id="tCode" inputmode="numeric" autocomplete="off" placeholder="TEMP-1234"></label><label for="tPin"><span class="lbl">PIN</span><input type="password" id="tPin" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 Ziffern"></label><div class="actions"><button type="button" class="btn primary" id="tGo">Mit Code anmelden</button></div><div class="status">Code und PIN bekommst du vom Chef.</div></div></div>
       <div id="authIn" class="actions" hidden><button type="button" class="btn" id="syncNow">Jetzt synchronisieren</button><button type="button" class="btn" id="pwBtn">Passwort ändern</button><button type="button" class="btn" id="doLogout">Abmelden</button></div>
       <div id="pwBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden>
         <label for="pwNeu"><span class="lbl">Neues Passwort</span><input type="password" id="pwNeu" autocomplete="new-password" minlength="6" placeholder="mindestens 6 Zeichen"></label>
@@ -918,7 +919,7 @@ a.btn.primary { color: #f3d98f !important; }
     go.addEventListener("click", function () { if (!ok.checked) return; lsSet("wr2:legal", LEGAL_VER); ov.remove(); });
     var sheet = el("div", { "class": "sheet", style: "max-height:88vh;overflow:auto" }, [
       el("h2", { text: "Information" }),
-      el("p", { text: "Mitarbeiter: " + ((($("name") && $("name").value) || "").trim() || (user && user.email) || ""), style: "font-weight:700;margin:0 0 8px" }),
+      el("p", { text: "Mitarbeiter: " + ((($("name") && $("name").value) || "").trim() || userLbl()), style: "font-weight:700;margin:0 0 8px" }),
       el("p", { text: "Die App ist ein privater Test von Bader Design. Es gibt keine Garantie und keine Haftung, Berechnungen sind unverbindlich. Der Entwickler kann alle Daten sehen. Die Daten liegen in einer Datenbank in Zürich und werden nachts gesichert." }),
       lb, el("div", { "class": "actions" }, [go])]);
     var ov = el("div", { "class": "overlay sites", id: "legalGate", role: "dialog", "aria-modal": "true", "aria-label": "Zustimmung" }, [sheet]);
@@ -929,10 +930,11 @@ a.btn.primary { color: #f3d98f !important; }
   function renderAuth() {
     var hint = $("authHint");
     if (user && !legalOk()) setTimeout(legalGate, 1700);
+    $("tempWrap").hidden = !!user || !!cloudOff; $("pwBtn").hidden = isTempUser();
     $("authFields").hidden = !!user || !!cloudOff; $("authIn").hidden = !user; if (!user) $("pwBox").hidden = true;
-    $("acctBtn").textContent = user ? (user.email || "Konto") : "Anmelden";
+    $("acctBtn").textContent = user ? (userLbl() || "Konto") : "Anmelden";
     var gate = gateOn();
-    hint.textContent = cloudOff ? cloudOff : user ? "Angemeldet als " + (user.email || "") + ". Deine Wochen werden mit der Cloud abgeglichen." + (memberGet() ? " " + roleText(memberGet()) + "." : "") : gate ? "Willkommen. Bitte melde dich mit deiner E-Mail-Adresse an. Wer noch kein Konto hat, tippt auf «Registrieren» und bestätigt danach die E-Mail." : "Melde dich an, damit deine Wochen auf allen Geräten gleich sind. Ohne Anmeldung bleiben sie auf diesem Gerät.";
+    hint.textContent = cloudOff ? cloudOff : user ? "Angemeldet als " + userLbl() + ". Deine Wochen werden mit der Cloud abgeglichen." + (memberGet() ? " " + roleText(memberGet()) + "." : "") : gate ? "Willkommen. Bitte melde dich mit deiner E-Mail-Adresse an. Wer noch kein Konto hat, tippt auf «Registrieren» und bestätigt danach die E-Mail." : "Melde dich an, damit deine Wochen auf allen Geräten gleich sind. Ohne Anmeldung bleiben sie auf diesem Gerät.";
     document.querySelector(".wrap").classList.toggle("gated", gate); if (gate) $("auth").hidden = false;
     $("menuBtn").style.display = gate ? "none" : ""; if (gate && $("menu")) closeMenu();
     setSync();
@@ -991,6 +993,35 @@ a.btn.primary { color: #f3d98f !important; }
       setTimeout(function () { $("auth").hidden = true; $("acctBtn").setAttribute("aria-expanded", "false"); authMsg(""); }, 700);
     } catch (e) { authMsg(authError(e && e.message), "bad"); }
   }
+  function isTempUser() { return !!(user && /@temp\.invalid$/i.test(String(user.email || ""))); }
+  function userLbl() {
+    if (!user) return "";
+    if (isTempUser()) { var um = user.user_metadata || {}; return (um.name || "Temporär") + (um.code ? " (TEMP-" + um.code + ")" : ""); }
+    return user.email || "";
+  }
+  async function doTempLogin() {
+    if (!sb) { authMsg(cloudOff || "Cloud nicht verfügbar.", "bad"); return; }
+    var c = $("tCode").value.replace(/\D/g, ""), p = $("tPin").value.replace(/\D/g, "");
+    if (c.length !== 4 || p.length !== 4) { authMsg("Bitte Code (4 Ziffern, z. B. TEMP-1234) und PIN (4 Ziffern) eingeben.", "bad"); return; }
+    if (!navigator.onLine) { authMsg("Keine Verbindung. Zum Anmelden brauchst du Internet.", "bad"); return; }
+    authMsg("Einen Moment …");
+    try {
+      var r = await sb.rpc("temp_login", { p_code: c, p_pin: p });
+      if (r.error) { authMsg(/schema cache|does not exist|could not find/i.test(String(r.error.message)) ? "Der temporäre Zugang ist in Supabase noch nicht eingerichtet." : authError(r.error.message), "bad"); return; }
+      var d = Array.isArray(r.data) ? r.data[0] : r.data;
+      if (!d || !d.o_ok) { authMsg((d && d.o_msg) || "Code oder PIN stimmt nicht.", "bad"); return; }
+      var sr = await sb.auth.signInWithPassword({ email: d.o_email, password: d.o_pw });
+      if (sr.error) { authMsg("Die Anmeldung hat nicht geklappt. Bitte beim Chef nachfragen.", "bad"); return; }
+      $("tPin").value = ""; $("tCode").value = ""; authMsg("Angemeldet.", "ok");
+      var nmv = d.o_name || "";
+      setTimeout(function () { var nf = $("name"); if (nf && nmv && !nf.value.trim()) { nf.value = nmv; state.name = nmv; persist(); } }, 1500);
+      setTimeout(function () { $("auth").hidden = true; $("acctBtn").setAttribute("aria-expanded", "false"); authMsg(""); }, 700);
+    } catch (e) { authMsg(authError(e && e.message), "bad"); }
+  }
+  $("tempToggle").addEventListener("click", function () { var b = $("tempBox"); b.hidden = !b.hidden; this.setAttribute("aria-expanded", String(!b.hidden)); if (!b.hidden) $("tCode").focus(); });
+  $("tGo").addEventListener("click", doTempLogin);
+  $("tPin").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); doTempLogin(); } });
+  $("tCode").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("tPin").focus(); } });
   $("acctBtn").addEventListener("click", function () { var a = $("auth"); a.hidden = !a.hidden; this.setAttribute("aria-expanded", String(!a.hidden)); if (!a.hidden) { var f = a.querySelector("input:not([hidden])"); if (f && !user && !cloudOff) f.focus(); } });
   $("authForm").addEventListener("submit", function (e) { e.preventDefault(); doAuth("in"); });
   var regMode = "neu";
@@ -1003,7 +1034,7 @@ a.btn.primary { color: #f3d98f !important; }
     $("regHint").textContent = m === "neu" ? "Du wirst Administrator dieser Firma und siehst danach den Firmen-Code für deine Mitarbeiter." : "Den Code bekommst du vom Chef. Er nimmt dich danach in der App auf.";
   }
   function regShow(on) {
-    $("regBox").hidden = !on; $("legalNote").hidden = on; $("doLogin").hidden = on; $("regBack").hidden = !on; authMsg("");
+    $("regBox").hidden = !on; $("legalNote").hidden = on; $("tempWrap").hidden = on || !!user; $("doLogin").hidden = on; $("regBack").hidden = !on; authMsg("");
     if (on) { regSet(regMode); $("regFeld").focus(); }
   }
   $("regNeu").addEventListener("click", function () { regSet("neu"); });
@@ -1651,7 +1682,7 @@ a.btn.primary { color: #f3d98f !important; }
       try {
         var r = await sb.rpc("members_list");
         if (r.error) { say(sharedMsg(r.error), "bad"); return; }
-        rows = r.data || [];
+        rows = (r.data || []).filter(function (x) { return !/@temp\.invalid$/i.test(String(x.email || "")); });
         try { var pr = await sb.rpc("pending_users"); pend = (pr && !pr.error && pr.data) ? pr.data : []; } catch (e2) { pend = []; }
         try { var cr = await sb.rpc("firma_code"); code = (cr && !cr.error && typeof cr.data === "string") ? cr.data : ""; } catch (e3) { code = ""; }
         draw();
@@ -1767,6 +1798,85 @@ a.btn.primary { color: #f3d98f !important; }
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMembers(); });
     document.body.appendChild(ov); draw(); em.focus(); load();
   }
+  /* ---------- Temporäre Personen: Zugang mit Code und PIN (Administrator und Büro) ---------- */
+  function closeTemp() { var o = $("tempAdm"); if (o) o.remove(); }
+  function tempMsg(er) { var m = String((er && er.message) || er || ""); return /schema cache|does not exist|could not find/i.test(m) ? "Der temporäre Zugang ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(er); }
+  function tempDate(iso) { return dmy(new Date(iso)); }
+  function tempDT(iso) { var d = new Date(iso); return dmy(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function tempText(name, code, pin, bis) {
+    var link = location.origin + location.pathname.replace(/[^\/]*$/, "");
+    return "Hallo " + name + "\n\nHier ist dein Zugang zur App «Wochenrapport»:\n\nApp öffnen: " + link + "\nUnter «Temporärer Zugang» eingeben:\nCode: TEMP-" + code + "\nPIN: " + pin + "\n" + "Der Zugang gilt, bis er gesperrt wird.\n" + "\nTipp: Link in Safari oder Chrome öffnen und über Teilen «Zum Home-Bildschirm» wählen.";
+  }
+  function openTemp() {
+    closeTemp(); closeMembers(); closeSites(); hideSug();
+    var busy = false, rows = [];
+    var msg = el("div", { "class": "status", role: "status" });
+    var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    var nm = el("input", { type: "text", autocomplete: "off", placeholder: "Name, z. B. Marco (Aushilfe)", "aria-label": "Name" });
+    var go = el("button", { type: "button", "class": "btn primary", text: "Zugang erstellen" });
+    var res = el("div", { "class": "editbox" }); res.hidden = true;
+    var list = el("div", { "class": "slist", role: "list" });
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Temporäre Personen" }),
+      el("p", { text: "Für Aushilfen ohne E-Mail. Du bekommst einen Code und einen PIN und gibst beides der Person. Sie meldet sich damit unter «Temporärer Zugang» an und kann Stunden und Baustellenrapporte erfassen. Der Zugang gilt, bis du ihn selbst sperrst." }),
+      el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), nm, el("div", { "class": "actions" }, [go])]),
+      res, msg, list, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "tempAdm", role: "dialog", "aria-modal": "true", "aria-label": "Temporäre Personen" }, [sheet]);
+    async function call(fn, args) {
+      if (!sb || !user) return { er: "Bitte zuerst anmelden." };
+      if (!navigator.onLine) return { er: "Keine Verbindung. Dafür brauchst du Internet." };
+      try { var r = await sb.rpc(fn, args || {}); return r.error ? { er: tempMsg(r.error) } : { data: r.data }; } catch (e) { return { er: tempMsg(e) }; }
+    }
+    async function load() { var r = await call("temp_liste"); if (r.er) { say(r.er, "bad"); return; } rows = r.data || []; draw(); }
+    async function run(fn, args, okText) {
+      if (busy) return null; busy = true; say("Einen Moment …");
+      try { var r = await call(fn, args); if (r.er) { say(r.er, "bad"); return null; } await load(); if (okText) say(okText, "ok"); return r; } finally { busy = false; }
+    }
+    function showRes(name, code, pin, bis) {
+      res.textContent = ""; res.hidden = false;
+      var tx = tempText(name, code, pin, bis);
+      res.appendChild(el("div", { "class": "lbl", text: "Zugang für " + name }));
+      res.appendChild(el("div", { "class": "big", style: "letter-spacing:.08em", text: "TEMP-" + code }));
+      res.appendChild(el("div", { "class": "big", style: "letter-spacing:.3em", text: "PIN " + pin }));
+      res.appendChild(el("div", { "class": "status", text: "Der Zugang gilt, bis du ihn sperrst. Den PIN siehst du nur jetzt. Geht er verloren, vergibst du einen neuen." }));
+      var sh = el("button", { type: "button", "class": "btn primary", text: "Per WhatsApp / Teilen" }), cp = el("button", { type: "button", "class": "btn", text: "Text kopieren" });
+      sh.addEventListener("click", function () { if (navigator.share) { navigator.share({ text: tx }).catch(function () { }); } else { window.open("https://wa.me/?text=" + encodeURIComponent(tx), "_blank"); } });
+      cp.addEventListener("click", function () { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tx).then(function () { toast("Kopiert ✓"); }, function () { toast("Kopieren nicht möglich."); }); else toast("Kopieren nicht möglich."); });
+      res.appendChild(el("div", { "class": "actions" }, [sh, cp]));
+      try { res.scrollIntoView({ block: "nearest" }); } catch (e) { }
+    }
+    function stat(r) { return r.gesperrt ? "gesperrt" : "aktiv"; }
+    function draw() {
+      list.textContent = "";
+      if (!rows.length) { list.appendChild(el("div", { "class": "status", text: "Noch keine temporären Personen." })); return; }
+      rows.forEach(function (r) {
+        var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.name }));
+        t.appendChild(el("small", { text: "TEMP-" + r.code + " · " + stat(r) }));
+        t.appendChild(el("small", { text: r.letzter_login ? "Letzte Anmeldung " + tempDT(r.letzter_login) : "Noch nie angemeldet" }));
+        var b1 = el("button", { type: "button", text: r.gesperrt ? "Entsperren" : "Sperren" });
+        b1.addEventListener("click", function () { run("temp_sperren", { p_id: r.id, p_sperre: !r.gesperrt }, r.gesperrt ? r.name + " ist entsperrt." : r.name + " ist gesperrt."); });
+        var b3 = el("button", { type: "button", text: "Neuer PIN" });
+        b3.addEventListener("click", async function () {
+          if (!confirm("Neuen PIN für " + r.name + " vergeben? Der alte PIN gilt dann nicht mehr, und die Person wird abgemeldet.")) return;
+          var x = await run("temp_pin_neu", { p_id: r.id }, "Neuer PIN für " + r.name + ".");
+          if (x && x.data) showRes(r.name, r.code, String(x.data), r.ablauf);
+        });
+        var b4 = el("button", { type: "button", "class": "x", text: "Entfernen" });
+        b4.addEventListener("click", function () { if (confirm(r.name + " entfernen? Der Zugang wird gesperrt und verschwindet aus der Liste. Die erfassten Stunden und Rapporte bleiben erhalten.")) run("temp_entfernen", { p_id: r.id }, r.name + " ist entfernt."); });
+        list.appendChild(el("div", { "class": "srow stack", role: "listitem" }, [t, el("div", { "class": "acts" }, [b1, b3, b4])]));
+      });
+    }
+    go.addEventListener("click", async function () {
+      var n = nm.value.trim(); if (n.length < 2) { say("Bitte einen Namen eingeben.", "bad"); nm.focus(); return; }
+      var x = await run("temp_anlegen", { p_name: n, p_ablauf: null }, "Zugang erstellt.");
+      if (x && x.data) { var d = Array.isArray(x.data) ? x.data[0] : x.data; if (d) { showRes(n, d.o_code, d.o_pin, d.o_ablauf); nm.value = ""; } }
+    });
+    nm.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); go.click(); } });
+    close.addEventListener("click", closeTemp);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) closeTemp(); });
+    document.body.appendChild(ov); draw(); load();
+  }
+
   $("membersBtn").addEventListener("click", openMembers);
 
   /* ---------- Export (nur Administratoren): Excel, CSV, Word ---------- */
@@ -4730,8 +4840,8 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); }
-    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers]]; }
+    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); }
+    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Farbtöne & Hersteller", function () { openColors(); }], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
       var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
