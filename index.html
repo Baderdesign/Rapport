@@ -497,7 +497,7 @@ a.btn.primary { color: #f3d98f !important; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .thbtn { color: #e9cd82; box-shadow: 0 6px 16px rgba(0,0,0,.6), 0 0 12px rgba(205,174,106,.25), inset 0 1px 0 rgba(255,255,255,.1); } }
 /* Home kompakt v2 */
 .top{display:flex;flex-direction:column;gap:10px}
-.top>div:first-child{flex:none!important;width:100%}
+.top>div:first-child{flex:none!important;width:100%;gap:4px!important}
 .titlebar{position:relative;grid-template-columns:44px 1fr auto auto;gap:8px}
 .titlebar .brand .logo{width:44px;height:44px;grid-column:1;grid-row:1;justify-self:start;margin:0}
 .titlebar .brand h1{grid-column:2;grid-row:1;text-align:center;font-size:1.45rem}
@@ -507,7 +507,7 @@ a.btn.primary { color: #f3d98f !important; }
 .titlebar #menuBtn{grid-column:4;grid-row:1;width:44px;height:44px}
 .titlebar .sync{position:absolute;left:34px;top:32px;grid-column:auto;grid-row:auto;font-size:0;gap:0}
 .titlebar .sync::before{width:12px;height:12px;border:2px solid var(--bg,#eceff3);box-sizing:content-box}
-label.name{flex-direction:row;align-items:center;max-width:none;margin:-12px 104px 0 52px;gap:0}
+label.name{flex-direction:row;align-items:center;max-width:none;margin:-4px 104px 0 52px;gap:0}
 label.name .lbl{display:none}
 label.name input{flex:1 1 auto;text-align:center;min-height:26px;padding:0;border:0;background:transparent;box-shadow:none;font-size:.85rem;color:var(--muted)}
 .weeknav{display:grid;grid-template-columns:44px 1fr 1fr 44px;gap:8px;max-width:none;width:100%;flex:none}
@@ -534,6 +534,8 @@ body:not(.buero) .sitesbar{flex-wrap:nowrap;overflow-x:auto;gap:8px;scrollbar-wi
 body:not(.buero) .sitesbar::-webkit-scrollbar{display:none}
 body:not(.buero) .sitesbar .btn{flex:0 0 auto;white-space:nowrap;min-height:40px;padding:4px 12px;font-size:.9rem}
 body:not(.buero) .sitesbar .status{flex:0 0 auto;white-space:nowrap;font-size:.8rem;color:var(--muted)}
+body:not(.buero) #bilanzBtn{display:none!important}
+#sitesInfo.hdrinfo{display:block;text-align:center;margin:0;white-space:nowrap;font-size:.75rem;line-height:1.25;color:var(--muted)}
 </style>
 </head><body>
 <div id="splash" aria-hidden="true"><img id="splashImg" alt=""><div class="sbar"><i></i></div><div class="stx">Rapport wird geladen</div></div>
@@ -859,6 +861,9 @@ body:not(.buero) .sitesbar .status{flex:0 0 auto;white-space:nowrap;font-size:.8
         "body.buero #sitesBtn{order:1}body.buero #sitesAdd{order:2}body.buero #colorsBtn{order:3}body.buero #bilanzBtn{order:4}body.buero #membersBtn{order:5}body.buero #sitesInfo{order:6;text-align:center}";
       document.head.appendChild(cs); }
     document.body.classList.toggle("buero", bu);
+    try { var si = $("sitesInfo"), nl = document.querySelector("label.name"), sb = document.querySelector(".sitesbar");
+      if (!bu && nl && si.previousElementSibling !== nl) { nl.parentNode.insertBefore(si, nl.nextSibling); si.classList.add("hdrinfo"); }
+      else if (bu && si.parentNode !== sb) { sb.appendChild(si); si.classList.remove("hdrinfo"); } } catch (e) { }
     $("membersBtn").textContent = bu ? "Mitarbeiter hinzufügen" : "Mitarbeiter"; $("bilanzBtn").textContent = bu ? "Auswertung pro Baustelle" : "Auswertung"; $("sitesAdd").textContent = bu ? "Baustelle hinzufügen" : "+ Baustelle";
   }
   function renderSitesInfo() {
