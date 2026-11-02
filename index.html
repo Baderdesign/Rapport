@@ -503,6 +503,7 @@ a.btn.primary { color: #f3d98f !important; }
 <div class="wrap">
   <div class="top">
     <div style="display:flex;flex-direction:column;gap:12px;flex:1 1 260px;min-width:0">
+      <div id="updBar" hidden role="status"><button type="button" class="btn primary" id="updGo" style="width:100%">App jetzt aktualisieren</button></div>
       <div class="titlebar"><div class="brand"><img class="logo" id="logoImg" alt="" width="46" height="46"><h1>Wochenrapport</h1></div>
         <div class="acct"><span class="sync" id="sync" role="status"></span><button class="btn" id="acctBtn" type="button" aria-expanded="false" aria-controls="auth">Anmelden</button><button class="btn icon" id="menuBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Menü">☰</button></div>
         </div>
@@ -1605,7 +1606,7 @@ a.btn.primary { color: #f3d98f !important; }
       if (!nr || !n) { say("Bitte Nummer und Name eingeben.", "bad"); return; }
       var ex = siteByNr(nr);
       if (ex && editNr !== nr && !confirm("Die Nummer " + nr + " gibt es schon (" + ex.n + "). Ersetzen?")) return;
-      var offFiles = (fOff.files ? Array.prototype.slice.call(fOff.files) : []).concat(offCam), stdV = offNum(fStd.value);
+      var offFiles = (fOff.files ? Array.prototype.slice.call(fOff.files) : []).concat(offCam), stdV = offNum(fStd.value), hadCam = offCam.length > 0;
       var old = editNr ? siteByNr(editNr) : null, oldNr = editNr, chg = !!old && (oldNr !== nr || old.n !== n || (old.n2 || "") !== n2);
       var ok = await run(async function () {
         var er = await sitesSave([{ nr: nr, n: n, n2: n2, h: h, z: z, f: ffa.value.trim() }], editNr && editNr !== nr ? [editNr] : []);
@@ -1622,7 +1623,7 @@ a.btn.primary { color: #f3d98f !important; }
         var g1 = await offRpc("soll_save", { p_site: nr, p_summe: gd ? gd.o_summe : null, p_anteil: gd ? gd.o_anteil : null, p_satz: gd ? gd.o_satz : null, p_std: stdV });
         if (g1.er) toast("Die Stundenvorgabe konnte nicht gespeichert werden: " + g1.er);
       }
-      if (ok) { reset(); if (offFiles.length) openOffEdit(nr, offFiles, null); else fnr.focus(); }
+      if (ok) { reset(); if (offFiles.length) openOffEdit(nr, offFiles, null, hadCam); else fnr.focus(); }
     });
     seedBtn.addEventListener("click", async function () {
       var ok = await run(function () { return sitesSave(SEED.map(function (r) { return { nr: r[0], n: r[1], n2: r[2] }; })); });
@@ -1960,7 +1961,7 @@ a.btn.primary { color: #f3d98f !important; }
       }
     }
     fi.addEventListener("change", function () { if (fi.files && fi.files.length) openOffEdit(nr, Array.prototype.slice.call(fi.files), function () { load(); }); });
-    fc.addEventListener("change", function () { if (fc.files && fc.files.length) openOffEdit(nr, Array.prototype.slice.call(fc.files), function () { load(); }); });
+    fc.addEventListener("change", function () { if (fc.files && fc.files.length) openOffEdit(nr, Array.prototype.slice.call(fc.files), function () { load(); }, true); });
     async function load() {
       say("Offerte wird geladen …");
       var r = await offRpc("offerte_get", { p_site: nr }); if (r.er) { say(r.er, "bad"); return; }
@@ -2024,11 +2025,20 @@ a.btn.primary { color: #f3d98f !important; }
   }
 
   /* Preise abdecken: Seiten laden (Foto oder PDF), mit dem Finger schwarze Flächen ziehen, ohne Preise speichern */
-  function openOffEdit(nr, files, onSaved) {
+  function openOffEdit(nr, files, onSaved, cam) {
     closeOffEdit();
     var pages = [], idx = 0, busy = false, drag = null;
     var msg = el("div", { "class": "status", role: "status" });
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
+    var camMode = !!cam, nxt = el("div", { "class": "editbox" }); nxt.hidden = true;
+    function nxtDraw() {
+      nxt.textContent = ""; nxt.hidden = !camMode || !pages.length; if (nxt.hidden) return;
+      var nb = el("button", { type: "button", "class": "btn primary", text: "Nächste Seite fotografieren" }), db = el("button", { type: "button", "class": "btn", text: "Fertig, Preise abdecken" });
+      nb.addEventListener("click", function () { fc.value = ""; fc.click(); });
+      db.addEventListener("click", function () { camMode = false; nxtDraw(); try { cv.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) { } });
+      nxt.appendChild(el("div", { "class": "status", text: pages.length + (pages.length === 1 ? " Seite aufgenommen." : " Seiten aufgenommen.") }));
+      nxt.appendChild(el("div", { "class": "actions" }, [nb, db]));
+    }
     var cv = el("canvas", { style: "width:100%;display:block;touch-action:none;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:crosshair" });
     var prev = el("button", { type: "button", "class": "btn", text: "‹" }), next = el("button", { type: "button", "class": "btn", text: "›" }), lbl = el("div", { "class": "status", style: "flex:1;text-align:center;align-self:center" });
     var undo = el("button", { type: "button", "class": "btn", text: "Rückgängig" }), clr = el("button", { type: "button", "class": "btn", text: "Seite leeren" });
@@ -2042,7 +2052,7 @@ a.btn.primary { color: #f3d98f !important; }
     save.disabled = true;
     var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Preise abdecken" }),
       el("p", { text: "Ziehe mit dem Finger Flächen über alle Preise, Einzelpreise, Summen und die MWST. Die Flächen werden schwarz und sind nach dem Speichern endgültig verdeckt. Seiten, die du nicht brauchst (z. B. die Preisübersicht), kannst du weglassen." }),
-      msg, cv, el("div", { "class": "actions", style: "flex-wrap:nowrap" }, [prev, lbl, next]), el("div", { "class": "actions" }, [undo, clr]), skipL,
+      msg, nxt, cv, el("div", { "class": "actions", style: "flex-wrap:nowrap" }, [prev, lbl, next]), el("div", { "class": "actions" }, [undo, clr]), skipL,
       el("div", { "class": "actions" }, [camE, more]), okL, el("div", { "class": "actions" }, [save, cancel])]);
     var ov = el("div", { "class": "overlay sites", id: "offEdit", role: "dialog", "aria-modal": "true", "aria-label": "Preise abdecken" }, [sheet]);
 
@@ -2112,7 +2122,7 @@ a.btn.primary { color: #f3d98f !important; }
     camE.addEventListener("click", function () { fc.value = ""; fc.click(); });
     fc.addEventListener("change", async function () {
       if (!fc.files || !fc.files.length) return; say("Foto wird geladen …");
-      try { await addFiles(Array.prototype.slice.call(fc.files)); say(""); idx = pages.length - 1; paint(); } catch (e) { say("Das hat nicht geklappt: " + (e && e.message ? e.message : e), "bad"); }
+      try { await addFiles(Array.prototype.slice.call(fc.files)); say(""); idx = pages.length - 1; paint(); camMode = true; nxtDraw(); } catch (e) { say("Das hat nicht geklappt: " + (e && e.message ? e.message : e), "bad"); }
     });
     fi.addEventListener("change", async function () {
       if (!fi.files || !fi.files.length) return; say("Seiten werden geladen …");
@@ -2148,7 +2158,7 @@ a.btn.primary { color: #f3d98f !important; }
     cancel.addEventListener("click", function () { if (!pages.some(function (p) { return p.rects.length; }) || confirm("Abbrechen? Die abgedeckten Stellen gehen verloren.")) closeOffEdit(); });
     sheet.appendChild(fi); sheet.appendChild(fc);
     document.body.appendChild(ov); say("Seiten werden geladen …"); paint();
-    addFiles(files).then(function () { say(pages.length ? "" : "Keine Seiten gefunden.", pages.length ? "" : "bad"); idx = 0; paint(); }).catch(function (e) { say("Das hat nicht geklappt: " + (e && e.message ? e.message : e), "bad"); });
+    addFiles(files).then(function () { say(pages.length ? "" : "Keine Seiten gefunden.", pages.length ? "" : "bad"); idx = 0; paint(); nxtDraw(); }).catch(function (e) { say("Das hat nicht geklappt: " + (e && e.message ? e.message : e), "bad"); });
   }
 
   $("membersBtn").addEventListener("click", openMembers);
@@ -3957,7 +3967,7 @@ function openReport(pre) {
     });
     var goLbl = function () { go.textContent = os.value === "offerte" ? "Offerte laden" : "Ablegen"; camB.hidden = os.value !== "offerte"; }; goLbl();
     camB.addEventListener("click", function () { fcD.value = ""; fcD.click(); });
-    fcD.addEventListener("change", function () { if (fcD.files && fcD.files.length) openOffEdit(ss.value, Array.prototype.slice.call(fcD.files), function () { show(); }); });
+    fcD.addEventListener("change", function () { if (fcD.files && fcD.files.length) openOffEdit(ss.value, Array.prototype.slice.call(fcD.files), function () { show(); }, true); });
     os.addEventListener("change", function () { goLbl(); show(); });
     ss.addEventListener("change", show); cl.addEventListener("click", closeDateien); ov.addEventListener("click", function (e) { if (e.target === ov) closeDateien(); });
     document.body.appendChild(ov); show();
@@ -5252,7 +5262,17 @@ function openReport(pre) {
   try { $("logoImg").src = window.__ico || document.querySelector('link[rel="apple-touch-icon"]').href; } catch (e) { }
   /* ---------- Start ---------- */
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { } /* Browser bittet, die Daten nicht automatisch zu löschen */
-  try { if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(function () { }); } catch (e) { } /* App auch ohne Netz starten (braucht sw.js im selben Ordner) */
+  /* App auch ohne Netz starten (braucht sw.js im selben Ordner) und Hinweis, wenn eine neue Version bereit ist */
+  function showUpdate() { var b = $("updBar"); if (b) b.hidden = false; } /* Leiste über dem Konto, kein Fenster: wer nicht aktualisieren will, wird nicht gestört */
+  $("updGo").addEventListener("click", function () { location.reload(); });
+  try {
+    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+      var hadCtl = !!navigator.serviceWorker.controller, swReg = null, lastUpd = 0;
+      navigator.serviceWorker.register("sw.js").then(function (r) { swReg = r; }).catch(function () { });
+      navigator.serviceWorker.addEventListener("controllerchange", function () { if (!hadCtl) { hadCtl = true; return; } showUpdate(); });
+      document.addEventListener("visibilitychange", function () { if (!document.hidden && swReg && Date.now() - lastUpd > 600000) { lastUpd = Date.now(); try { swReg.update().catch(function () { }); } catch (e) { } } });
+    }
+  } catch (e) { }
   localKeys().forEach(function (wk) { var o = localWeek(wk); if (o) index[wk] = totals(deserialize(o.days)).tot; });
   loadWeek(state.week);
 
