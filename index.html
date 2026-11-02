@@ -497,7 +497,7 @@ a.btn.primary { color: #f3d98f !important; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .thbtn { color: #e9cd82; box-shadow: 0 6px 16px rgba(0,0,0,.6), 0 0 12px rgba(205,174,106,.25), inset 0 1px 0 rgba(255,255,255,.1); } }
 /* Home kompakt v2 */
 .top{display:flex;flex-direction:column;gap:10px}
-.top>div:first-child{flex:none!important}
+.top>div:first-child{flex:none!important;width:100%}
 .titlebar{position:relative;grid-template-columns:44px 1fr auto auto;gap:8px}
 .titlebar .brand .logo{width:44px;height:44px;grid-column:1;grid-row:1;justify-self:start;margin:0}
 .titlebar .brand h1{grid-column:2;grid-row:1;text-align:left;font-size:1.45rem}
@@ -507,7 +507,7 @@ a.btn.primary { color: #f3d98f !important; }
 .titlebar #menuBtn{grid-column:4;grid-row:1;width:44px;height:44px}
 .titlebar .sync{position:absolute;left:34px;top:32px;grid-column:auto;grid-row:auto;font-size:0;gap:0}
 .titlebar .sync::before{width:12px;height:12px;border:2px solid var(--bg,#eceff3);box-sizing:content-box}
-label.name{flex-direction:row;align-items:center;max-width:none;margin:-6px 0 0 52px;gap:0}
+label.name{flex-direction:row;align-items:center;max-width:none;margin:-12px 0 0 52px;gap:0}
 label.name .lbl{display:none}
 label.name input{flex:1 1 auto;min-height:26px;padding:0;border:0;background:transparent;box-shadow:none;font-size:.85rem;color:var(--muted)}
 .weeknav{display:grid;grid-template-columns:44px 1fr 1fr 44px;gap:8px;max-width:none;width:100%;flex:none}
