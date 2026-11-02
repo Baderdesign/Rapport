@@ -549,7 +549,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
 .day:not(.coll)>.dsum{display:none}
 .dsum{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:52px}
 .dsum .dd{font-weight:800;color:#2a1f6b;font-size:1.1rem;width:30px;flex:0 0 auto}
-.dsum .dm{flex:1;min-width:0;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsum .dm{flex:1;min-width:0;font-size:.9rem}.dsum .dm div{display:flex;gap:8px;line-height:1.35}.dsum .dm div span:first-child{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dsum .dm .lh{flex:0 0 auto;color:var(--muted);font-variant-numeric:tabular-nums}
 .dsum .dh{font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto}
 .dsum .dv{color:var(--muted);flex:0 0 auto}
 .dsum.leer .dm,.dsum.leer .dd,.dsum.leer .dh{color:var(--muted);font-weight:500}
@@ -1195,10 +1195,10 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var sec = document.querySelectorAll(".day")[di]; if (sec) { try { sec.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) { } }
   }
   function daySummary(rows, ds) {
-    var d = {}; if (absDay(rows)) return { t: ABS_T[rows[0].typ] + (ds.abs ? " · " + fmtAbs(ds.abs) + " Std." : ""), h: "", leer: false };
-    var names = []; rows.forEach(function (e) { var n = ((e.nr || "") + " " + (e.obj || "")).trim(); if (n) names.push(n); });
+    var ty = typOf(rows); if (ty) return { t: ABS_T[ty], h: ty === "frei" ? hm(ds.tot) : (ds.abs ? fmtAbs(ds.abs) + " Std." : ""), leer: false };
+    var names = [], hrs = [], ef = effs(rows); rows.forEach(function (e, i) { var n = ((e.nr || "") + " " + (e.obj || "")).trim(); if (n) { names.push(n); var c = calcRow(e, ef[i]); hrs.push(c.hasTime && !c.invalid ? hm(c.work) : ""); } });
     var has = names.length || ds.gross;
-    return { t: names.length ? names.join(" · ") : "noch leer", h: ds.gross || ds.tot ? hm(ds.tot) : "–", leer: !has };
+    return { t: names.length ? names.join("\n") : "noch leer", hl: names.length > 1 ? hrs : null, h: ds.gross || ds.tot ? hm(ds.tot) : "–", leer: !has };
   }
   function renderAll() {
     var mon = fromKey(state.week), fri = addDays(mon, 4), iso = isoWeek(mon);
@@ -1225,7 +1225,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var secs = document.querySelectorAll(".day");
     state.days.forEach(function (rows, di) {
       var ds = dayStats(rows);
-      try { var sm = daySummary(rows, ds), db = secs[di].querySelector(".dsum"); db.className = "dsum" + (sm.leer ? " leer" : ""); db.innerHTML = '<span class="dd">' + DAYS[di].slice(0, 2) + '</span><span class="dm"></span><span class="dh">' + esc(sm.h) + '</span><span class="dv">⌄</span>'; db.querySelector(".dm").textContent = sm.t; } catch (e) { }
+      try { var sm = daySummary(rows, ds), db = secs[di].querySelector(".dsum"); db.className = "dsum" + (sm.leer ? " leer" : ""); db.innerHTML = '<span class="dd">' + DAYS[di].slice(0, 2) + '</span><span class="dm"></span><span class="dh">' + esc(sm.h) + '</span><span class="dv">⌄</span>'; var dmEl = db.querySelector(".dm"); sm.t.split("\n").forEach(function (ln, li) { var l = document.createElement("div"), a = document.createElement("span"); a.textContent = ln; l.appendChild(a); if (sm.hl) { var hh = document.createElement("span"); hh.className = "lh"; hh.textContent = sm.hl[li] || ""; l.appendChild(hh); } dmEl.appendChild(l); }); } catch (e) { }
       if (absDay(rows)) { secs[di].querySelector("[data-dt]").innerHTML = ds.abs ? "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : ""; return; }
       var ef = effs(rows);
       rows.forEach(function (e, ri) {
