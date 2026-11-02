@@ -1170,7 +1170,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var p = "d" + di + "r" + ri + "-";
     return '<div class="row" data-d="' + di + '" data-r="' + ri + '">' +
       fieldInput(p + "nr", "f-nr", "Baustellen-Nr.", 'type="text" inputmode="numeric" data-k="nr" autocomplete="off" placeholder="Nr."', e.nr) +
-      '<div class="f f-obj"><span>Baustelle / Objekt' + (e.obj2 ? '' : ' <button type="button" class="o2add" data-o2="1" aria-label="Zweite Zeile hinzufügen">+</button>') + '</span>' +
+      '<div class="f f-obj"><span>Baustelle / Objekt' + ' <button type="button" class="o2add" data-o2="1" aria-label="Zweite Zeile hinzufügen"' + (e.obj2 ? ' hidden' : '') + '>+</button><button type="button" class="o2add o2del" data-o2x="1" aria-label="Zweite Zeile entfernen"' + (e.obj2 ? '' : ' hidden') + '>×</button></span>' +
         '<input type="text" id="' + p + 'obj" data-k="obj" autocomplete="off" placeholder="Baustelle suchen" value="' + esc(e.obj) + '">' +
         '<input type="text" id="' + p + 'obj2" data-k="obj2" autocomplete="off" aria-label="Baustelle, zweite Zeile" placeholder="2. Zeile"' + (e.obj2 ? '' : ' hidden') + ' value="' + esc(e.obj2) + '"></div>' +
       '<div class="f f-time">' + fieldInput(p + "von", "", "Arbeitszeit von", 'type="text" inputmode="decimal" data-k="von" autocomplete="off" placeholder="6.25"', e.von) + fieldInput(p + "bis", "", "bis", 'type="text" inputmode="decimal" data-k="bis" autocomplete="off" placeholder="16.14"', e.bis) + '<div class="f f-hrs"><span>Stunden</span><div class="calc" data-c="gross"></div></div>' + twHtml(p, e, "2") + twHtml(p, e, "3") + '<button type="button" class="add tw-add" data-tw-add' + ((e.von3 || e.bis3) ? " hidden" : "") + '>+ Zeitfenster</button></div>' +
@@ -1307,7 +1307,8 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var b = ev.target.closest && ev.target.closest("[data-ds]"); if (b) { setOpenDay(+b.getAttribute("data-ds")); return; }
     var hd = ev.target.closest && ev.target.closest(".dayhead h2"); if (hd) { var sec = hd.closest(".day"); if (sec) { OPENDAY = { wk: state.week, di: -1 }; sec.classList.add("coll"); } }
   });
-  $("days").addEventListener("click", function (ev) { var b = ev.target.closest && ev.target.closest("[data-o2]"); if (!b) return; var f = b.closest(".f-obj"), i2 = f && f.querySelector('[data-k="obj2"]'); if (i2) { i2.hidden = false; i2.focus(); } b.remove(); });
+  $("days").addEventListener("click", function (ev) { var x = ev.target.closest && ev.target.closest("[data-o2x]"); if (x) { var fx = x.closest(".f-obj"), ix = fx && fx.querySelector('[data-k="obj2"]'); if (ix) { ix.value = ""; ix.dispatchEvent(new Event("input", { bubbles: true })); ix.hidden = true; } x.hidden = true; var pl = fx && fx.querySelector("[data-o2]"); if (pl) pl.hidden = false; return; }
+    var b = ev.target.closest && ev.target.closest("[data-o2]"); if (!b) return; var f = b.closest(".f-obj"), i2 = f && f.querySelector('[data-k="obj2"]'); if (i2) { i2.hidden = false; i2.focus(); } b.hidden = true; var dx = f && f.querySelector("[data-o2x]"); if (dx) dx.hidden = false; });
   $("name").addEventListener("input", function (e) { state.name = e.target.value; persist(); });
   $("prev").addEventListener("click", function () { loadWeek(key(addDays(fromKey(state.week), -7))); });
   $("next").addEventListener("click", function () { loadWeek(key(addDays(fromKey(state.week), 7))); });
