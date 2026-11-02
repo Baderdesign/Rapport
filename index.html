@@ -536,6 +536,25 @@ body:not(.buero) .sitesbar .btn{flex:0 0 auto;white-space:nowrap;min-height:40px
 body:not(.buero) .sitesbar .status{flex:0 0 auto;white-space:nowrap;font-size:.8rem;color:var(--muted)}
 body:not(.buero) #bilanzBtn{display:none!important}
 #sitesInfo.hdrinfo{display:block;text-align:center;margin:0;white-space:nowrap;font-size:.75rem;line-height:1.25;color:var(--muted)}
+.o2add{margin-left:8px;min-height:0;width:26px;height:26px;padding:0;border:1.5px solid var(--accent,#d9b45a);border-radius:8px;background:#fff;font:700 16px/1 inherit;line-height:1;color:inherit;vertical-align:middle;cursor:pointer}
+.f-time .tw-add{border:0!important;background:none!important;box-shadow:none!important;text-align:left!important;padding:0 2px!important;min-height:28px!important;font-size:.85rem!important;text-decoration:underline;color:var(--muted)!important}
+body:not(.buero) .sitesbar{display:flex;flex-wrap:nowrap;gap:8px;overflow:visible;margin-top:-2px}
+body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:40px;padding:4px 8px;font-size:.9rem;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.addrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.addrow .spbox{margin-top:0}.addrow .spbox.open{flex:1 1 100%}
+.addrow .add{height:40px}.addrow .spbox:not(.open){min-height:40px;display:flex;align-items:center;padding:0 12px}
+/* Tage einklappen */
+.day.coll{padding:0;gap:0;border-left:5px solid #d4af5a}
+.day.coll>*:not(.dsum){display:none!important}
+.day:not(.coll)>.dsum{display:none}
+.dsum{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:52px}
+.dsum .dd{font-weight:800;color:#2a1f6b;font-size:1.1rem;width:30px;flex:0 0 auto}
+.dsum .dm{flex:1;min-width:0;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsum .dh{font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.dsum .dv{color:var(--muted);flex:0 0 auto}
+.dsum.leer .dm,.dsum.leer .dd,.dsum.leer .dh{color:var(--muted);font-weight:500}
+.day.coll:has(.dsum.leer){border-left-color:var(--line)}
+.dayhead h2{cursor:pointer}
 </style>
 </head><body>
 <div id="splash" aria-hidden="true"><img id="splashImg" alt=""><div class="sbar"><i></i></div><div class="stx">Rapport wird geladen</div></div>
@@ -1151,10 +1170,10 @@ body:not(.buero) #bilanzBtn{display:none!important}
     var p = "d" + di + "r" + ri + "-";
     return '<div class="row" data-d="' + di + '" data-r="' + ri + '">' +
       fieldInput(p + "nr", "f-nr", "Baustellen-Nr.", 'type="text" inputmode="numeric" data-k="nr" autocomplete="off" placeholder="Nr."', e.nr) +
-      '<div class="f f-obj"><span>Baustelle / Objekt</span>' +
+      '<div class="f f-obj"><span>Baustelle / Objekt' + (e.obj2 ? '' : ' <button type="button" class="o2add" data-o2="1" aria-label="Zweite Zeile hinzufügen">+</button>') + '</span>' +
         '<input type="text" id="' + p + 'obj" data-k="obj" autocomplete="off" placeholder="Baustelle suchen" value="' + esc(e.obj) + '">' +
-        '<input type="text" id="' + p + 'obj2" data-k="obj2" autocomplete="off" aria-label="Baustelle, zweite Zeile" placeholder="2. Zeile (optional)" value="' + esc(e.obj2) + '"></div>' +
-      '<div class="f f-time">' + fieldInput(p + "von", "", "Arbeitszeit von", 'type="text" inputmode="decimal" data-k="von" autocomplete="off" placeholder="6.25"', e.von) + fieldInput(p + "bis", "", "bis", 'type="text" inputmode="decimal" data-k="bis" autocomplete="off" placeholder="16.14"', e.bis) + '<div class="f f-hrs"><span>Stunden</span><div class="calc" data-c="gross"></div></div>' + twHtml(p, e, "2") + twHtml(p, e, "3") + '<button type="button" class="add tw-add" data-tw-add' + ((e.von3 || e.bis3) ? " hidden" : "") + '>+ Zeitfenster (z. B. nach der Pause)</button></div>' +
+        '<input type="text" id="' + p + 'obj2" data-k="obj2" autocomplete="off" aria-label="Baustelle, zweite Zeile" placeholder="2. Zeile"' + (e.obj2 ? '' : ' hidden') + ' value="' + esc(e.obj2) + '"></div>' +
+      '<div class="f f-time">' + fieldInput(p + "von", "", "Arbeitszeit von", 'type="text" inputmode="decimal" data-k="von" autocomplete="off" placeholder="6.25"', e.von) + fieldInput(p + "bis", "", "bis", 'type="text" inputmode="decimal" data-k="bis" autocomplete="off" placeholder="16.14"', e.bis) + '<div class="f f-hrs"><span>Stunden</span><div class="calc" data-c="gross"></div></div>' + twHtml(p, e, "2") + twHtml(p, e, "3") + '<button type="button" class="add tw-add" data-tw-add' + ((e.von3 || e.bis3) ? " hidden" : "") + '>+ Zeitfenster</button></div>' +
       fieldInput(p + "pause", "f-pause", "Pause in Min.", 'type="text" inputmode="numeric" data-k="pause" autocomplete="off" placeholder="60"', e.pause) +
       '<div class="f f-total"><span>Total ohne Pausen</span><div class="calc" data-c="work"></div></div>' +
       fieldInput(p + "hin", "f-hin", "Reise hin (Min.)", 'type="text" inputmode="numeric" data-k="hin" autocomplete="off"', e.hin) +
@@ -1165,18 +1184,34 @@ body:not(.buero) #bilanzBtn{display:none!important}
   }
   var COLHEAD = '<div class="cols" aria-hidden="true"><span>Baustellen-Nr.</span><span>Baustelle / Objekt</span><span>Arbeitszeit von – bis, Stunden</span><span>Pause in Min.</span><span>Total ohne Pausen</span><span>Reise hin in Min.</span><span>Reise zurück in Min.</span><span>Reisezeit Tag gesamt</span><span>Absenz in Std.</span><span></span></div>';
 
+  var OPENDAY = { wk: null, di: -1 };
+  function openDayIdx(mon) {
+    if (OPENDAY.wk !== state.week) { var tk = key(new Date()), di = -1; for (var q = 0; q < 5; q++) if (key(addDays(mon, q)) === tk) di = q; OPENDAY = { wk: state.week, di: di }; }
+    return OPENDAY.di;
+  }
+  function setOpenDay(di) {
+    OPENDAY = { wk: state.week, di: di };
+    document.querySelectorAll(".day").forEach(function (sec, i) { sec.classList.toggle("coll", i !== di); });
+    var sec = document.querySelectorAll(".day")[di]; if (sec) { try { sec.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) { } }
+  }
+  function daySummary(rows, ds) {
+    var d = {}; if (absDay(rows)) return { t: ABS_T[rows[0].typ] + (ds.abs ? " · " + fmtAbs(ds.abs) + " Std." : ""), h: "", leer: false };
+    var names = []; rows.forEach(function (e) { var n = ((e.nr || "") + " " + (e.obj || "")).trim(); if (n) names.push(n); });
+    var has = names.length || ds.gross;
+    return { t: names.length ? names.join(" · ") : "noch leer", h: ds.gross || ds.tot ? hm(ds.tot) : "–", leer: !has };
+  }
   function renderAll() {
     var mon = fromKey(state.week), fri = addDays(mon, 4), iso = isoWeek(mon);
     $("kw").textContent = "KW " + iso.w + " / " + iso.y;
     $("dates").textContent = dm(mon) + " – " + dmy(fri);
     $("name").value = state.name;
-    var html = "";
+    var html = "", od = openDayIdx(mon);
     state.days.forEach(function (rows, di) {
-      html += '<section class="day" data-day="' + di + '"><div class="dayhead"><h2>' + DAYS[di] + '<span>' + dm(addDays(mon, di)) + '</span></h2>' + typButtons(di, rows) + '<div class="daytotal" data-dt></div></div>' +
+      html += '<section class="day' + (di === od ? '' : ' coll') + '" data-day="' + di + '"><button type="button" class="dsum" data-ds="' + di + '" aria-label="' + DAYS[di] + ' öffnen"></button><div class="dayhead"><h2>' + DAYS[di] + '<span>' + dm(addDays(mon, di)) + '</span></h2>' + typButtons(di, rows) + '<div class="daytotal" data-dt></div></div>' +
         (absDay(rows)
           ? '<div class="absbox"><b>' + esc(ABS_T[rows[0].typ]) + '</b><div class="f"><span>Absenz in Std.</span><input type="text" inputmode="decimal" autocomplete="off" data-ah="' + di + '" aria-label="Absenz in Stunden" value="' + esc(rows[0].abs) + '"></div><p>Keine Uhrzeit und keine Reisezeit nötig. Zum Zurücksetzen nochmals auf «' + esc(ABS_T[rows[0].typ]) + '» tippen.</p></div></section>'
           : COLHEAD + '<div class="rows">' + rows.map(function (e, ri) { return rowHtml(di, ri, e); }).join("") + '</div>' +
-            '<button type="button" class="add" data-add="' + di + '"' + (rows.length >= MAXROWS ? " hidden" : "") + '>+ Weitere Baustelle an diesem Tag</button><div data-sp="' + di + '" hidden></div></section>');
+            '<div class="addrow"><button type="button" class="add" data-add="' + di + '"' + (rows.length >= MAXROWS ? " hidden" : "") + '>+ Weitere Baustelle</button><div data-sp="' + di + '" hidden></div></div></section>');
     });
     $("days").innerHTML = html;
     recalc(); fillPicker(); try { spBuild(); } catch (e) { }
@@ -1190,6 +1225,7 @@ body:not(.buero) #bilanzBtn{display:none!important}
     var secs = document.querySelectorAll(".day");
     state.days.forEach(function (rows, di) {
       var ds = dayStats(rows);
+      try { var sm = daySummary(rows, ds), db = secs[di].querySelector(".dsum"); db.className = "dsum" + (sm.leer ? " leer" : ""); db.innerHTML = '<span class="dd">' + DAYS[di].slice(0, 2) + '</span><span class="dm"></span><span class="dh">' + esc(sm.h) + '</span><span class="dv">⌄</span>'; db.querySelector(".dm").textContent = sm.t; } catch (e) { }
       if (absDay(rows)) { secs[di].querySelector("[data-dt]").innerHTML = ds.abs ? "Absenz <b>" + fmtAbs(ds.abs) + " Std.</b>" : ""; return; }
       var ef = effs(rows);
       rows.forEach(function (e, ri) {
@@ -1267,6 +1303,11 @@ body:not(.buero) #bilanzBtn{display:none!important}
     var v = tmin(inp.value); if (v === null || !inp.value) return;
     var n = fmtT(v); if (n !== inp.value) { inp.value = n; state.days[+row.dataset.d][+row.dataset.r][inp.dataset.k] = n; recalc(); persist(); }
   });
+  $("days").addEventListener("click", function (ev) {
+    var b = ev.target.closest && ev.target.closest("[data-ds]"); if (b) { setOpenDay(+b.getAttribute("data-ds")); return; }
+    var hd = ev.target.closest && ev.target.closest(".dayhead h2"); if (hd) { var sec = hd.closest(".day"); if (sec) { OPENDAY = { wk: state.week, di: -1 }; sec.classList.add("coll"); } }
+  });
+  $("days").addEventListener("click", function (ev) { var b = ev.target.closest && ev.target.closest("[data-o2]"); if (!b) return; var f = b.closest(".f-obj"), i2 = f && f.querySelector('[data-k="obj2"]'); if (i2) { i2.hidden = false; i2.focus(); } b.remove(); });
   $("name").addEventListener("input", function (e) { state.name = e.target.value; persist(); });
   $("prev").addEventListener("click", function () { loadWeek(key(addDays(fromKey(state.week), -7))); });
   $("next").addEventListener("click", function () { loadWeek(key(addDays(fromKey(state.week), 7))); });
@@ -4385,8 +4426,8 @@ function openReport(pre) {
   }
   function spCss() {
     if (document.getElementById("spcss")) return; var cs = document.createElement("style"); cs.id = "spcss";
-    cs.textContent = ".spbox{margin-top:14px;border:1.5px dashed #cdae6a;border-radius:16px;padding:10px 14px;background:var(--surface)}.spbox.open{border-style:solid}" +
-      ".spbox .sph{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;background:none;border:0;padding:6px 0;font-weight:700;font-size:1.05rem;color:var(--ink);cursor:pointer;text-align:left}.spbox .sph span+span{color:var(--muted);white-space:nowrap}" +
+    cs.textContent = ".spbox{margin-top:10px;border:1.5px dashed #cdae6a;border-radius:12px;padding:2px 12px;background:var(--surface);width:fit-content;max-width:100%}.spbox.open{border-style:solid;width:auto;padding:8px 14px}" +
+      ".spbox .sph{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;background:none;border:0;padding:6px 0;font-weight:600;font-size:.9rem;color:var(--ink);cursor:pointer;text-align:left}.spbox .sph span+span{color:var(--muted);white-space:nowrap}" +
       ".spi{border:1px solid var(--line);border-radius:14px;padding:10px;margin:10px 0;display:flex;flex-direction:column;gap:8px;background:var(--bg,transparent)}" +
       ".spi select,.spi input[type=text]{width:100%;height:44px;border-radius:12px;padding:0 12px;font-size:1rem}.spi .x{align-self:flex-end;background:none;border:0;color:var(--muted);text-decoration:underline;font-size:.85rem;cursor:pointer}" +
       ".spbox .spn{font-size:.82rem;color:var(--muted);margin:6px 0}";
