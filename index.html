@@ -1153,6 +1153,7 @@ a.btn.primary { color: #f3d98f !important; }
     if (inp.dataset && inp.dataset.ah !== undefined) { state.days[+inp.dataset.ah][0].abs = inp.value; recalc(); persist(); return; }
     var row = inp.closest(".row"); if (!row || !inp.dataset.k) return;
     state.days[+row.dataset.d][+row.dataset.r][inp.dataset.k] = inp.value;
+    if (inp.dataset.k === "hin" || inp.dataset.k === "zur") state.days[+row.dataset.d][+row.dataset.r].ta = 0; /* von Hand geändert: die Reise wird nicht mehr automatisch angepasst */
     recalc(); persist();
   });
   $("days").addEventListener("click", function (ev) {
@@ -1167,7 +1168,7 @@ a.btn.primary { color: #f3d98f !important; }
     if (twb) { var rw = twb.closest(".row"), hid = rw.querySelector(".tw[hidden]"); if (hid) { hid.hidden = false; var fi = hid.querySelector("input"); if (fi) fi.focus(); } if (!rw.querySelector(".tw[hidden]")) twb.hidden = true; return; }
     var add = ev.target.closest("[data-add]"), del = ev.target.closest("[data-del]");
     if (add) { var di = +add.dataset.add; if (state.days[di].length < MAXROWS) { state.days[di].push(blank()); renderAll(); var r = document.querySelectorAll('.day')[di].querySelectorAll('.row'); var f = r[r.length - 1].querySelector('input'); if (f) f.focus(); persist(); } }
-    if (del) { var row = del.closest(".row"), d = +row.dataset.d, r2 = +row.dataset.r; if (state.days[d].length > 1) { state.days[d].splice(r2, 1); renderAll(); persist(); } }
+    if (del) { var row = del.closest(".row"), d = +row.dataset.d, r2 = +row.dataset.r; if (state.days[d].length > 1) { state.days[d].splice(r2, 1); travelDay(d); renderAll(); persist(); } }
   });
   $("days").addEventListener("click", function (ev) {
     var tb = ev.target.closest ? ev.target.closest("[data-t]") : null; if (!tb) return;
@@ -1434,13 +1435,26 @@ a.btn.primary { color: #f3d98f !important; }
     sug.style.top = (r.bottom + window.pageYOffset + 3) + "px";
     sugRow = inp.closest(".row"); sug.hidden = false; sug.scrollTop = 0; sugInp = inp; fitSug(inp); arrows(sug);
   }
+  function travelDay(d) { /* automatisch gesetzte Reisezeiten eines Tages: eine Baustelle = hin und zurück, mehrere = erste nur hin, letzte nur zurück, dazwischen keine */
+    var rows = state.days[d] || [], idx = [];
+    rows.forEach(function (e, i) { if (e.nr || e.obj) idx.push(i); });
+    idx.forEach(function (i, p) {
+      var e = rows[i]; if (!e.ta) return; var x = siteByNr(e.nr); if (!x) return;
+      var one = idx.length === 1, first = p === 0, last = p === idx.length - 1;
+      e.hin = (one || first) ? (x.h || "") : ""; e.zur = (one || last) ? (x.z || "") : "";
+      var rw = document.querySelector('#days .row[data-d="' + d + '"][data-r="' + i + '"]');
+      if (rw) ["hin", "zur"].forEach(function (k) { var inp = rw.querySelector('[data-k="' + k + '"]'); if (inp) inp.value = e[k]; });
+    });
+    recalc();
+  }
   function fillRow(row, x, only2) {
     var e = state.days[+row.dataset.d][+row.dataset.r];
     if (only2) { /* Auswahl in der «2. Zeile»: nur diese Zeile wird gefüllt, Nummer und Objekt bleiben unberührt */
       e.obj2 = x.nr + " " + x.n; var i2 = row.querySelector('[data-k="obj2"]'); if (i2) i2.value = e.obj2; recalc(); persist(); return;
     }
     e.nr = x.nr; e.obj = x.n; /* die «2. Zeile» bleibt für sich */
-    if ((x.h || x.z) && !e.hin && !e.zur) { e.hin = x.h || ""; e.zur = x.z || ""; } /* Vorschlag für die Reise, nur wenn noch nichts eingetragen ist */
+    if (e.ta || (!e.hin && !e.zur)) { e.ta = 1; e.hin = x.h || ""; e.zur = x.z || ""; } else e.ta = 0; /* Vorschlag für die Reise, nur wenn noch nichts von Hand eingetragen ist */
+    travelDay(+row.dataset.d); /* mehrere Baustellen am Tag: bei der ersten nur die Hinfahrt, bei der letzten nur die Rückfahrt */
     ["nr", "obj", "hin", "zur"].forEach(function (k) { var i = row.querySelector('[data-k="' + k + '"]'); if (i) i.value = e[k]; });
     recalc(); persist();
   }
