@@ -789,6 +789,7 @@ a.btn.primary { color: #f3d98f !important; }
       }
     } catch (e) { sharedErr = sharedMsg(e); }
     renderSitesInfo(); renderAuth(); aboCheck(); if (window.__sitesRedraw && $("sites")) window.__sitesRedraw();
+    try { thRender(); } catch (e) { }
     try { spBuild(); } catch (e) { }
   }
   async function sharedWrite(add, del) {
@@ -935,6 +936,7 @@ a.btn.primary { color: #f3d98f !important; }
   }
   function authMsg(t, c) { var m = $("authMsg"); m.textContent = t || ""; m.className = "status" + (c ? " " + c : ""); }
   function renderAuth() {
+    try { thRender(); } catch (e) { }
     var hint = $("authHint");
     if (user && !legalOk()) setTimeout(legalGate, 1700);
     $("tempWrap").hidden = !!user || !!cloudOff; $("pwBtn").hidden = isTempUser();
@@ -1001,10 +1003,37 @@ a.btn.primary { color: #f3d98f !important; }
     } catch (e) { authMsg(authError(e && e.message), "bad"); }
   }
   function isTempUser() { return !!(user && /@temp\.invalid$/i.test(String(user.email || ""))); }
+  function isTestHandy() { return !!(user && isTempUser() && user.user_metadata && user.user_metadata.testhandy === true); }
   function userLbl() {
     if (!user) return "";
-    if (isTempUser()) { var um = user.user_metadata || {}; return (um.name || "Temporär") + (um.code ? " (TEMP-" + um.code + ")" : ""); }
+    if (isTempUser()) { var um = user.user_metadata || {}; return (isTestHandy() ? "Test-Handy" : (um.name || "Temporär")) + (um.code ? " (TEMP-" + um.code + ")" : ""); }
     return user.email || "";
+  }
+  /* ---------- Test-Handy: Leiste zum Wechseln zwischen Mitarbeiter, Büro und Administrator ---------- */
+  function thRender() {
+    var old = $("thBar"); if (old) old.remove();
+    document.body.style.paddingBottom = "";
+    if (!isTestHandy()) return;
+    if (!document.getElementById("thcss")) { var cs = document.createElement("style"); cs.id = "thcss";
+      cs.textContent = "#thBar{position:fixed;left:0;right:0;bottom:0;z-index:9;display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:#2a1f5c;color:#fff;font:600 12px system-ui,sans-serif;box-shadow:0 -2px 10px rgba(0,0,0,.25)}#thBar button{font:inherit;border:1px solid #d4b061;background:transparent;color:#f3dca0;border-radius:999px;padding:6px 12px;white-space:nowrap;min-height:34px}#thBar button.on{background:#d4b061;color:#2a1f5c}#thBar .clr{border-color:#9a93c4;color:#cfc9ee}#toast{bottom:calc(120px + env(safe-area-inset-bottom))!important}";
+      document.head.appendChild(cs); }
+    var m = memberGet(), cur = m && m.rolle, bar = el("div", { id: "thBar", role: "group", "aria-label": "Rolle wechseln" }, [el("span", { text: "TEST" })]);
+    [["mitarbeiter", "Mitarbeiter"], ["buero", "Büro"], ["admin", "Admin"]].forEach(function (x) {
+      var b = el("button", { type: "button", "class": cur === x[0] ? "on" : "", text: x[1], "aria-pressed": String(cur === x[0]) });
+      b.addEventListener("click", async function () {
+        if (cur === x[0] || !sb) return; if (!navigator.onLine) { toast("Keine Verbindung."); return; }
+        b.disabled = true;
+        try { var r = await sb.rpc("test_rolle", { p_rolle: x[0] }); if (r.error) { toast(/schema cache|does not exist|could not find/i.test(String(r.error.message)) ? "In Supabase fehlt das SQL «testhandy»." : sharedMsg(r.error)); b.disabled = false; return; } await pullSites(); thRender(); toast("Jetzt als " + x[1] + " angemeldet"); }
+        catch (e) { toast(sharedMsg(e)); b.disabled = false; }
+      });
+      bar.appendChild(b);
+    });
+    var cl = el("button", { type: "button", "class": "clr", text: "Testdaten löschen" });
+    cl.addEventListener("click", async function () {
+      if (!sb || !confirm("Alle Wochen, Baustellenrapporte und Regie löschen, die dieses Test-Handy erfasst hat? Daten anderer Personen bleiben unberührt.")) return;
+      try { var r = await sb.rpc("test_leeren"); if (r.error) { toast(sharedMsg(r.error)); return; } for (var i = 0, ks = localKeys(); i < ks.length; i++) { try { localStorage.removeItem(WK + ks[i]); } catch (e) { } qDrop(ks[i]); delete index[ks[i]]; } toast("Testdaten gelöscht ✓"); setTimeout(function () { location.reload(); }, 700); } catch (e) { toast(sharedMsg(e)); }
+    });
+    bar.appendChild(cl); document.body.appendChild(bar); document.body.style.paddingBottom = "64px";
   }
   async function doTempLogin() {
     if (!sb) { authMsg(cloudOff || "Cloud nicht verfügbar.", "bad"); return; }
@@ -1847,12 +1876,13 @@ a.btn.primary { color: #f3d98f !important; }
     var say = function (t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); };
     var nm = el("input", { type: "text", autocomplete: "off", placeholder: "Name, z. B. Marco (Aushilfe)", "aria-label": "Name" });
     var go = el("button", { type: "button", "class": "btn primary", text: "Zugang erstellen" });
+    var goT = el("button", { type: "button", "class": "btn", text: "Test-Handy anlegen" }); goT.hidden = !isAdmin();
     var res = el("div", { "class": "editbox" }); res.hidden = true;
     var list = el("div", { "class": "slist", role: "list" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
     var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Temporäre Personen" }),
       el("p", { text: "Für Aushilfen ohne E-Mail. Du bekommst einen Code und einen PIN und gibst beides der Person. Sie meldet sich damit unter «Temporärer Zugang» an und kann Stunden und Baustellenrapporte erfassen. Der Zugang gilt, bis du ihn selbst sperrst." }),
-      el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), nm, el("div", { "class": "actions" }, [go])]),
+      el("div", { "class": "editbox" }, [el("div", { "class": "lbl", text: "Neue Person" }), nm, el("div", { "class": "actions" }, [go, goT]), el("small", { text: "«Test-Handy» ist nur für dich zum Vorführen: Es arbeitet in deiner Firma und wechselt in der App zwischen Mitarbeiter, Büro und Admin. Sperren kannst du es jederzeit.", style: "display:block;margin-top:6px" })]),
       res, msg, list, el("div", { "class": "actions" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "tempAdm", role: "dialog", "aria-modal": "true", "aria-label": "Temporäre Personen" }, [sheet]);
     async function call(fn, args) {
@@ -1884,7 +1914,7 @@ a.btn.primary { color: #f3d98f !important; }
       if (!rows.length) { list.appendChild(el("div", { "class": "status", text: "Noch keine temporären Personen." })); return; }
       rows.forEach(function (r) {
         var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: r.name }));
-        t.appendChild(el("small", { text: "TEMP-" + r.code + " · " + stat(r) }));
+        t.appendChild(el("small", { text: "TEMP-" + r.code + " · " + stat(r) + (r.testhandy ? " · Test-Handy (jetzt: " + ({ mitarbeiter: "Mitarbeiter", buero: "Büro", admin: "Admin" }[r.rolle] || r.rolle || "?") + ")" : "") }));
         t.appendChild(el("small", { text: r.letzter_login ? "Letzte Anmeldung " + tempDT(r.letzter_login) : "Noch nie angemeldet" }));
         var b1 = el("button", { type: "button", text: r.gesperrt ? "Entsperren" : "Sperren" });
         b1.addEventListener("click", function () { run("temp_sperren", { p_id: r.id, p_sperre: !r.gesperrt }, r.gesperrt ? r.name + " ist entsperrt." : r.name + " ist gesperrt."); });
@@ -1903,6 +1933,11 @@ a.btn.primary { color: #f3d98f !important; }
       var n = nm.value.trim(); if (n.length < 2) { say("Bitte einen Namen eingeben.", "bad"); nm.focus(); return; }
       var x = await run("temp_anlegen", { p_name: n, p_ablauf: null }, "Zugang erstellt.");
       if (x && x.data) { var d = Array.isArray(x.data) ? x.data[0] : x.data; if (d) { showRes(n, d.o_code, d.o_pin, d.o_ablauf); nm.value = ""; } }
+    });
+    goT.addEventListener("click", async function () {
+      var n = nm.value.trim() || "Test-Handy";
+      var x = await run("temp_anlegen_test", { p_name: n }, "Test-Handy erstellt.");
+      if (x && x.data) { var d = Array.isArray(x.data) ? x.data[0] : x.data; if (d) { showRes(n, d.o_code, d.o_pin, null); nm.value = ""; } }
     });
     nm.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); go.click(); } });
     close.addEventListener("click", closeTemp);
