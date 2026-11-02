@@ -500,16 +500,16 @@ a.btn.primary { color: #f3d98f !important; }
 .top>div:first-child{flex:none!important;width:100%}
 .titlebar{position:relative;grid-template-columns:44px 1fr auto auto;gap:8px}
 .titlebar .brand .logo{width:44px;height:44px;grid-column:1;grid-row:1;justify-self:start;margin:0}
-.titlebar .brand h1{grid-column:2;grid-row:1;text-align:left;font-size:1.45rem}
+.titlebar .brand h1{grid-column:2;grid-row:1;text-align:center;font-size:1.45rem}
 .titlebar #acctBtn{grid-column:3;grid-row:1;justify-self:end;min-height:44px;padding:6px 12px;font-size:.9rem}
 .titlebar #acctBtn.in{width:44px;padding:0;font-size:0}
 .titlebar #acctBtn.in::before{content:"\1F464";font-size:1.25rem}
 .titlebar #menuBtn{grid-column:4;grid-row:1;width:44px;height:44px}
 .titlebar .sync{position:absolute;left:34px;top:32px;grid-column:auto;grid-row:auto;font-size:0;gap:0}
 .titlebar .sync::before{width:12px;height:12px;border:2px solid var(--bg,#eceff3);box-sizing:content-box}
-label.name{flex-direction:row;align-items:center;max-width:none;margin:-12px 0 0 52px;gap:0}
+label.name{flex-direction:row;align-items:center;max-width:none;margin:-12px 104px 0 52px;gap:0}
 label.name .lbl{display:none}
-label.name input{flex:1 1 auto;min-height:26px;padding:0;border:0;background:transparent;box-shadow:none;font-size:.85rem;color:var(--muted)}
+label.name input{flex:1 1 auto;text-align:center;min-height:26px;padding:0;border:0;background:transparent;box-shadow:none;font-size:.85rem;color:var(--muted)}
 .weeknav{display:grid;grid-template-columns:44px 1fr 1fr 44px;gap:8px;max-width:none;width:100%;flex:none}
 .weeknav #prev{grid-column:1;grid-row:1;width:44px;height:44px}.weeknav #next{grid-column:4;grid-row:1;width:44px;height:44px}
 .weeknav .range{grid-column:2/4;grid-row:1;min-width:0;flex-direction:row;justify-content:center;align-items:baseline;gap:8px}
@@ -524,6 +524,16 @@ label.name input{flex:1 1 auto;min-height:26px;padding:0;border:0;background:tra
 .summary .total .lbl small{display:block;text-transform:none;letter-spacing:0;font-weight:500;opacity:.7;margin-top:2px;font-size:.62rem}
 .summary b{white-space:nowrap}
 .summary b small{font-size:.8rem}
+/* Home v3 */
+.weeknav{grid-template-columns:64px 1fr 1fr 64px}
+.weeknav #prev{justify-self:start}.weeknav #next{justify-self:end}
+.weeknav .range{grid-column:2/4}
+.weeknav #today{grid-column:1/2;width:auto;justify-self:start;padding:4px 14px}
+.weeknav .picker{grid-column:2/5}
+body:not(.buero) .sitesbar{flex-wrap:nowrap;overflow-x:auto;gap:8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+body:not(.buero) .sitesbar::-webkit-scrollbar{display:none}
+body:not(.buero) .sitesbar .btn{flex:0 0 auto;white-space:nowrap;min-height:40px;padding:4px 12px;font-size:.9rem}
+body:not(.buero) .sitesbar .status{flex:0 0 auto;white-space:nowrap;font-size:.8rem;color:var(--muted)}
 </style>
 </head><body>
 <div id="splash" aria-hidden="true"><img id="splashImg" alt=""><div class="sbar"><i></i></div><div class="stx">Rapport wird geladen</div></div>
@@ -542,7 +552,7 @@ label.name input{flex:1 1 auto;min-height:26px;padding:0;border:0;background:tra
       <button class="btn icon" id="prev" type="button" aria-label="Vorherige Woche">‹</button>
       <div class="range"><span class="kw" id="kw"></span><span class="dates" id="dates"></span></div>
       <button class="btn icon" id="next" type="button" aria-label="Nächste Woche">›</button>
-      <button class="btn" id="today" type="button">Diese Woche</button>
+      <button class="btn" id="today" type="button">Heute</button>
       <select id="picker" class="picker" aria-label="Gespeicherte Woche öffnen"></select>
     </div>
   </div>
@@ -849,11 +859,11 @@ label.name input{flex:1 1 auto;min-height:26px;padding:0;border:0;background:tra
         "body.buero #sitesBtn{order:1}body.buero #sitesAdd{order:2}body.buero #colorsBtn{order:3}body.buero #bilanzBtn{order:4}body.buero #membersBtn{order:5}body.buero #sitesInfo{order:6;text-align:center}";
       document.head.appendChild(cs); }
     document.body.classList.toggle("buero", bu);
-    $("membersBtn").textContent = bu ? "Mitarbeiter hinzufügen" : "Mitarbeiter"; $("bilanzBtn").textContent = bu ? "Auswertung pro Baustelle" : "Auswertung"; $("sitesAdd").textContent = bu ? "Baustelle hinzufügen" : "+ Baustelle hinzufügen";
+    $("membersBtn").textContent = bu ? "Mitarbeiter hinzufügen" : "Mitarbeiter"; $("bilanzBtn").textContent = bu ? "Auswertung pro Baustelle" : "Auswertung"; $("sitesAdd").textContent = bu ? "Baustelle hinzufügen" : "+ Baustelle";
   }
   function renderSitesInfo() {
     var n = sitesList().length, m = memberGet(), ed = canEditSites(), parts = [];
-    $("sitesBtn").textContent = "Baustellen-Liste" + (n ? " (" + n + ")" : "");
+    $("sitesBtn").textContent = (isBuero() ? "Baustellen-Liste" : "Baustellen") + (n ? " (" + n + ")" : "");
     $("sitesAdd").hidden = !ed; $("membersBtn").hidden = !isStaff(); $("bilanzBtn").hidden = !isStaff(); $("colorsBtn").hidden = !isBuero(); applyRole();
     if (user && m) parts.push(roleText(m));
     if (user && noFirma) parts.push(sharedErr ? sharedErr : (user.user_metadata && user.user_metadata.beitritt_code) ? "Du bist registriert. Der Chef muss dich noch aufnehmen, danach siehst du die Baustellen." : "Dein Konto ist noch keiner Firma zugeordnet. Bitte melde dich beim Administrator.");
