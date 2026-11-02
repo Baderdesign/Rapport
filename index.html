@@ -869,6 +869,12 @@ a.btn.primary { color: #f3d98f !important; }
       var remote = {}, cur = false;
       (r.data || []).forEach(function (row) { remote[row.week] = row.data || {}; });
       delete remote[SITES_WEEK]; /* alter Eintrag aus einer früheren Version */
+      try { /* Jahresabschluss: Wochen vor dem Stichtag der Firma gehören ins Archiv und werden hier entfernt */
+        var fsr = await sb.rpc("firma_start_get");
+        if (!fsr.error && typeof fsr.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fsr.data)) {
+          localKeys().forEach(function (wk) { if (/^\d{4}-\d{2}-\d{2}$/.test(wk) && key(addDays(fromKey(wk), 6)) < fsr.data) { try { localStorage.removeItem(WK + wk); } catch (e) { } qDrop(wk); delete index[wk]; delete remote[wk]; } });
+        }
+      } catch (e) { }
       Object.keys(remote).forEach(function (wk) {
         var l = localWeek(wk), rd = remote[wk];
         if (!l || String(rd.updated || "") > String(l.updated || "")) { lsSet(WK + wk, JSON.stringify(rd)); index[wk] = totals(deserialize(rd.days)).tot; if (wk === state.week) cur = true; }
@@ -2163,7 +2169,7 @@ a.btn.primary { color: #f3d98f !important; }
 
   $("membersBtn").addEventListener("click", openMembers);
 
-  /* ---------- Export (nur Administratoren): Excel, CSV, Word ---------- */
+  /* ---------- Export (Administrator und Büro): Excel, CSV, Word ---------- */
   function expLoad(url, test) {
     return new Promise(function (ok, no) {
       if (test()) return ok();
@@ -2277,7 +2283,7 @@ a.btn.primary { color: #f3d98f !important; }
     z.file("word/document.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>" + body + "<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1000\" w:right=\"1000\" w:bottom=\"1000\" w:left=\"1000\" w:header=\"500\" w:footer=\"500\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>");
     return z.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
-  /* Export-Bereich in der Auswertung (nur Administratoren) */
+  /* Export-Bereich in der Auswertung (Administrator und Büro) */
   function expBuild(getRows, getRange) {
     if (!isStaff()) return null;
     var site = el("button", { type: "button", "class": "btn", "aria-label": "Baustellen für den Export auswählen", style: "width:100%;justify-content:space-between;margin:6px 0" }), fmt = el("select", { "aria-label": "Dateiformat" }, [el("option", { value: "xlsx", text: "Excel (.xlsx)" }), el("option", { value: "csv", text: "CSV (Banana, bexio u. a.)" }), el("option", { value: "docx", text: "Word (.docx)" })]);
@@ -3579,6 +3585,161 @@ function openReport(pre) {
     }).sort(function (a, b) { return (a.name || a.em).localeCompare(b.name || b.em); });
   }
   function closeFeier() { var o = $("feier"); if (o) o.remove(); }
+  /* ---------- Jahresabschluss (nur Administrator): Archiv auf dem Gerät, Überträge ins neue Jahr, Aufräumen ---------- */
+  var AB_JSZIP = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+  function abName(t) { return String(t == null ? "" : t).replace(/[\\\/:*?"<>|\r\n]+/g, "_").replace(/\s+/g, " ").trim().slice(0, 60) || "ohne_Name"; }
+  function abB64(d) { d = String(d || ""); var i = d.indexOf("base64,"); return i >= 0 ? d.slice(i + 7) : d; }
+  function abExt(mime, name) { var m = /\.([A-Za-z0-9]{2,5})$/.exec(String(name || "")); if (m) return ""; return { "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png" }[String(mime || "").toLowerCase()] || ""; }
+  async function abData(yy) {
+    var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(new Date(yy, 0, 1))), p_bis: key(new Date(yy, 11, 31)) });
+    if (r.error) throw new Error(sharedMsg(r.error));
+    var D = { y: yy, rows: r.data || [], tmpMail: {}, members: [], kx: {}, P: [], emps: [], tmps: [] };
+    try { var ml = await sb.rpc("members_list"); if (!ml.error && Array.isArray(ml.data)) { D.members = ml.data; ml.data.forEach(function (x) { if (x.rolle === "temporaer") D.tmpMail[String(x.email).toLowerCase()] = 1; }); } } catch (e) { }
+    try { var kr = await sb.rpc("konten_list", { p_jahr: yy }); if (!kr.error && Array.isArray(kr.data)) kr.data.forEach(function (x) { D.kx[String(x.email).toLowerCase()] = x; }); } catch (e) { }
+    var emps = {}, tmps = {};
+    for (var mo = 0; mo < 12; mo++) {
+      var all = gleitCalc(D.rows, yy, mo); D.P.push(all);
+      all.forEach(function (o) { var tgt = D.tmpMail[o.em] ? tmps : emps; if (!tgt[o.em]) tgt[o.em] = { em: o.em, name: o.name || "" }; if (o.name) tgt[o.em].name = o.name; });
+    }
+    function lst(m) { return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return String(a.name || a.em).localeCompare(String(b.name || b.em), "de"); }); }
+    D.emps = lst(emps); D.tmps = lst(tmps);
+    return D;
+  }
+  function abCarry(D) { /* Überstunden und Ferien am Jahresende pro Mitarbeiter (Temporäre haben keine Konten) */
+    var dec = D.P[11] || [], by = {}, ems = {}, out = [];
+    dec.forEach(function (o) { by[o.em] = o; if (!D.tmpMail[o.em]) ems[o.em] = 1; });
+    Object.keys(D.kx).forEach(function (e) { if (!D.tmpMail[e]) ems[e] = 1; });
+    Object.keys(ems).sort().forEach(function (em) {
+      var o = by[em] || {}, K = D.kx[em] || {}, ue0 = pmin(K.ue_vorjahr), us0 = pmin(K.ue_start), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480);
+      var ue = Math.round(ue0 + us0 + (o.kum || 0) - (o.frj || 0)), rest = Math.max(0, fa + fv0 - (o.fer || 0));
+      var tage = String(Math.round(rest / 480 * 100) / 100);
+      out.push({ em: em, name: o.name || (D.emps.filter(function (x) { return x.em === em; })[0] || {}).name || "", ue: ue, tage: tage, fa: K.f_anspruch || "" });
+    });
+    return out;
+  }
+  async function abZip(D, say) {
+    await expLoad(AB_JSZIP, function () { return window.JSZip; });
+    var yy = D.y, z = new window.JSZip(), fehler = [], crit = 0, firma = (memberGet() || {}).firma || "";
+    var von = yy + "-01-01", bis = yy + "-12-31";
+    function bad(t, c) { fehler.push(t); if (c) crit++; }
+    var J = { app: "wochenrapport", archiv: yy, erstellt: new Date().toISOString(), firma: firma, mitarbeiter: D.members, wochen: D.rows, konten: D.kx };
+    say("Baustellen und Rapporte werden gelesen …");
+    var sites = []; try { var sr = await sb.from("sites").select("nr,name,name2,hin,zur,farben"); if (sr.error) sr = await sb.from("sites").select("nr,name,name2,hin,zur"); if (sr.error) throw sr.error; sites = sr.data || []; } catch (e) { bad("Baustellenliste nicht gelesen", 1); }
+    J.baustellen = sites;
+    try { var rr = await sb.rpc("firma_reports", { p_von: von, p_bis: bis }); if (rr.error) throw rr.error; J.baustellenrapporte = rr.data || []; } catch (e) { bad("Baustellenrapporte nicht gelesen", 1); }
+    try { var sp = await sb.rpc("firma_spesen"); if (!sp.error) J.spesen_einstellung = sp.data; } catch (e) { }
+    try { var kl = await sb.rpc("kalk_list"); if (!kl.error) J.kalkulator = kl.data; } catch (e) { }
+    try { var al = await sb.rpc("ausmass_list"); if (!al.error) J.ausmass = al.data; } catch (e) { }
+    J.regie = []; J.stundenvorgaben = {}; var nrs = sites.map(function (x) { return String(x.nr); });
+    var fileN = 0;
+    for (var i = 0; i < nrs.length; i++) {
+      var nr = nrs[i], sn = abName(nr + " " + ((sites[i] && sites[i].name) || ""));
+      say("Baustelle " + (i + 1) + " von " + nrs.length + ": " + nr + " …");
+      try { var rg = await sb.rpc("regie_list", { p_site: nr }); if (rg.error) throw rg.error; (rg.data || []).forEach(function (x) { J.regie.push({ site_nr: nr, nr: x.nr, data: x.data, updated: x.updated, autor: x.autor }); }); } catch (e) { bad("Regie " + nr + " nicht gelesen", 1); }
+      try { var so = await sb.rpc("soll_get", { p_site: nr }); if (!so.error && so.data && so.data[0]) J.stundenvorgaben[nr] = so.data[0]; } catch (e) { }
+      try { var dl = await sb.rpc("dateien_list", { p_site: nr });
+        if (!dl.error && Array.isArray(dl.data)) for (var q = 0; q < dl.data.length; q++) { var f = dl.data[q];
+          try { var g = await sb.rpc("datei_get", { p_id: f.id }); var gd = Array.isArray(g.data) ? g.data[0] : g.data; if (g.error || !gd) throw 0; var nm = abName(gd.name || f.name || ("Datei" + f.id)); z.file("Dateien/" + sn + "/" + abName(f.ordner || "") + "/" + nm + abExt(gd.mime, nm), abB64(gd.data), { base64: true }); fileN++; } catch (e) { bad("Datei " + (f.name || f.id) + " (" + nr + ") nicht gelesen"); } } } catch (e) { bad("Dateien " + nr + " nicht gelesen"); }
+      try { var ofr = await offRpc("offerte_get", { p_site: nr }); var od = ofr && !ofr.er && (Array.isArray(ofr.data) ? ofr.data[0] : ofr.data);
+        if (od && Array.isArray(od.o_seiten)) od.o_seiten.forEach(function (pg, k) { z.file("Offerten/" + sn + "/Offerte_Seite" + (k + 1) + ".jpg", abB64(pg), { base64: true }); fileN++; }); } catch (e) { bad("Offerte " + nr + " nicht gelesen"); }
+      for (var kk = 0; kk < 2; kk++) { var kd = ["rapport", "regie"][kk];
+        try { var fl = await sb.rpc("foto_list_site", { p_kind: kd, p_site: nr });
+          if (!fl.error && Array.isArray(fl.data)) for (var u = 0; u < fl.data.length; u++) { var x = fl.data[u];
+            try { var gf = await sb.rpc("foto_get", { p_id: x.id }); var fd = Array.isArray(gf.data) ? gf.data[0] : gf.data; if (gf.error || !fd) throw 0; var pr = String(x.ref || "").split("|"); z.file("Fotos/" + sn + "/" + kd + "/" + abName((pr[2] || "") + "_" + x.id) + ".jpg", abB64(fd.data), { base64: true }); fileN++; } catch (e) { bad("Foto " + x.id + " (" + nr + ") nicht gelesen"); } } } catch (e) { } }
+    }
+    say("Excel wird erstellt …");
+    try { await expLoad(AB_JSZIP, function () { return window.JSZip; }); var X = await expCollect(D.rows, von, bis, "*", true, true); var xb = await expXlsx(X); z.file("Auswertung_" + yy + ".xlsx", xb); } catch (e) { bad("Excel nicht erstellt: " + ((e && e.message) || e), 1); }
+    say("Stundenübersicht (PDF) wird erstellt …");
+    try { var pd = buildGleitYearPdf({ y: yy, P: D.P, emps: D.emps, tmps: D.tmps, kx: D.kx }, firma, ""); if (!pd) throw new Error("PDF-Bibliothek nicht geladen"); if (pd.empty) bad("Stundenübersicht: keine Daten für das Jahr"); else z.file("Stundenuebersicht_" + yy + ".pdf", pd.output("arraybuffer")); } catch (e) { bad("Stundenübersicht nicht erstellt: " + ((e && e.message) || e), 1); }
+    z.file("Sicherung_" + yy + ".json", JSON.stringify(J));
+    var carry = abCarry(D);
+    z.file("LIESMICH.txt", "Archiv Wochenrapport " + yy + " (" + firma + ")\r\nErstellt am " + dmy(new Date()) + "\r\n\r\n" +
+      "Auswertung_" + yy + ".xlsx  Stunden pro Tag, Baustelle und Mitarbeiter, Spesen, Regie (zum Nachschauen in Excel)\r\n" +
+      "Stundenuebersicht_" + yy + ".pdf  Jahresübersicht pro Mitarbeiter mit Überstunden und Ferien\r\n" +
+      "Sicherung_" + yy + ".json  alle Rohdaten (Wochen, Baustellen, Rapporte, Regie, Konten); mit jedem Texteditor lesbar\r\n" +
+      "Dateien, Offerten, Fotos  abgelegte Dateien, Offerten ohne Preise und Fotos pro Baustelle\r\n\r\n" +
+      "Übertrag ins Jahr " + (yy + 1) + ":\r\n" + carry.map(function (c) { return " " + (c.name || c.em) + ": Überstunden " + hmS(c.ue) + " Std.Min, Ferien " + c.tage + " Tage"; }).join("\r\n") +
+      (fehler.length ? "\r\n\r\nHinweise:\r\n- " + fehler.join("\r\n- ") : "") + "\r\n");
+    say("ZIP-Datei wird gepackt …");
+    var blob = await z.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } }, function (m) { say("ZIP-Datei wird gepackt … " + Math.round(m.percent) + " %"); });
+    return { blob: blob, fehler: fehler, crit: crit, files: fileN };
+  }
+  function abFallback(blob, fn, file) { /* ZIP zum Speichern anbieten (über dem Abschluss-Fenster) */
+    showFallback(blob, { output: function () { return ""; } }, fn, file, "Archiv");
+    var so = $("sheet"); if (!so) return; so.style.zIndex = "100";
+    var ln = so.querySelector("a.btn.primary"); if (ln) { ln.setAttribute("download", fn); ln.removeAttribute("target"); ln.textContent = "Archiv speichern"; }
+    var pp = so.querySelector("p"); if (pp) pp.textContent = "Tippe auf «Archiv speichern». Die ZIP-Datei landet im Ordner «Downloads» beziehungsweise unter «In Dateien sichern». Am PC entpacken und ablegen. " + fn;
+    Array.prototype.forEach.call(so.querySelectorAll("button"), function (bt) { if (/Vorschau/.test(bt.textContent)) bt.remove(); });
+  }
+  function openAbschluss() {
+    var old = $("abschl"); if (old) old.remove();
+    var now = new Date(), yy0 = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    var yi = el("input", { type: "number", inputmode: "numeric", min: "2020", max: "2100", value: String(yy0), "aria-label": "Jahr, das abgeschlossen wird" });
+    var b1 = el("button", { type: "button", "class": "btn primary", text: "1. Archiv erstellen und sichern" }), b2 = el("button", { type: "button", "class": "btn", text: "2. Übertrag prüfen" });
+    var cf = el("input", { type: "text", autocomplete: "off", autocapitalize: "characters", placeholder: "ABSCHLIESSEN", "aria-label": "Zur Bestätigung ABSCHLIESSEN schreiben" }), b3 = el("button", { type: "button", "class": "btn primary", text: "3. Jahr abschliessen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var msg = el("div", { "class": "status", role: "status" }), tab = el("div", {}), D = null, arch = false;
+    b3.disabled = true;
+    function say(t, c) { msg.textContent = t; msg.className = "status" + (c ? " " + c : ""); }
+    function upd() { b3.disabled = !(arch && D && cf.value.trim().toUpperCase() === "ABSCHLIESSEN"); }
+    cf.addEventListener("input", upd);
+    function yr() { var v = parseInt(yi.value, 10); return v >= 2020 && v <= 2100 ? v : 0; }
+    function guard() { if (isDemo()) { say(DEMO_MSG, "bad"); return false; } if (!sb || !user || !navigator.onLine) { say("Dafür brauchst du Internet und die Anmeldung.", "bad"); return false; } if (!yr()) { say("Bitte ein gültiges Jahr eingeben.", "bad"); return false; } return true; }
+    async function load() { try { await flush(); } catch (e) { } D = await abData(yr()); return D; }
+    function showCarry() {
+      tab.textContent = ""; var C = abCarry(D);
+      tab.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Übertrag ins Jahr " + (D.y + 1) }));
+      if (!C.length) tab.appendChild(el("div", { "class": "status", text: "Keine Mitarbeiter mit Daten gefunden." }));
+      C.forEach(function (c) { tab.appendChild(el("div", { "class": "srow stack", style: "font-variant-numeric:tabular-nums" }, [el("b", { text: c.name || c.em }), el("div", { "class": "status", text: "Überstunden " + hmS(c.ue) + " Std.Min · Ferien " + c.tage + " Tage" + (c.fa ? " · Anspruch bleibt " + c.fa + " Tage" : "") })])); });
+      tab.appendChild(el("div", { "class": "status", text: "Diese Werte werden als Konten " + (D.y + 1) + " gespeichert (bereits eingetragene Werte für dieses Jahr werden ersetzt). Den Ferienanspruch " + (D.y + 1) + " prüfst du danach unter «Stunden pro Mitarbeiter» → «Konten bearbeiten»." }));
+    }
+    b1.addEventListener("click", async function () {
+      if (!guard()) return; b1.disabled = true; arch = false; upd();
+      try {
+        say("Daten werden geladen …"); await load();
+        var R = await abZip(D, function (t) { say(t); });
+        var fn = "Archiv_" + D.y + "_Wochenrapport.zip", file = null; try { file = new File([R.blob], fn, { type: "application/zip" }); } catch (e) { }
+        if (R.crit) { say("Das Archiv ist unvollständig (" + R.fehler.slice(0, 3).join("; ") + "). Bitte nochmals versuchen, bevor du abschliesst.", "bad"); }
+        else {
+          arch = true;
+          say("Archiv fertig (" + Math.round(R.blob.size / 1024 / 1024 * 10) / 10 + " MB, " + R.files + " Dateien)" + (R.fehler.length ? ". Hinweis: " + R.fehler.length + " Datei(en) konnten nicht gelesen werden, siehe LIESMICH.txt im Archiv." : ".") + " Bitte jetzt am PC ablegen und kontrollieren.", "ok");
+        }
+        if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) { try { await navigator.share({ files: [file], title: fn }); } catch (e) { if (!e || e.name !== "AbortError") abFallback(R.blob, fn, file); } }
+        else abFallback(R.blob, fn, file);
+        showCarry();
+      } catch (e) { say("Das Archiv konnte nicht erstellt werden: " + ((e && e.message) || e), "bad"); } finally { b1.disabled = false; upd(); }
+    });
+    b2.addEventListener("click", async function () { if (!guard()) return; b2.disabled = true; try { say("Wird berechnet …"); await load(); showCarry(); say(""); } catch (e) { say((e && e.message) || String(e), "bad"); } finally { b2.disabled = false; upd(); } });
+    b3.addEventListener("click", async function () {
+      if (!guard() || !D || !arch) return; if (cf.value.trim().toUpperCase() !== "ABSCHLIESSEN") return;
+      if (Date.now() < new Date(D.y + "-12-20T00:00:00").getTime()) { say("Zu früh: Der Jahresabschluss ist erst ab dem 20. Dezember " + D.y + " möglich. Das Archiv kannst du schon jetzt erstellen.", "bad"); return; }
+      b3.disabled = true; b1.disabled = true; b2.disabled = true;
+      try {
+        var C = abCarry(D), ny = D.y + 1;
+        for (var i = 0; i < C.length; i++) {
+          say("Überträge werden gespeichert (" + (i + 1) + " von " + C.length + ") …");
+          var kr = await sb.rpc("konten_set", { p_email: C[i].em, p_jahr: ny, p_ue: hmS(C[i].ue), p_fa: C[i].fa, p_fv: C[i].tage, p_us: "" });
+          if (kr.error) throw new Error("Übertrag für " + (C[i].name || C[i].em) + " nicht gespeichert: " + sharedMsg(kr.error) + " Es wurde noch nichts gelöscht.");
+        }
+        say("Jahr wird abgeschlossen …");
+        var ar = await sb.rpc("jahresabschluss", { p_start: ny + "-01-01", p_confirm: "ABSCHLIESSEN" });
+        if (ar.error) throw new Error(/schema cache|could not find|does not exist/i.test(String(ar.error.message || "")) ? "In Supabase fehlt noch das SQL «Jahresabschluss». Die Überträge sind gespeichert, gelöscht wurde nichts." : sharedMsg(ar.error));
+        try { await pullAll(); } catch (e) { }
+        arch = false; tab.textContent = ""; cf.value = "";
+        say("Jahr " + D.y + " ist abgeschlossen. Die Überträge für " + ny + " sind gespeichert. Baustellen, Rapporte und Stunden sind entfernt; auf den Geräten verschwinden die alten Wochen beim nächsten Start der App.", "ok");
+        toast("Jahr abgeschlossen ✓");
+      } catch (e) { say((e && e.message) || String(e), "bad"); } finally { b1.disabled = false; b2.disabled = false; upd(); }
+    });
+    var sheet = el("div", { "class": "sheet", style: "max-height:90vh;overflow:auto" }, [el("h2", { text: "Jahresabschluss" }),
+      el("p", { text: "So beginnt das neue Jahr leer. Zuerst das Archiv des alten Jahres auf dem Gerät sichern, dann den Übertrag prüfen, zuletzt abschliessen. Es bleiben nur Mitarbeiter, Überstunden und Ferien (als Übertrag) sowie die Einstellungen. Alles andere (Baustellen, Stunden, Rapporte, Regie, Offerten, Dateien, Fotos) wird entfernt." }),
+      el("label", {}, [el("span", { "class": "lbl", text: "Jahr, das abgeschlossen wird" }), yi]),
+      el("div", { "class": "actions", style: "flex-direction:column;align-items:stretch;margin-top:8px" }, [b1, b2]), tab,
+      el("label", { style: "margin-top:12px" }, [el("span", { "class": "lbl", text: "Zur Bestätigung ABSCHLIESSEN schreiben (nicht rückgängig zu machen)" }), cf]),
+      el("div", { "class": "actions", style: "flex-direction:column;align-items:stretch;margin-top:8px" }, [b3, cl]), msg]);
+    var ov = el("div", { "class": "overlay sites", id: "abschl", role: "dialog", "aria-modal": "true", "aria-label": "Jahresabschluss" }, [sheet]); ov.style.zIndex = "60";
+    function shut() { ov.remove(); }
+    cl.addEventListener("click", shut); ov.addEventListener("click", function (e) { if (e.target === ov) shut(); });
+    document.body.appendChild(ov);
+  }
   function openLegal() {
     var old = $("legal"); if (old) old.remove();
     var T = [
@@ -3589,6 +3750,7 @@ function openReport(pre) {
       ["Datenschutz: welche Daten", "Konto (E-Mail, Name, Rolle, Passwort nur verschlüsselt), Arbeitszeiten, Absenzen, Baustellen, Wochen- und Regie-Rapporte, Fotos und Belege, Unterschriften, Kalkulationen, Offerten ohne Preise und Stundenvorgaben pro Baustelle sowie technische Angaben beim Aufruf (z. B. IP-Adresse). Keine Werbung, kein Tracking, keine Standortdaten."],
       ["Offerten und Stundenvorgaben", "Offerten werden als Foto oder PDF abgelegt. Die Preise werden zuvor auf dem eigenen Gerät abgedeckt; das ist nicht rückgängig zu machen, die Preise gelangen nie auf den Server. Die Offerte darf nur von Admin und Büro abgelegt oder gelöscht werden, alle Mitarbeitenden der Firma dürfen sie ansehen. Die Stundenvorgabe (Summe, Anteil, Stundensatz, Stunden) ist nur für Admin und Büro sichtbar. Es erfolgt keine Auswertung durch künstliche Intelligenz und keine Weitergabe an Dritte."],
       ["Temporäre Personen", "Temporäre Personen melden sich mit Code und PIN an, eine E-Mail-Adresse ist nicht nötig. Gespeichert werden Name, Code und die PIN nur verschlüsselt. Admin und Büro können den Zugang jederzeit sperren; bereits erfasste Rapporte bleiben bestehen."],
+      ["Jahreswechsel", "Zum Jahresende sichert der Administrator die Daten des alten Jahres (Stunden, Baustellen, Rapporte, Regie, Offerten, Dateien, Fotos) als Archiv auf seinem Gerät. Danach werden sie aus der App entfernt. Nur Überstunden- und Ferienkonten werden ins neue Jahr übertragen. Das Archiv liegt allein beim Administrator beziehungsweise Arbeitgeber; für Auskunft oder Herausgabe genügt eine Mail an davidbader@gmx.ch."],
       ["Kamera", "Die Kamera wird nur geöffnet, wenn Sie selbst auf «Foto» tippen, nie im Hintergrund. Zum Lesen von PDF-Dateien lädt die App eine Hilfsbibliothek von cdnjs; dabei wird technisch bedingt Ihre IP-Adresse übertragen, jedoch keine Inhalte."],
       ["Wer die Daten sieht", "Sie sehen Ihre eigenen Daten. Büro, Admin und Inhaber sehen je nach Rolle die Daten der Mitarbeitenden ihrer Firma. Der Anbieter hat als Entwickler und Betreiber technisch Zugriff auf alle Daten. Er nutzt ihn nur für Betrieb, Support und Fehlerbehebung und gibt die Daten nicht weiter. Rapporte und PDFs geben Sie selbst weiter."],
       ["Dienstleister", "Supabase (Datenbank und Anmeldung, Standort Zürich), GitHub Pages (Bereitstellung der App), cdnjs und jsDelivr (Hilfsbibliotheken). Dabei können Daten ins Ausland gelangen. Die Datenbank wird nachts automatisch gesichert. Die Sicherungen liegen in einem privaten Speicher bei GitHub und werden nach 30 Tagen gelöscht, eine gelöschte Person kann deshalb noch bis zu 30 Tage darin enthalten sein. Auf Ihrem Gerät speichert die App Einträge und einen Zwischenspeicher, damit sie auch ohne Empfang startet."],
@@ -5154,7 +5316,7 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); }
+    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
     if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
@@ -5162,7 +5324,7 @@ function openReport(pre) {
       if (iS >= 0 && iU >= 0) { var fS = items[iS][1], fU = items[iU][1]; items[iS] = ["Stundenübersicht", null, [["Stunden pro Mitarbeiter", fS], ["Monats- / Jahresübersicht", fU]]]; items.splice(iU, 1); }
     })();
     (function () { /* Mitarbeiter, Temporäre und Inhaber-Punkte zusammen in einem aufklappbaren Eintrag «Verwaltung» */
-      var names = { "Neue Registrierungen & Mitarbeiter": "Registrierungen & Mitarbeiter", "Mitarbeiter hinzufügen": "Mitarbeiter hinzufügen", "Temporäre Personen": "Temporäre Personen", "Inhaber: Abos": "Inhaber: Abos", "Inhaber: Firma wechseln": "Inhaber: Firma wechseln" };
+      var names = { "Neue Registrierungen & Mitarbeiter": "Registrierungen & Mitarbeiter", "Mitarbeiter hinzufügen": "Mitarbeiter hinzufügen", "Temporäre Personen": "Temporäre Personen", "Jahresabschluss": "Jahresabschluss", "Inhaber: Abos": "Inhaber: Abos", "Inhaber: Firma wechseln": "Inhaber: Firma wechseln" };
       var sub = [], at = -1, rest = [];
       items.forEach(function (it) { if (names[it[0]] && !it[2]) { if (at < 0) at = rest.length; sub.push([names[it[0]], it[1]]); } else rest.push(it); });
       if (sub.length > 1) { rest.splice(at, 0, ["Mitarbeiter", null, sub]); items = rest; }
