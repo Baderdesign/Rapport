@@ -555,6 +555,19 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
 .dsum.leer .dm,.dsum.leer .dd,.dsum.leer .dh{color:var(--muted);font-weight:500}
 .day.coll:has(.dsum.leer){border-left-color:var(--line)}
 .dayhead h2{cursor:pointer}
+
+/* Kundenkartei: ganze Seite in App-Grösse */
+.kpage { position: fixed; inset: 0; z-index: 9; background: var(--bg); color: var(--ink); overflow-y: auto; padding: 16px; padding-top: calc(16px + env(safe-area-inset-top, 0px)); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+.kin { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.kin h2 { font-size: 1.6rem; margin: 0; }
+.kin .khead { display: flex; align-items: center; gap: 10px; }
+.kin .kcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.kin .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kin .chips .btn { padding: 7px 11px; font-size: .85rem; min-height: 0; }
+.kin input[type=tel], .kin input[type=email], .kin input[type=search] { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; }
+.kin textarea { width: 100%; min-height: 80px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 16px; font-family: inherit; }
+.kb { --c: #2f6fdb; display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: .78rem; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+.kb.b { --c: #1f7a43; } .kb.c { --c: #b26a00; } .kb.d { --c: #6b7785; }
 </style>
 </head><body>
 <div id="splash" aria-hidden="true"><img id="splashImg" alt=""><div class="sbar"><i></i></div><div class="stx">Rapport wird geladen</div></div>
@@ -1629,7 +1642,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     }
   });
   document.addEventListener("pointerdown", function (ev) { if (!sug.hidden && !sug.contains(ev.target) && !(ev.target.closest && ev.target.closest(".row"))) hideSug(); });
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeGleit(); closeDateien(); closeM2(); closeRegieGen(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); closeKK(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hideSug(); closeSites(); closeMembers(); closeBilanz(); closeKunden(); closeGleit(); closeDateien(); closeM2(); closeRegieGen(); closeMenu(); closeReport(); closeRapport(); closeColors(); closeRegie(); closeJahr(); closeKK(); var uw = $("uebers"); if (uw) uw.remove(); var ow = $("owner"); if (ow) ow.remove(); } });
   window.addEventListener("resize", hideSug);
 
   /* ---------- Baustellen verwalten ---------- */
@@ -2594,6 +2607,118 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     prev.addEventListener("click", function () { mon = addDays(mon, -7); load(); }); next.addEventListener("click", function () { mon = addDays(mon, 7); load(); });
     close.addEventListener("click", closeWstat); ov.addEventListener("click", function (ev) { if (ev.target === ov) closeWstat(); });
     document.body.appendChild(ov); load();
+  }
+
+  /* ---------- Kundenkartei (Büro / Administrator): Kunde, Adresse, Kontakt, Baustellen mit Status ---------- */
+  var KST = [["arbeit", "In Arbeit", "a"], ["fertig", "Arbeit ausgeführt", "b"], ["rechnung_offen", "Rechnung noch nicht geschickt", "c"], ["versendet", "Rechnung versendet", "d"]];
+  function kstOf(k) { for (var i = 0; i < KST.length; i++) if (KST[i][0] === k) return KST[i]; return KST[0]; }
+  function kBadge(k) { var x = kstOf(k); return el("span", { "class": "kb " + x[2], text: x[1] }); }
+  function kNorm(d) {
+    d = d || {}; var S = function (v) { return String(v == null ? "" : v); };
+    return { name: S(d.name), adresse: S(d.adresse), tel: S(d.tel), email: S(d.email), notiz: S(d.notiz),
+      bau: (Array.isArray(d.bau) ? d.bau : []).map(function (b) { return { nr: S(b.nr), status: kstOf(b.status)[0], ts: S(b.ts), hist: Array.isArray(b.hist) ? b.hist.map(function (h) { return { s: kstOf(h.s)[0], ts: S(h.ts) }; }) : [] }; }) };
+  }
+  function kMsg(e) { var m = String((e && e.message) || e || ""); if (/kunden_/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Die Kundenkartei ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)."; return sharedMsg(e); }
+  function closeKunden() { var o = $("kunden"); if (o) o.remove(); }
+  function openKunden() {
+    closeKunden(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); hideSug();
+    var rows = [], flt = "", q = "", cur = null, loaded = false;
+    var root = el("div", { "class": "kpage", id: "kunden", role: "dialog", "aria-modal": "true", "aria-label": "Kunden" }), inn = el("div", { "class": "kin" }); root.appendChild(inn);
+    var msg = el("div", { "class": "status", role: "status" });
+    function say(t, c) { msg.textContent = t || ""; msg.className = "status" + (c ? " " + c : ""); }
+    function head(title, backFn, backTxt) {
+      var b = el("button", { type: "button", "class": "btn", text: "‹ " + backTxt, "aria-label": backTxt }); b.addEventListener("click", backFn);
+      return el("div", { "class": "khead" }, [b, el("h2", { text: title })]);
+    }
+    function city(a) { var m = /\d{4}\s+(.+)$/.exec(a || ""); return m ? m[1] : (a || ""); }
+    function match(r) {
+      var d = r.d, t = fold(q.trim());
+      if (flt && !d.bau.some(function (b) { return b.status === flt; })) return false;
+      if (!t) return true;
+      return fold(d.name + " " + d.adresse + " " + d.bau.map(function (b) { return b.nr; }).join(" ")).indexOf(t) >= 0;
+    }
+    async function load() {
+      if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
+      if (!navigator.onLine) { say("Keine Verbindung. Die Kundenkartei braucht Internet.", "bad"); return; }
+      say("Einen Moment …");
+      try {
+        var r = await sb.rpc("kunden_list"); if (r.error) { say(kMsg(r.error), "bad"); return; }
+        rows = (r.data || []).map(function (x) { return { id: x.id, d: kNorm(x.data) }; }); loaded = true; say(""); draw();
+      } catch (e) { say(kMsg(e), "bad"); }
+    }
+    function draw() { var y = root.scrollTop; inn.textContent = ""; cur ? drawEdit() : drawList(); inn.appendChild(msg); root.scrollTop = y; }
+    function drawList() {
+      inn.appendChild(head("Kunden", closeKunden, "Zurück"));
+      var si = el("input", { type: "search", placeholder: "Kunde, Ort oder Baustellen-Nr. suchen", value: q, "aria-label": "Suchen", autocomplete: "off" });
+      var chips = el("div", { "class": "chips" }), lst = el("div", { "class": "slist", role: "list" });
+      function cnt(k) { return rows.filter(function (r) { return !k || r.d.bau.some(function (b) { return b.status === k; }); }).length; }
+      [["", "Alle"], ["arbeit", "In Arbeit"], ["fertig", "Ausgeführt"], ["rechnung_offen", "Rechnung offen"], ["versendet", "Versendet"]].forEach(function (c) {
+        var b = el("button", { type: "button", "class": "btn" + (flt === c[0] ? " primary" : ""), text: c[1] + (loaded ? " (" + cnt(c[0]) + ")" : "") }); b.setAttribute("aria-pressed", flt === c[0] ? "true" : "false");
+        b.addEventListener("click", function () { flt = c[0]; draw(); }); chips.appendChild(b);
+      });
+      function fill() {
+        lst.textContent = ""; var l = rows.filter(match).sort(function (a, b) { return a.d.name.localeCompare(b.d.name); });
+        if (!l.length) { lst.appendChild(el("div", { "class": "srow mut", text: loaded ? (rows.length ? "Keine Kunden gefunden." : "Noch keine Kunden. Mit «+ Neuer Kunde» anlegen.") : "" })); return; }
+        l.forEach(function (r) {
+          var d = r.d, sub = [city(d.adresse), d.bau.map(function (b) { return b.nr; }).join(", ")].filter(Boolean).join(" · ");
+          var seen = {}, bs = el("div", { style: "display:flex;flex-wrap:wrap;gap:5px;margin-top:5px" });
+          d.bau.forEach(function (b) { if (!seen[b.status]) { seen[b.status] = 1; bs.appendChild(kBadge(b.status)); } });
+          var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: d.name || "(ohne Namen)" })); if (sub) t.appendChild(el("small", { text: sub })); if (bs.firstChild) t.appendChild(bs);
+          lst.appendChild(tapRow(t, function () { cur = { id: r.id, d: JSON.parse(JSON.stringify(r.d)) }; draw(); root.scrollTop = 0; }));
+        });
+      }
+      si.addEventListener("input", function () { q = si.value; fill(); });
+      var nw = el("button", { type: "button", "class": "btn primary", text: "+ Neuer Kunde" });
+      nw.addEventListener("click", function () { cur = { id: "", d: kNorm({}) }; draw(); root.scrollTop = 0; });
+      inn.appendChild(si); inn.appendChild(chips); inn.appendChild(lst); inn.appendChild(nw); fill();
+    }
+    function drawEdit() {
+      var d = cur.d, isNew = !cur.id;
+      inn.appendChild(head(isNew ? "Neuer Kunde" : (d.name || "Kunde"), function () { cur = null; draw(); }, "Liste"));
+      var fld = function (lbl, key, ph, type) { var i = el("input", { type: type || "text", value: d[key], placeholder: ph || "", "aria-label": lbl, maxlength: "200", autocomplete: "off" }); i.addEventListener("input", function () { d[key] = i.value; }); return [el("div", { "class": "lbl", text: lbl }), i]; };
+      var card = el("div", { "class": "kcard" });
+      fld("Name", "name", "Name oder Firma").concat(fld("Adresse", "adresse", "Strasse, PLZ Ort"), fld("Telefon", "tel", "", "tel"), fld("E-Mail", "email", "", "email")).forEach(function (n) { card.appendChild(n); });
+      var nt = el("textarea", { "aria-label": "Notiz", placeholder: "Notiz (z. B. Ansprechperson)", maxlength: "2000" }); nt.value = d.notiz; nt.addEventListener("input", function () { d.notiz = nt.value; });
+      card.appendChild(el("div", { "class": "lbl", text: "Notiz" })); card.appendChild(nt); inn.appendChild(card);
+      inn.appendChild(el("div", { "class": "lbl", text: "Baustellen und Status" }));
+      if (!d.bau.length) inn.appendChild(el("div", { "class": "mut", text: "Noch keine Baustelle zugeordnet." }));
+      d.bau.forEach(function (b, bi) {
+        var s = siteByNr(b.nr), c = el("div", { "class": "kcard" });
+        c.appendChild(el("div", {}, [el("b", { text: b.nr }), document.createTextNode(s && s.n ? " " + s.n : "")]));
+        c.appendChild(el("div", {}, [kBadge(b.status)]));
+        if (b.ts) c.appendChild(el("div", { "class": "mut", style: "font-size:.85rem", text: kstOf(b.status)[1] + " seit " + b.ts }));
+        var sel = el("select", { "aria-label": "Status " + b.nr }, KST.map(function (x) { return el("option", { value: x[0], text: x[1] }); })); sel.value = b.status;
+        sel.addEventListener("change", function () { if (sel.value === b.status) return; b.status = sel.value; b.ts = dmy(new Date()); b.hist.push({ s: b.status, ts: b.ts }); draw(); });
+        c.appendChild(el("div", { "class": "lbl", text: "Status ändern" })); c.appendChild(sel);
+        if (b.hist.length > 1) c.appendChild(el("div", { "class": "mut", style: "font-size:.8rem", text: "Verlauf: " + b.hist.map(function (h) { return kstOf(h.s)[1] + " " + h.ts; }).join(" → ") }));
+        var ac = el("div", { "class": "actions" }), fb = el("button", { type: "button", "class": "btn", text: "Dateien ablegen" }), rb = el("button", { type: "button", "class": "btn", text: "Baustelle entfernen" });
+        fb.addEventListener("click", function () { openDateien(); var o = $("dateien"), x = o && o.querySelector("select"); if (x) { x.value = b.nr; x.dispatchEvent(new Event("change")); } });
+        rb.addEventListener("click", function () { if (!confirm("Baustelle " + b.nr + " von diesem Kunden entfernen?")) return; d.bau.splice(bi, 1); draw(); });
+        ac.appendChild(fb); ac.appendChild(rb); c.appendChild(ac); inn.appendChild(c);
+      });
+      var free = sitesList().filter(function (x) { return !d.bau.some(function (b) { return b.nr === x.nr; }); });
+      if (free.length) {
+        var as = el("select", { "aria-label": "Baustelle zuordnen" }, [el("option", { value: "", text: "Baustelle zuordnen …" })].concat(free.map(function (x) { return el("option", { value: x.nr, text: x.nr + " " + (x.n || "") }); })));
+        as.addEventListener("change", function () { if (!as.value) return; var t = dmy(new Date()); d.bau.push({ nr: as.value, status: "arbeit", ts: t, hist: [{ s: "arbeit", ts: t }] }); draw(); });
+        inn.appendChild(as);
+      }
+      var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), dl = el("button", { type: "button", "class": "btn", text: "Kunde löschen" }); dl.hidden = isNew;
+      sv.addEventListener("click", async function () {
+        if (!d.name.trim()) { say("Bitte einen Namen eintragen.", "bad"); return; }
+        sv.disabled = true; say("Wird gespeichert …");
+        try {
+          var id = cur.id || ("k" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+          var r = await sb.rpc("kunden_save", { p_id: id, p_data: d }); if (r.error) { say(kMsg(r.error), "bad"); return; }
+          cur = null; await load(); toast("Kunde gespeichert ✓"); root.scrollTop = 0;
+        } catch (e) { say(kMsg(e), "bad"); } finally { sv.disabled = false; }
+      });
+      dl.addEventListener("click", async function () {
+        if (!confirm("Kunde «" + (d.name || "") + "» löschen?")) return;
+        try { var r = await sb.rpc("kunden_delete", { p_id: cur.id }); if (r.error) { say(kMsg(r.error), "bad"); return; } cur = null; await load(); toast("Kunde gelöscht ✓"); } catch (e) { say(kMsg(e), "bad"); }
+      });
+      inn.appendChild(el("div", { "class": "actions" }, [sv, dl]));
+    }
+    document.body.appendChild(root); draw(); root.scrollTop = 0; load();
   }
 
   function openBilanz() {
@@ -5538,8 +5663,8 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Wochen-Status", openWstat]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
-    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
+    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Wochen-Status", openWstat]); items.push(["Kunden", openKunden]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
+    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Kunden", openKunden], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
       var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
