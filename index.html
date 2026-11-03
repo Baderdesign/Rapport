@@ -955,7 +955,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     dirty = true;
     clearTimeout(saveTimer);
     var run = function () {
-      var wk = state.week, body = { days: serialize(), sp: state.sp || {}, name: state.name, updated: new Date().toISOString() };
+      var wk = state.week, body = { days: serialize(), sp: state.sp || {}, name: state.name, sent: state.sent || "", updated: new Date().toISOString() };
       lsSet(WK + wk, JSON.stringify(body)); lsSet("wr2:name", state.name);
       index[wk] = totals(state.days).tot; fillPicker();
       setStatus("Gespeichert um " + nowHM() + (user ? (navigator.onLine ? "" : " · offline, wird später synchronisiert") : " · nur auf diesem Gerät"), "ok");
@@ -971,7 +971,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   function loadWeek(wk) {
     state.week = wk; dirty = false;
     var o = localWeek(wk);
-    state.days = deserialize(o && o.days); state.sp = (o && o.sp && typeof o.sp === "object") ? o.sp : {};
+    state.days = deserialize(o && o.days); state.sp = (o && o.sp && typeof o.sp === "object") ? o.sp : {}; state.sent = (o && o.sent) || "";
     state.name = (o && o.name) || lsGet("wr2:name") || "";
     renderAll();
   }
@@ -1451,7 +1451,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var first = ov.querySelector("a,button"); if (first) first.focus();
   }
 
-  function markSent(wk) { if (wk) lsSet("wr2:sent:" + wk, "1"); }
+  function markSent(wk) { if (!wk) return; lsSet("wr2:sent:" + wk, "1"); if (wk === state.week && !state.sent) { state.sent = dm(new Date()).slice(0, 6); try { persist(true); } catch (e) { } } }
   async function deliver(blob, doc, fn, saved, wkSent) {
     var mobile = isMobile(), file = null;
     try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
@@ -1471,7 +1471,42 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   }
 
   $("pdf2").addEventListener("click", function () { window.__pdfSheet = true; $("pdf").click(); });
+  /* Warnungen vor dem PDF (blockieren nie): leerer Arbeitstag, Bis vor Von, Zeiten ohne Baustelle */
+  function weekWarnings() {
+    var out = [], mon = fromKey(state.week), today = new Date(); today = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    state.days.forEach(function (rows, i) {
+      var dt = addDays(mon, i), lbl = DAYS[i] + " " + dm(dt);
+      var filled = rows.some(function (e) { return !isEmptyEntry(e) || e.typ; });
+      if (!filled) { var fe = false; try { fe = !!feiertag(dt); } catch (x) { } if (dt <= today && !fe) out.push({ l: lbl, t: "ist leer. Kein Eintrag, keine Absenz." }); return; }
+      var bad = false, nobau = false;
+      rows.forEach(function (e) {
+        if (e.typ) return;
+        if (wins(e).some(function (w) { return w.bad; })) bad = true;
+        if ((e.von || e.bis) && !String(e.nr == null ? "" : e.nr).trim()) nobau = true;
+      });
+      if (bad) out.push({ l: lbl, t: "Die Zeit «bis» liegt nicht nach «von»." });
+      if (nobau) out.push({ l: lbl, t: "Zeiten ohne Baustellen-Nr." });
+    });
+    return out;
+  }
+  function showWarn(list, go) {
+    var old = $("warnov"); if (old) old.remove();
+    var close = function () { var o = $("warnov"); if (o) o.remove(); };
+    var items = list.map(function (w) { return el("div", { style: "display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)" }, [el("span", { style: "color:#c62828;font-weight:900", text: "!" }), el("div", {}, [el("b", { text: w.l }), document.createTextNode(" " + w.t)])]); });
+    var fix = el("button", { type: "button", "class": "btn primary", text: "Korrigieren" }), goBtn = el("button", { type: "button", "class": "btn", text: "Trotzdem erstellen" });
+    fix.addEventListener("click", function () { window.__pdfSheet = false; close(); });
+    goBtn.addEventListener("click", function () { close(); go(); });
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Bitte kurz prüfen" }), el("p", { text: list.length === 1 ? "Vor dem PDF ist dir 1 Sache aufgefallen:" : "Vor dem PDF sind dir " + list.length + " Dinge aufgefallen:" })].concat(items, [el("div", { "class": "actions", style: "margin-top:14px" }, [fix, goBtn])]));
+    var ov = el("div", { "class": "overlay", id: "warnov", role: "dialog", "aria-modal": "true", "aria-label": "Bitte prüfen" }, [sheet]);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) { window.__pdfSheet = false; close(); } });
+    document.body.appendChild(ov); fix.focus();
+  }
   $("pdf").addEventListener("click", function () {
+    var w = []; try { w = weekWarnings(); } catch (e) { w = []; }
+    if (w.length && !$("warnov")) { showWarn(w, pdfGo); return; }
+    pdfGo();
+  });
+  function pdfGo() {
     var btn = $("pdf"); btn.disabled = true;
     var saved = persist(true).catch(function () { }); /* nicht abwarten: Teilen muss direkt auf das Tippen folgen */
     if (!spReady()) { setStatus("Die Belegfotos werden noch geladen. Bitte kurz warten und nochmals tippen.", "warn"); btn.disabled = false; spPrefetch(); return; }
@@ -1482,7 +1517,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     deliver(doc.output("blob"), doc, fn, saved, state.week).catch(function (e) {
       setStatus("Das PDF konnte nicht abgelegt werden. Die Woche ist trotzdem gespeichert.", "bad");
     }).then(function () { btn.disabled = false; });
-  });
+  }
 
   /* ---------- Baustellen: Vorschläge in den Feldern ---------- */
   function fold(v) { v = String(v == null ? "" : v).toLowerCase(); try { v = v.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch (e) { } return v; }
@@ -2509,6 +2544,58 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     return { sites: out, people: people, tot: tot };
   }
   function closeBilanz() { var o = $("bilanz"); if (o) o.remove(); }
+  /* ---------- Wochen-Status (Büro / Administrator): wer hat die Woche eingetragen und das PDF verschickt ---------- */
+  function closeWstat() { var o = $("wstat"); if (o) o.remove(); }
+  function openWstat() {
+    closeWstat(); closeBilanz(); closeSites(); closeMembers(); hideSug();
+    var mon = addDays(mondayOf(new Date()), -7), busy = false;
+    var title = el("div", { style: "flex:1;text-align:center;font-weight:700;padding-top:10px" });
+    var prev = el("button", { type: "button", "class": "btn", style: "padding:10px 14px", text: "‹", "aria-label": "Vorherige Woche" }), next = el("button", { type: "button", "class": "btn", style: "padding:10px 14px", text: "›", "aria-label": "Nächste Woche" });
+    var info = el("div", { style: "border-radius:10px;padding:10px 12px;margin-bottom:10px", hidden: "" }), list = el("div", { "class": "slist", role: "list" }), msg = el("div", { "class": "status", role: "status" });
+    var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Wochen-Status" }), el("div", { style: "display:flex;gap:8px;margin:6px 0 10px" }, [prev, title, next]), info, msg, list, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "wstat", role: "dialog", "aria-modal": "true", "aria-label": "Wochen-Status" }, [sheet]);
+    var COL = { ok: "#1e8e3e", warn: "#e0a800", bad: "#c62828" };
+    async function load() {
+      if (busy) return; busy = true; list.textContent = ""; info.hidden = true;
+      title.textContent = "KW " + isoWeek(mon).w + " · " + mon.getDate() + ".–" + dmy(addDays(mon, 4));
+      if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; msg.className = "status bad"; busy = false; return; }
+      if (!navigator.onLine) { msg.textContent = "Keine Verbindung. Der Wochen-Status braucht Internet."; msg.className = "status bad"; busy = false; return; }
+      msg.textContent = "Einen Moment …"; msg.className = "status";
+      try {
+        var wk = key(mon), r = await sb.rpc("firma_wochen", { p_von: key(addDays(mon, -49)), p_bis: wk });
+        if (r.error) { msg.textContent = sharedMsg(r.error); msg.className = "status bad"; return; }
+        var P = {};
+        (r.data || []).forEach(function (row) { var em = String(row.email || "").toLowerCase(); if (!em) return; var p = P[em] || (P[em] = { em: em, name: "", cur: null }); var nm = String((row.data || {}).name || "").trim(); if (nm) p.name = nm; if (row.week === wk) p.cur = row.data || {}; });
+        if (isAdmin()) { try { var ml = await sb.rpc("members_list"); if (!ml.error) (ml.data || []).forEach(function (m) { var em = String(m.email || "").toLowerCase(); if (em && m.rolle === "mitarbeiter" && !P[em]) P[em] = { em: em, name: "", cur: null }; }); } catch (e) { } }
+        var arr = Object.keys(P).map(function (k) {
+          var p = P[k], nm = p.name || p.em.split("@")[0], st = "bad", tx = "nichts eingetragen";
+          if (p.cur) {
+            var days = deserialize(p.cur.days), t = totals(days).tot, any = days.some(function (d) { return d.some(function (e) { return !isEmptyEntry(e) || e.typ; }); });
+            if (any && p.cur.sent) { st = "ok"; tx = "PDF verschickt " + p.cur.sent + " · " + hm(t) + " Std."; }
+            else if (any) { st = "warn"; tx = "angefangen · " + hm(t) + " Std. · PDF fehlt"; }
+          }
+          return { nm: nm, st: st, tx: tx };
+        });
+        var ord = { bad: 0, warn: 1, ok: 2 }; arr.sort(function (a, b) { return ord[a.st] - ord[b.st] || a.nm.localeCompare(b.nm); });
+        msg.textContent = ""; list.textContent = "";
+        if (!arr.length) { msg.textContent = "Noch keine Mitarbeiter mit Einträgen in den letzten Wochen."; return; }
+        var miss = arr.filter(function (a) { return a.st !== "ok"; }), nb = arr.filter(function (a) { return a.st === "bad"; }).length;
+        info.hidden = false; info.textContent = "";
+        info.style.background = miss.length ? "#fff4d6" : "#e3f4e8"; info.style.border = "1px solid " + (miss.length ? "#e0a800" : "#1e8e3e");
+        info.appendChild(el("b", { text: miss.length ? miss.length + " von " + arr.length + " fehlen noch" : "Alle " + arr.length + " sind fertig ✓" }));
+        if (miss.length) info.appendChild(el("div", { "class": "mut", style: "font-size:.85rem", text: nb + " nichts eingetragen · " + (miss.length - nb) + " nicht verschickt" }));
+        arr.forEach(function (a) {
+          list.appendChild(el("div", { "class": "srow", style: "display:flex;align-items:center;gap:12px;padding:12px 14px" }, [el("span", { style: "width:14px;height:14px;border-radius:50%;flex:none;background:" + COL[a.st] }), el("div", { style: "flex:1" }, [el("b", { text: a.nm }), el("div", { "class": "mut", style: "font-size:.85rem", text: a.tx })])]));
+        });
+      } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+      finally { busy = false; }
+    }
+    prev.addEventListener("click", function () { mon = addDays(mon, -7); load(); }); next.addEventListener("click", function () { mon = addDays(mon, 7); load(); });
+    close.addEventListener("click", closeWstat); ov.addEventListener("click", function (ev) { if (ev.target === ov) closeWstat(); });
+    document.body.appendChild(ov); load();
+  }
+
   function openBilanz() {
     closeBilanz(); closeSites(); closeMembers(); hideSug();
     var busy = false;
@@ -5451,8 +5538,8 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
-    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
+    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Wochen-Status", openWstat]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
+    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
       var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
