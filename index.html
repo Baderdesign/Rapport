@@ -3348,7 +3348,7 @@ function openReport(pre) {
   }
   function closeRegie() { var o = $("regie"); if (o) o.remove(); }
   /* ---------- Abnahmeprotokoll (pro Baustelle fortlaufend nummeriert, Unterschrift: Kunde, Maler, Gipser) ---------- */
-  var AB_ART = ["Weissputz", "Ausgeführte Arbeiten"];
+  var AB_ART = ["Abnahme", "Weissputz", "Ausgeführte Arbeiten"];
   var AB_ERG = [["ohne", "Abnahme ohne Mängel"], ["mit", "Abnahme mit Mängeln (Liste unten)"], ["verweigert", "Abnahme verweigert"]];
   var AB_SIG = [["k", "Kunde"], ["m", "Maler"], ["g", "Gipser"]];
   function abBlank() { var t = new Date(); return { sent: "", datum: t.getDate() + "." + (t.getMonth() + 1) + "." + t.getFullYear(), auftraggeber: "", objekt: "", art: "", arbeiten: "", ausgef: "", anwesend: "", gew: { m: true, g: true, k: false }, erg: "ohne", maengel: [], sig: {} }; }
