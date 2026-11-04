@@ -3348,12 +3348,14 @@ function openReport(pre) {
   }
   function closeRegie() { var o = $("regie"); if (o) o.remove(); }
   /* ---------- Abnahmeprotokoll (pro Baustelle fortlaufend nummeriert, Unterschrift: Kunde, Maler, Gipser) ---------- */
+  var AB_ART = ["Weissputz", "Ausgeführte Arbeiten"];
   var AB_ERG = [["ohne", "Abnahme ohne Mängel"], ["mit", "Abnahme mit Mängeln (Liste unten)"], ["verweigert", "Abnahme verweigert"]];
   var AB_SIG = [["k", "Kunde"], ["m", "Maler"], ["g", "Gipser"]];
-  function abBlank() { var t = new Date(); return { sent: "", datum: t.getDate() + "." + (t.getMonth() + 1) + "." + t.getFullYear(), auftraggeber: "", objekt: "", arbeiten: "", ausgef: "", anwesend: "", gew: { m: true, g: true, k: false }, erg: "ohne", maengel: [], sig: {} }; }
+  function abBlank() { var t = new Date(); return { sent: "", datum: t.getDate() + "." + (t.getMonth() + 1) + "." + t.getFullYear(), auftraggeber: "", objekt: "", art: "", arbeiten: "", ausgef: "", anwesend: "", gew: { m: true, g: true, k: false }, erg: "ohne", maengel: [], sig: {} }; }
   function abNorm(d) {
     var b = abBlank(); d = d || {}; b.datum = "";
-    ["sent", "datum", "auftraggeber", "objekt", "arbeiten", "ausgef", "anwesend"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k].slice(0, 3000); });
+    ["sent", "datum", "auftraggeber", "objekt", "art", "arbeiten", "ausgef", "anwesend"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k].slice(0, 3000); });
+    if (b.ausgef) { b.arbeiten = (b.arbeiten ? b.arbeiten + "\n" : "") + b.ausgef; b.ausgef = ""; }
     if (d.gew && typeof d.gew === "object") b.gew = { m: !!d.gew.m, g: !!d.gew.g, k: !!d.gew.k };
     b.erg = AB_ERG.some(function (x) { return x[0] === d.erg; }) ? d.erg : "ohne";
     if (Array.isArray(d.maengel)) b.maengel = d.maengel.slice(0, 30).map(function (m) { m = m || {}; return { t: String(m.t || "").slice(0, 400), frist: String(m.frist || "").slice(0, 20) }; });
@@ -3375,7 +3377,7 @@ function openReport(pre) {
       var ls = para(r[1], 10, W - 34); chk(ls.length * 4.6 + 1.5); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text(r[0], mx, y); doc.setFont("helvetica", "normal");
       ls.forEach(function (l, i) { doc.text(l, mx + 34, y + i * 4.6); }); y += Math.max(1, ls.length) * 4.6 + 1.5;
     });
-    y += 3; chk(14); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("Weissputz-Abnahme", mx, y); doc.setLineWidth(0.3); doc.line(mx, y + 1.5, mx + W, y + 1.5); y += 6.5;
+    y += 3; chk(14); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("Abnahme" + (d.art ? ": " + d.art : ""), mx, y); doc.setLineWidth(0.3); doc.line(mx, y + 1.5, mx + W, y + 1.5); y += 6.5;
     doc.setFont("helvetica", "normal"); para(d.arbeiten || "", 10, W).forEach(function (l) { chk(5); doc.text(l, mx, y); y += 4.6; });
     if (d.ausgef) { y += 4; chk(14); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("Ausgeführte Arbeiten", mx, y); doc.setLineWidth(0.3); doc.line(mx, y + 1.5, mx + W, y + 1.5); y += 6.5; doc.setFont("helvetica", "normal"); para(d.ausgef, 10, W).forEach(function (l) { chk(5); doc.text(l, mx, y); y += 4.6; }); }
     y += 4; chk(30); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("Ergebnis", mx, y); doc.line(mx, y + 1.5, mx + W, y + 1.5); y += 7;
@@ -3467,7 +3469,17 @@ function openReport(pre) {
         i.value = d[key]; if (area) i.style.minHeight = "90px"; i.addEventListener("input", function () { d[key] = i.value; }); ctrls.push(i); ed.appendChild(el("div", { "class": "lbl", text: lbl })); ed.appendChild(i);
       }
       ed.appendChild(title);
-      fld("Datum", "datum", "z. B. 5.11.2026"); fld("Auftraggeber / Kunde", "auftraggeber", "Name"); fld("Objekt / Ort", "objekt", "Adresse der Baustelle"); fld("Weissputz-Abnahme", "arbeiten", "z. B. Weissputz Wände und Decken, Räume, Qualität", true); fld("Ausgeführte Arbeiten (optional)", "ausgef", "Was wurde ausgeführt?", true); fld("Anwesend", "anwesend", "Namen");
+      fld("Datum", "datum", "z. B. 5.11.2026"); fld("Auftraggeber / Kunde", "auftraggeber", "Name"); fld("Objekt / Ort", "objekt", "Adresse der Baustelle"); (function () {
+        var ai = el("input", { type: "text", maxlength: "60", autocomplete: "off", placeholder: "Abnahme: tippen oder auswählen", "aria-label": "Abnahme" }), asg = el("div", { "class": "slist pick", role: "list" }); asg.hidden = true; ai.value = d.art; ctrls.push(ai);
+        function show() {
+          var q = ai.value.trim().toLowerCase(), it = AB_ART.filter(function (x) { return !q || x.toLowerCase().indexOf(q) >= 0; }); asg.textContent = ""; asg.hidden = ai.disabled || !it.length || (it.length === 1 && it[0].toLowerCase() === q);
+          it.forEach(function (x) { var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x })); asg.appendChild(tapRow(t, function () { ai.value = x; d.art = x; asg.hidden = true; })); });
+          if (!asg.hidden && q && !AB_ART.some(function (x) { return x.toLowerCase() === q; })) { var o = el("div", { "class": "t" }); o.appendChild(el("b", { text: "«" + ai.value.trim() + "» übernehmen" })); asg.appendChild(tapRow(o, function () { d.art = ai.value.trim(); asg.hidden = true; })); }
+        }
+        ai.addEventListener("input", function () { d.art = ai.value; show(); }); ai.addEventListener("focus", show); ai.addEventListener("blur", function () { setTimeout(function () { asg.hidden = true; }, 200); });
+        ed.appendChild(el("div", { "class": "lbl", text: "Abnahme" })); ed.appendChild(ai); ed.appendChild(asg);
+      })();
+      fld("Beschreibung / Ausgeführte Arbeiten", "arbeiten", "Was wurde abgenommen bzw. ausgeführt?", true); fld("Anwesend", "anwesend", "Namen");
       /* Unternehmen */
       ed.appendChild(el("div", { "class": "lbl", text: "Wer unterschreibt (Auswahl)" }));
       var gbox = el("div", { style: "display:flex;gap:14px;flex-wrap:wrap;margin:4px 0 8px" });
@@ -3510,7 +3522,7 @@ function openReport(pre) {
         });
         var g = d.sig[cur]; sigName.value = g ? g.name : names[cur]; sigName.disabled = !!g; prev.textContent = "";
         if (g) { prev.appendChild(el("img", { src: g.img, alt: "Unterschrift " + cur, style: "max-width:100%;max-height:130px" })); info.textContent = "Unterschrieben am " + g.ts + ". Das Protokoll ist gesperrt. Zum Ändern erst alle Unterschriften entfernen."; }
-        else { prev.appendChild(el("span", { "class": "mut", text: "Noch nicht unterschrieben. «Unterschreiben» tippen und das Handy quer halten." })); info.textContent = locked() ? "Das Protokoll ist gesperrt, weil schon jemand unterschrieben hat." : "Wer unterschreibt, oben antippen. Unter «Unternehmen» wählst du, wer unterschreibt (Maler, Gipser, Kunde)."; }
+        else { prev.appendChild(el("span", { "class": "mut", text: "Noch nicht unterschrieben. «Unterschreiben» tippen und das Handy quer halten." })); info.textContent = locked() ? "Das Protokoll ist gesperrt, weil schon jemand unterschrieben hat." : "Wer unterschreibt, oben antippen. Oben unter «Wer unterschreibt» wählst du Maler, Gipser und/oder Kunde."; }
         go.hidden = !!g; rm.hidden = !g;
         ctrls.forEach(function (c) { c.disabled = locked(); }); drawM();
       }
