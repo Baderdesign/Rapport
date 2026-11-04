@@ -2560,7 +2560,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   /* ---------- Wochen-Status (Büro / Administrator): wer hat die Woche eingetragen und das PDF verschickt ---------- */
   function closeWstat() { var o = $("wstat"); if (o) o.remove(); }
   function openWstat() {
-    closeWstat(); closeBilanz(); closeSites(); closeMembers(); hideSug();
+    aufraeumen(); closeWstat(); closeBilanz(); closeSites(); closeMembers(); hideSug();
     var mon = addDays(mondayOf(new Date()), -7), busy = false;
     var title = el("div", { style: "flex:1;text-align:center;font-weight:700;padding-top:10px" });
     var prev = el("button", { type: "button", "class": "btn", style: "padding:10px 14px", text: "‹", "aria-label": "Vorherige Woche" }), next = el("button", { type: "button", "class": "btn", style: "padding:10px 14px", text: "›", "aria-label": "Nächste Woche" });
@@ -3422,7 +3422,7 @@ function openReport(pre) {
     } catch (e) { }
   }
   function openAbnahme() {
-    closeAbnahme(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeRegie(); closeReport(); hideSug();
+    aufraeumen(); closeAbnahme(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeRegie(); closeReport(); hideSug();
     var site = "", rows = [], editing = null;
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
     var sug = el("div", { "class": "slist pick", role: "list" }); sug.hidden = true;
@@ -3569,7 +3569,7 @@ function openReport(pre) {
 
 
   function openRegie(pre) {
-    pre = pre || {};
+    pre = pre || {}; aufraeumen();
     closeRegie(); closeMenu(); closeSites(); closeMembers(); if (!pre.nr) closeBilanz(); closeRapport(); closeReport(); closeColors(); hideSug();
     var site = "", rows = [], editing = null; /* editing: {nr|null, d} */
     var inp = el("input", { type: "text", placeholder: "Baustelle: Nummer oder Name tippen", autocomplete: "off", "aria-label": "Baustelle" });
@@ -4102,10 +4102,19 @@ function openReport(pre) {
     var blob = doc.output("blob"), file = null;
     try { file = new File([blob], fn, { type: "application/pdf" }); } catch (e) { }
     if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-      try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); return; }
-      catch (e) { if (e && e.name === "AbortError") return; }
+      try { await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); return true; }
+      catch (e) { if (e && e.name === "AbortError") return false; }
     }
-    showFallback(blob, doc, fn, file, label);
+    showFallback(blob, doc, fn, file, label); return false;
+  }
+  /* Regie-Rapporte und Abnahmeprotokolle samt Fotos werden 14 Tage nach der letzten Änderung gelöscht (höchstens 1x pro Tag und Gerät) */
+  async function aufraeumen() {
+    try {
+      if (isDemo() || !sb || !user || !navigator.onLine) return;
+      var t = dmy(new Date()), k = "wr2:aufr:" + (user.id || user.email || "");
+      if (localStorage.getItem(k) === t) return;
+      var r = await sb.rpc("aufraeumen_regie"); if (!r.error) localStorage.setItem(k, t);
+    } catch (e) { }
   }
   function tdStyle(b) { return "padding:3px 4px;border:1px solid var(--line);text-align:right;white-space:nowrap;font-weight:" + (b ? 700 : 400); }
   function openUebersicht() {
