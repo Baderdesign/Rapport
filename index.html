@@ -4782,8 +4782,20 @@ function openReport(pre) {
     return oqOpen().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction("q", mode), rq = fn(tx.objectStore("q")); tx.oncomplete = function () { res(rq && rq.result); }; tx.onerror = tx.onabort = function () { rej(tx.error); }; }); });
   }
   function oqAll() { return oqRun("readonly", function (st) { return st.getAll(); }).then(function (a) { return a || []; }); }
-  function oqPut(o) { return oqRun("readwrite", function (st) { return st.put(o); }); }
-  function oqDel(id) { return oqRun("readwrite", function (st) { return st.delete(id); }); }
+  function oqPut(o) { return oqRun("readwrite", function (st) { return st.put(o); }).then(function (x) { oqDot(); return x; }); }
+  function oqDel(id) { return oqRun("readwrite", function (st) { return st.delete(id); }).then(function (x) { oqDot(); return x; }); }
+  /* kleiner gelber Punkt am Menü-Knopf, solange noch etwas aufs Netz wartet */
+  var APP_VER = "1.0";
+  async function oqDot() {
+    try {
+      var b = document.getElementById("menuBtn"); if (!b) return;
+      var n = 0; if (window.indexedDB && user) { var uid = oqUid(); n = (await oqAll()).filter(function (x) { return x.uid === uid; }).length; }
+      var d = document.getElementById("oqdot");
+      if (!n) { if (d) d.remove(); b.removeAttribute("data-wait"); return; }
+      if (!d) { b.style.position = "relative"; d = document.createElement("span"); d.id = "oqdot"; d.setAttribute("role", "img"); d.style.cssText = "position:absolute;top:6px;right:6px;width:12px;height:12px;border-radius:50%;background:#e0a800;border:2px solid #fff;box-shadow:0 0 0 1px #e0a80088;pointer-events:none"; b.appendChild(d); }
+      d.setAttribute("aria-label", n + " Eintrag" + (n > 1 ? "e" : "") + " noch nicht hochgeladen");
+    } catch (e) { }
+  }
   function oqUid() { return user ? String(user.id || user.email || "") : ""; }
   function isNetErr(e) { var m = String((e && e.message) || e || ""); return !navigator.onLine || /failed to fetch|networkerror|network request failed|load failed|timeout|fetch/i.test(m); }
   async function oqPutRec(o) { o.id = "r:" + o.qid; o.t = "rec"; o.uid = oqUid(); o.ts = Date.now(); await oqPut(o); }
@@ -4812,11 +4824,12 @@ function openReport(pre) {
         await up(g, g.ref);
       }
     } catch (e) { } finally { OQ.busy = false; }
+    try { Object.keys(FOTOC).forEach(function (k) { var c = FOTOC[k]; if (c && c.items && c.items.some(function (x) { return x.q; })) { c.items = c.items.filter(function (x) { return !x.q; }); c.loaded = false; c.load(); } }); } catch (e) { }
     return done;
   }
   window.addEventListener("online", function () { setTimeout(oqSync, 1500); });
   document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(oqSync, 1000); });
-  setInterval(function () { oqSync(); }, 45000); setTimeout(oqSync, 4000);
+  setInterval(function () { oqSync(); oqDot(); }, 45000); setTimeout(function () { oqSync(); oqDot(); }, 4000);
   function fotoScale(file, maxPx, q) {
     return new Promise(function (ok, no) {
       var u = URL.createObjectURL(file), im = new Image();
@@ -4865,7 +4878,7 @@ function openReport(pre) {
     function ready() {
       if (isDemo()) { say(DEMO_MSG, 1); return false; }
       if (!sb || !user) { say("Bitte zuerst anmelden.", 1); return false; }
-      if (!navigator.onLine && !(c.kind === "regie" && window.indexedDB)) { say("Keine Verbindung. Fotos brauchen Internet.", 1); return false; }
+      if (!navigator.onLine && !window.indexedDB) { say("Keine Verbindung. Fotos brauchen Internet.", 1); return false; }
       return true;
     }
     function big(f) {
@@ -4898,7 +4911,7 @@ function openReport(pre) {
     c.load = async function () {
       if (c.loaded || !sb || !user || isDemo()) return;
       var qi = [];
-      if (c.kind === "regie" && window.indexedDB) { try { (await oqAll()).forEach(function (z) { if (z.t === "foto" && z.uid === oqUid() && z.kind === c.kind && z.ref === c.ref && !c.items.some(function (x) { return x.id === z.fid; })) { qi.push({ id: z.fid, q: 1, note: z.note || "", thumb: z.thumb }); c.cache[z.fid] = { data: z.data, w: z.w, h: z.h, created: new Date(z.ts).toISOString() }; } }); } catch (e) { } }
+      if (window.indexedDB) { try { (await oqAll()).forEach(function (z) { if (z.t === "foto" && z.uid === oqUid() && z.kind === c.kind && z.ref === c.ref && !c.items.some(function (x) { return x.id === z.fid; })) { qi.push({ id: z.fid, q: 1, note: z.note || "", thumb: z.thumb }); c.cache[z.fid] = { data: z.data, w: z.w, h: z.h, created: new Date(z.ts).toISOString() }; } }); } catch (e) { } }
       if (!navigator.onLine) { if (qi.length) { c.items = c.items.concat(qi); draw(); } return; }
       c.loaded = true;
       try { var r = await sb.rpc("foto_list", { p_kind: c.kind, p_ref: c.ref }); if (r.error) { say(fotoMsg(r.error), 1); c.loaded = false; return; } c.items = (r.data || []).map(function (x) { return { id: x.id, note: x.note || "", thumb: x.thumb }; }).concat(qi); draw(); }
@@ -4912,8 +4925,8 @@ function openReport(pre) {
         try {
           var full = await fotoScale(fl[i], 1600, 0.72), th = await fotoScale(fl[i], 280, 0.6);
           var r = null;
-          if (navigator.onLine || c.kind !== "regie") { try { r = await sb.rpc("foto_save", { p_kind: c.kind, p_ref: c.ref, p_note: "", p_thumb: th.url, p_data: full.url, p_w: full.w, p_h: full.h }); } catch (e2) { r = { error: e2 }; } }
-          if ((!r || (r.error && isNetErr(r.error))) && c.kind === "regie" && window.indexedDB) {
+          if (navigator.onLine || !window.indexedDB) { try { r = await sb.rpc("foto_save", { p_kind: c.kind, p_ref: c.ref, p_note: "", p_thumb: th.url, p_data: full.url, p_w: full.w, p_h: full.h }); } catch (e2) { r = { error: e2 }; } }
+          if ((!r || (r.error && isNetErr(r.error))) && window.indexedDB) {
             var fid = "q" + fotoRid(); await oqPut({ id: "f:" + fid, fid: fid, t: "foto", uid: oqUid(), ts: Date.now(), kind: c.kind, ref: c.ref, note: "", thumb: th.url, data: full.url, w: full.w, h: full.h });
             c.items.push({ id: fid, q: 1, note: "", thumb: th.url }); c.cache[fid] = { data: full.url, w: full.w, h: full.h, created: new Date().toISOString() }; draw(); continue;
           }
@@ -4933,7 +4946,7 @@ function openReport(pre) {
       return out;
     };
     c.cached = function () { var out = []; c.items.forEach(function (it) { var k = c.cache[it.id]; if (k) out.push({ note: it.note || "", created: k.created, data: k.data, w: k.w, h: k.h }); }); return out; };
-    c.move = async function (newRef) { var old = c.ref; c.ref = newRef; if (c.items.length && old !== newRef) { try { await sb.rpc("foto_move", { p_kind: c.kind, p_old: old, p_new: newRef }); } catch (e) { } try { if (c.kind === "regie" && window.indexedDB) (await oqAll()).forEach(function (z) { if (z.t === "foto" && z.ref === old && z.kind === c.kind) { z.ref = newRef; oqPut(z); } }); } catch (e) { } } };
+    c.move = async function (newRef) { var old = c.ref; c.ref = newRef; if (c.items.length && old !== newRef) { try { await sb.rpc("foto_move", { p_kind: c.kind, p_old: old, p_new: newRef }); } catch (e) { } try { if (window.indexedDB) (await oqAll()).forEach(function (z) { if (z.t === "foto" && z.ref === old && z.kind === c.kind) { z.ref = newRef; oqPut(z); } }); } catch (e) { } } };
     c.removeAll = async function () { for (var i = 0; i < c.items.length; i++) { try { if (c.items[i].q) await oqDel("f:" + c.items[i].id); else await sb.rpc("foto_delete", { p_id: c.items[i].id }); } catch (e) { } } c.items = []; draw(); };
     draw();
     return c;
@@ -6016,6 +6029,14 @@ function openReport(pre) {
     })();
     if (memberGet() && memberGet().rolle === "temporaer") items = items.filter(function (it) { return it[0] !== "Farbverbrauch-Rechner"; }); /* Temporäre brauchen den Farbverbrauch-Rechner nicht */
     items.push(["Nutzung & Datenschutz", openLegal]);
+    if (isAdmin() || isBuero()) { /* Aufgeräumtes Menü: Alltag oben, Rest in vier Gruppen */
+      var G = { "Baustellen": ["Baustellen-Liste", "Baustelle hinzufügen", "Baustellen-Info", "Kunden", "Dateien ablegen"], "Auswertung": ["Stunden pro Mitarbeiter", "Stundenübersicht", "Monats- / Jahresübersicht", "Auswertung pro Baustelle", "Wochen-Status", "Spesen"], "Rechner": ["Maler-Kalkulator", "Novacolor", "Naturofloor", "Ausmass", "Farbverbrauch-Rechner"] }, D = ["Baustellenrapport", "Regie-Rapport", "Abnahmeprotokoll"];
+      var flat = []; items.forEach(function (it) { if (it[2]) it[2].forEach(function (c) { flat.push(c); }); else flat.push(it); });
+      var top = [], grp = { "Baustellen": [], "Auswertung": [], "Rechner": [], "Verwaltung": [] };
+      D.forEach(function (n) { flat.forEach(function (it) { if (it[0] === n) top.push(it); }); });
+      flat.forEach(function (it) { if (D.indexOf(it[0]) >= 0) return; var g = "Verwaltung"; Object.keys(G).forEach(function (k) { if (G[k].indexOf(it[0]) >= 0) g = k; }); grp[g].push(it); });
+      items = top; ["Baustellen", "Auswertung", "Rechner", "Verwaltung"].forEach(function (k) { if (grp[k].length) items.push([k, null, grp[k]]); });
+    }
     var box = el("div", { "class": "drawer" }, [el("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px" }, [el("h2", { text: "Menü", style: "margin:0" }), themeSwitch()])]);
     items.forEach(function (it) {
       if (it[2]) { /* Aufklappbar: Untermenü direkt darunter, es scrollt nach unten ins Bild */
@@ -6026,6 +6047,7 @@ function openReport(pre) {
       }
       var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b);
     });
+    box.appendChild(el("div", { style: "text-align:center;color:var(--muted);font-size:.8rem;padding:10px 0 4px", text: "Version " + APP_VER }));
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMenu(); });
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
