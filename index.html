@@ -3408,6 +3408,35 @@ function openReport(pre) {
     return doc;
   }
   function closeAbnahme() { var o = $("abnahme"); if (o) o.remove(); }
+  /* ---------- Speicherplatz (Büro/Admin): Belegung der 500 MB Gratis-Datenbank ---------- */
+  function closeSpeicher() { var o = $("speicher"); if (o) o.remove(); }
+  function openSpeicher() {
+    closeSpeicher(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeRegie(); closeAbnahme(); closeReport(); hideSug();
+    var body = el("div", {}), msg = el("div", { "class": "status", role: "status", text: "Einen Moment …" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Speicherplatz" }), msg, body, el("div", { "class": "actions" }, [close])]);
+    var ov = el("div", { "class": "overlay sites", id: "speicher", role: "dialog", "aria-modal": "true", "aria-label": "Speicherplatz" }, [sheet]);
+    close.addEventListener("click", closeSpeicher); ov.addEventListener("click", function (ev) { if (ev.target === ov) closeSpeicher(); });
+    document.body.appendChild(ov);
+    function mb(b) { var x = b / 1048576; return (x >= 100 ? Math.round(x) : Math.round(x * 10) / 10).toString().replace(".", ",") + " MB"; }
+    function bar(lbl, b, tot, col) {
+      var pc = Math.max(0, Math.min(100, b * 100 / tot)), f = el("div", { style: "height:100%;border-radius:7px;background:" + col + ";width:" + pc + "%" });
+      return el("div", { style: "margin:10px 0" }, [el("div", { style: "display:flex;justify-content:space-between;gap:8px" }, [el("b", { text: lbl }), el("span", { text: mb(b) })]), el("div", { style: "height:14px;background:#e6e6ee;border-radius:7px;overflow:hidden;margin-top:4px", role: "img", "aria-label": lbl + " " + mb(b) }, [f])]);
+    }
+    (async function () {
+      try {
+        if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; return; }
+        if (!navigator.onLine) { msg.textContent = "Keine Verbindung."; return; }
+        var r = await sb.rpc("speicher_info");
+        if (r.error) { var m0 = String(r.error.message || ""); msg.textContent = /speicher_info/i.test(m0) && /schema cache|does not exist|could not find/i.test(m0) ? "Die Speicher-Anzeige ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)." : sharedMsg(r.error); return; }
+        var d = r.data || {}, lim = +d.limit || 524288000, db = +d.db || 0, fo = +d.fotos || 0, da = +d.dateien || 0, rest = Math.max(0, db - fo - da), free = Math.max(0, lim - db), pc = Math.round(db * 100 / lim), col = pc >= 80 ? "#b3261e" : pc >= 60 ? "#e0a800" : "#1e8e3e";
+        msg.textContent = ""; body.textContent = "";
+        body.appendChild(el("div", { "class": "mut", style: "font-size:.85rem", text: "Gratis-Paket von Supabase: " + mb(lim) + " Datenbank" }));
+        body.appendChild(bar("Fotos (" + (d.fotos_n || 0) + ")", fo, lim, "#6a4ccf")); body.appendChild(bar("Rapporte, Wochen, Regie u. a.", rest, lim, "#2a1f6b")); body.appendChild(bar("Dateien und Offerten", da, lim, "#c79a1a")); body.appendChild(bar("Frei", free, lim, "#cfd3dc"));
+        var warn = pc >= 80;
+        body.appendChild(el("div", { style: "border:1px solid " + col + ";border-radius:10px;padding:10px 12px;margin-top:12px;background:" + (warn ? "#fdecea" : pc >= 60 ? "#fff4d6" : "#e3f4e8") }, [el("b", { text: (warn ? "Achtung: nur noch " : "Noch ") + mb(free) + " frei (" + (100 - pc) + " %)" }), el("div", { "class": "mut", style: "font-size:.85rem", text: warn ? "Bald voll. Alte Fotos und Dateien löschen oder bei Supabase auf ein grösseres Paket wechseln, sonst können keine Daten mehr gespeichert werden." : "Regie-Rapporte, Abnahmen und Fotos werden nach 14 Tagen automatisch gelöscht. Ab 80 % erscheint eine rote Warnung." })]));
+      } catch (e) { msg.textContent = sharedMsg(e); }
+    })();
+  }
   async function abKundeStatus(site) {
     try {
       if (!isStaff() || !sb) return;
@@ -3445,7 +3474,7 @@ function openReport(pre) {
     async function pick(nr) { site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : ""; list.textContent = ""; newBtn.hidden = !nr; if (!nr) return; await loadList(); }
     async function loadList() {
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
-      if (!navigator.onLine) { say("Keine Verbindung. Das Abnahmeprotokoll braucht Internet.", "bad"); return; }
+      if (!navigator.onLine) { say(""); return; }
       say("Einen Moment …");
       try { var r = await sb.rpc("abnahme_list", { p_site: site }); if (r.error) { say(abMsg(r.error), "bad"); return; } rows = r.data || []; say(""); drawList(); } catch (e) { say(abMsg(e), "bad"); }
     }
@@ -3535,19 +3564,28 @@ function openReport(pre) {
       var sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), pf = el("button", { type: "button", "class": "btn", text: "Als PDF" }), del = el("button", { type: "button", "class": "btn", text: "Löschen" }), back = el("button", { type: "button", "class": "btn", text: "Zurück" });
       del.hidden = !(isStaff() && nr);
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back])); cur = firstSig(); AB_SIG.forEach(function (z) { if (d.sig[z[0]] && !d.sig[cur]) cur = z[0]; }); sigDraw();
+      async function viaQueue() {
+        editing.qid = editing.qid || ("q" + fotoRid());
+        await oqPutRec({ qid: editing.qid, rpc: "abnahme_save", kind: "regie", abn: true, site: site, nr: editing.nr || null, data: d, from: fc.ref });
+        if (navigator.onLine) { var mp = await oqSync(); if (mp[editing.qid]) { editing.nr = mp[editing.qid]; fc.ref = "ABN|" + site + "|" + editing.nr; delete editing.qid; title.textContent = "Abnahmeprotokoll Nr. " + editing.nr + " · Baustelle " + site; } }
+        return editing.nr;
+      }
       async function ensureSaved() {
-        var r = await sb.rpc("abnahme_save", { p_site: site, p_nr: editing.nr, p_data: d }); if (r.error) throw r.error;
+        if (!navigator.onLine || editing.qid) return await viaQueue();
+        var r; try { r = await sb.rpc("abnahme_save", { p_site: site, p_nr: editing.nr, p_data: d }); } catch (e0) { r = { error: e0 }; }
+        if (r.error && isNetErr(r.error)) return await viaQueue();
+        if (r.error) throw r.error;
         if (!editing.nr) { await fc.move("ABN|" + site + "|" + r.data); editing.nr = r.data; title.textContent = "Abnahmeprotokoll Nr. " + r.data + " · Baustelle " + site; } return editing.nr;
       }
       sv.addEventListener("click", async function () {
         if (isDemo()) { es(DEMO_MSG, "bad"); return; }
-        if (!sb || !user || !navigator.onLine) { es("Keine Verbindung. Zum Speichern brauchst du Internet.", "bad"); return; }
+        if (!sb || !user) { es("Bitte zuerst anmelden.", "bad"); return; }
         es("Einen Moment …"); sv.disabled = true;
-        try { var n2 = await ensureSaved(); closeAbnahme(); toast("Abnahmeprotokoll Nr. " + n2 + " gespeichert ✓"); if (Object.keys(d.sig).length && d.erg !== "verweigert") abKundeStatus(site); } catch (e) { es(abMsg(e), "bad"); } finally { sv.disabled = false; }
+        try { var n2 = await ensureSaved(); closeAbnahme(); toast(n2 ? "Abnahmeprotokoll Nr. " + n2 + " gespeichert ✓" : "Abnahmeprotokoll gespeichert ✓"); if (Object.keys(d.sig).length && d.erg !== "verweigert") abKundeStatus(site); } catch (e) { es(abMsg(e), "bad"); } finally { sv.disabled = false; }
       });
       pf.addEventListener("click", async function () {
         es("Einen Moment …");
-        try { if (!isDemo() && sb && user && navigator.onLine) await ensureSaved(); } catch (e) { }
+        try { if (!isDemo() && sb && user) await ensureSaved(); } catch (e) { }
         var si = siteByNr(site), doc = null; try { doc = buildAbnahmePdf(editing.nr || "", site, si ? si.n : "", d); } catch (e) { }
         if (!doc) { es("Das PDF konnte nicht erstellt werden.", "bad"); return; }
         try { fotoPdf(doc, await fc.all(), "Abnahmeprotokoll " + (editing.nr ? "Nr. " + editing.nr : "") + " · " + site); } catch (e) { }
@@ -3603,7 +3641,7 @@ function openReport(pre) {
     }
     async function loadList() {
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
-      if (!navigator.onLine) { say("Keine Verbindung. Regie-Rapporte brauchen Internet.", "bad"); return; }
+      if (!navigator.onLine) { say(""); return; }
       say("Einen Moment …");
       try {
         var r = await sb.rpc("regie_list", { p_site: site });
@@ -3724,21 +3762,30 @@ function openReport(pre) {
       ed.appendChild(emsg); ed.appendChild(el("div", { "class": "actions" }, [sv, pf, del, back]));
       sigDraw(); sentSync();
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
-      async function silentSave() { try { if (sb && user && navigator.onLine && !isDemo() && editing.nr) await sb.rpc("regie_save", { p_site: site, p_nr: editing.nr, p_data: collect() }); } catch (e) { } }
+      async function viaQueue() {
+        editing.qid = editing.qid || ("q" + fotoRid());
+        await oqPutRec({ qid: editing.qid, rpc: "regie_save", kind: "regie", abn: false, site: site, nr: editing.nr || null, data: collect(), from: fcR.ref });
+        if (navigator.onLine) { var mp = await oqSync(); if (mp[editing.qid]) { editing.nr = mp[editing.qid]; fcR.ref = site + "|" + editing.nr; delete editing.qid; title.textContent = "Regie-Rapport Nr. " + editing.nr + " · Baustelle " + site; sentSync(); } }
+        return true;
+      }
+      async function silentSave() { try { if (isDemo() || !sb || !user) return; if (!navigator.onLine || editing.qid) { await viaQueue(); return; } if (editing.nr) await sb.rpc("regie_save", { p_site: site, p_nr: editing.nr, p_data: collect() }); } catch (e) { } }
       async function ensureSaved() {
         if (editing.nr) return true;
-        if (!sb || !user || !navigator.onLine || isDemo()) return false;
+        if (!sb || !user || isDemo()) return false;
+        if (!navigator.onLine || editing.qid) return await viaQueue();
         var r = await sb.rpc("regie_save", { p_site: site, p_nr: null, p_data: collect() });
-        if (r.error) { es(regieMsg(r.error), "bad"); return false; }
+        if (r.error) { if (isNetErr(r.error)) return await viaQueue(); es(regieMsg(r.error), "bad"); return false; }
         await fcR.move(site + "|" + r.data); editing.nr = r.data; title.textContent = "Regie-Rapport Nr. " + r.data + " · Baustelle " + site; sentSync();
         return true;
       }
       sv.addEventListener("click", async function () {
         if (isDemo()) { es(DEMO_MSG, "bad"); return; }
-        if (!sb || !user || !navigator.onLine) { es("Keine Verbindung. Zum Speichern brauchst du Internet.", "bad"); return; }
+        if (!sb || !user) { es("Bitte zuerst anmelden.", "bad"); return; }
         es("Einen Moment …");
         try {
+          if (!navigator.onLine || editing.qid) { await viaQueue(); closeRegie(); toast("Regie-Rapport gespeichert ✓"); return; }
           var r = await sb.rpc("regie_save", { p_site: site, p_nr: editing.nr, p_data: collect() });
+          if (r.error && isNetErr(r.error)) { await viaQueue(); closeRegie(); toast("Regie-Rapport gespeichert ✓"); return; }
           if (r.error) { es(regieMsg(r.error), "bad"); return; }
           if (!editing.nr) await fcR.move(site + "|" + r.data);
           editing.nr = r.data; title.textContent = "Regie-Rapport Nr. " + r.data + " · Baustelle " + site; closeRegie(); toast("Regie-Rapport Nr. " + r.data + " gespeichert ✓");
@@ -4720,6 +4767,54 @@ function openReport(pre) {
   /* ---------- Fotos (Regie-Rapport, Ausmass, Offerte) ---------- */
   var FOTOC = {};
   function fotoRid() { return Math.random().toString(36).slice(2, 10); }
+  /* ---------- Offline-Warteschlange: Regie, Abnahme und deren Fotos werden ohne Netz im Handy gespeichert und automatisch hochgeladen ---------- */
+  var OQ = { db: null, busy: false };
+  function oqOpen() {
+    return new Promise(function (res, rej) {
+      if (OQ.db) return res(OQ.db); if (!window.indexedDB) return rej(new Error("kein IndexedDB"));
+      var rq = indexedDB.open("wr2q", 1); rq.onupgradeneeded = function () { rq.result.createObjectStore("q", { keyPath: "id" }); };
+      rq.onsuccess = function () { OQ.db = rq.result; res(OQ.db); }; rq.onerror = function () { rej(rq.error); };
+    });
+  }
+  function oqRun(mode, fn) {
+    return oqOpen().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction("q", mode), rq = fn(tx.objectStore("q")); tx.oncomplete = function () { res(rq && rq.result); }; tx.onerror = tx.onabort = function () { rej(tx.error); }; }); });
+  }
+  function oqAll() { return oqRun("readonly", function (st) { return st.getAll(); }).then(function (a) { return a || []; }); }
+  function oqPut(o) { return oqRun("readwrite", function (st) { return st.put(o); }); }
+  function oqDel(id) { return oqRun("readwrite", function (st) { return st.delete(id); }); }
+  function oqUid() { return user ? String(user.id || user.email || "") : ""; }
+  function isNetErr(e) { var m = String((e && e.message) || e || ""); return !navigator.onLine || /failed to fetch|networkerror|network request failed|load failed|timeout|fetch/i.test(m); }
+  async function oqPutRec(o) { o.id = "r:" + o.qid; o.t = "rec"; o.uid = oqUid(); o.ts = Date.now(); await oqPut(o); }
+  async function oqSync() {
+    if (OQ.busy || !sb || !user || !navigator.onLine || isDemo() || !window.indexedDB) return {};
+    OQ.busy = true; var done = {};
+    try {
+      var uid = oqUid(), all = (await oqAll()).filter(function (x) { return x.uid === uid; });
+      var recs = all.filter(function (x) { return x.t === "rec"; }).sort(function (a, b) { return a.ts - b.ts; }), fotos = all.filter(function (x) { return x.t === "foto"; });
+      async function up(f, ref) {
+        var r = await sb.rpc("foto_save", { p_kind: f.kind, p_ref: ref, p_note: f.note || "", p_thumb: f.thumb, p_data: f.data, p_w: f.w, p_h: f.h });
+        if (r.error) throw r.error; await oqDel(f.id); f.gone = true;
+      }
+      for (var i = 0; i < recs.length; i++) {
+        var q = recs[i], r = await sb.rpc(q.rpc, { p_site: q.site, p_nr: q.nr, p_data: q.data });
+        if (r.error) { if (isNetErr(r.error)) return done; continue; }
+        var nr = r.data, nref = q.abn ? "ABN|" + q.site + "|" + nr : q.site + "|" + nr;
+        if (q.from && q.from !== nref) { try { await sb.rpc("foto_move", { p_kind: q.kind, p_old: q.from, p_new: nref }); } catch (e) { } }
+        for (var k = 0; k < fotos.length; k++) { var f = fotos[k]; if (!f.gone && (f.ref === q.from || f.ref === nref) && f.kind === q.kind) await up(f, nref); }
+        await oqDel(q.id); done[q.qid] = nr;
+      }
+      for (var m = 0; m < fotos.length; m++) {
+        var g = fotos[m]; if (g.gone) continue;
+        if (/\|n[0-9a-z]{4,8}$/.test(g.ref) && Date.now() - g.ts > 86400000) { await oqDel(g.id); continue; }
+        if (/\|n[0-9a-z]{4,8}$/.test(g.ref)) continue;
+        await up(g, g.ref);
+      }
+    } catch (e) { } finally { OQ.busy = false; }
+    return done;
+  }
+  window.addEventListener("online", function () { setTimeout(oqSync, 1500); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(oqSync, 1000); });
+  setInterval(function () { oqSync(); }, 45000); setTimeout(oqSync, 4000);
   function fotoScale(file, maxPx, q) {
     return new Promise(function (ok, no) {
       var u = URL.createObjectURL(file), im = new Image();
@@ -4768,13 +4863,14 @@ function openReport(pre) {
     function ready() {
       if (isDemo()) { say(DEMO_MSG, 1); return false; }
       if (!sb || !user) { say("Bitte zuerst anmelden.", 1); return false; }
-      if (!navigator.onLine) { say("Keine Verbindung. Fotos brauchen Internet.", 1); return false; }
+      if (!navigator.onLine && !(c.kind === "regie" && window.indexedDB)) { say("Keine Verbindung. Fotos brauchen Internet.", 1); return false; }
       return true;
     }
     function big(f) {
       var o = el("div", { id: "fotobig", role: "dialog", "aria-modal": "true", "aria-label": "Foto" }), st = el("div", { "class": "status", text: "Einen Moment …" }), cl = el("button", { type: "button", "class": "btn primary", text: "Schliessen" });
       o.appendChild(st); o.appendChild(cl); document.body.appendChild(o);
       cl.addEventListener("click", function () { o.remove(); }); o.addEventListener("click", function (ev) { if (ev.target === o) o.remove(); });
+      if (f.q) { var kq = c.cache[f.id]; if (kq) { o.replaceChild(el("img", { src: kq.data, alt: "Foto" }), st); return; } }
       sb.rpc("foto_get", { p_id: f.id }).then(function (r) {
         if (r.error || !r.data || !r.data[0]) { st.textContent = r.error ? fotoMsg(r.error) : "Foto nicht gefunden."; return; }
         var im = el("img", { src: r.data[0].data, alt: f.note || "Foto" }); o.replaceChild(im, st);
@@ -4785,10 +4881,11 @@ function openReport(pre) {
       c.items.forEach(function (f) {
         var im = el("img", { src: f.thumb, alt: f.note || "Foto" });
         var ni = el("input", { type: "text", placeholder: "Notiz zum Foto", maxlength: "300", "aria-label": "Notiz zum Foto" }); ni.value = f.note || "";
-        ni.addEventListener("change", async function () { f.note = ni.value; try { var r = await sb.rpc("foto_note", { p_id: f.id, p_note: f.note }); if (r.error) say(fotoMsg(r.error), 1); } catch (e) { say(fotoMsg(e), 1); } });
+        ni.addEventListener("change", async function () { f.note = ni.value; if (f.q) { try { var qa = (await oqAll()).filter(function (z) { return z.id === "f:" + f.id; })[0]; if (qa) { qa.note = f.note; await oqPut(qa); } } catch (e) { } return; } try { var r = await sb.rpc("foto_note", { p_id: f.id, p_note: f.note }); if (r.error) say(fotoMsg(r.error), 1); } catch (e) { say(fotoMsg(e), 1); } });
         var dl = el("button", { type: "button", "class": "fx", text: "Foto entfernen" });
         dl.addEventListener("click", async function () {
           if (!confirm("Foto entfernen?")) return;
+          if (f.q) { try { await oqDel("f:" + f.id); } catch (e) { } c.items = c.items.filter(function (x) { return x !== f; }); draw(); return; }
           try { var r = await sb.rpc("foto_delete", { p_id: f.id }); if (r.error) { say(fotoMsg(r.error), 1); return; } } catch (e) { say(fotoMsg(e), 1); return; }
           c.items = c.items.filter(function (x) { return x !== f; }); draw();
         });
@@ -4797,8 +4894,12 @@ function openReport(pre) {
       });
     }
     c.load = async function () {
-      if (c.loaded || !sb || !user || !navigator.onLine || isDemo()) return; c.loaded = true;
-      try { var r = await sb.rpc("foto_list", { p_kind: c.kind, p_ref: c.ref }); if (r.error) { say(fotoMsg(r.error), 1); c.loaded = false; return; } c.items = (r.data || []).map(function (x) { return { id: x.id, note: x.note || "", thumb: x.thumb }; }); draw(); }
+      if (c.loaded || !sb || !user || isDemo()) return;
+      var qi = [];
+      if (c.kind === "regie" && window.indexedDB) { try { (await oqAll()).forEach(function (z) { if (z.t === "foto" && z.uid === oqUid() && z.kind === c.kind && z.ref === c.ref && !c.items.some(function (x) { return x.id === z.fid; })) { qi.push({ id: z.fid, q: 1, note: z.note || "", thumb: z.thumb }); c.cache[z.fid] = { data: z.data, w: z.w, h: z.h, created: new Date(z.ts).toISOString() }; } }); } catch (e) { } }
+      if (!navigator.onLine) { if (qi.length) { c.items = c.items.concat(qi); draw(); } return; }
+      c.loaded = true;
+      try { var r = await sb.rpc("foto_list", { p_kind: c.kind, p_ref: c.ref }); if (r.error) { say(fotoMsg(r.error), 1); c.loaded = false; return; } c.items = (r.data || []).map(function (x) { return { id: x.id, note: x.note || "", thumb: x.thumb }; }).concat(qi); draw(); }
       catch (e) { c.loaded = false; }
     };
     add.addEventListener("click", function () { if (ready()) inp.click(); });
@@ -4808,7 +4909,12 @@ function openReport(pre) {
         say("Foto " + (i + 1) + " von " + fl.length + " wird gespeichert …");
         try {
           var full = await fotoScale(fl[i], 1600, 0.72), th = await fotoScale(fl[i], 280, 0.6);
-          var r = await sb.rpc("foto_save", { p_kind: c.kind, p_ref: c.ref, p_note: "", p_thumb: th.url, p_data: full.url, p_w: full.w, p_h: full.h });
+          var r = null;
+          if (navigator.onLine || c.kind !== "regie") { try { r = await sb.rpc("foto_save", { p_kind: c.kind, p_ref: c.ref, p_note: "", p_thumb: th.url, p_data: full.url, p_w: full.w, p_h: full.h }); } catch (e2) { r = { error: e2 }; } }
+          if ((!r || (r.error && isNetErr(r.error))) && c.kind === "regie" && window.indexedDB) {
+            var fid = "q" + fotoRid(); await oqPut({ id: "f:" + fid, fid: fid, t: "foto", uid: oqUid(), ts: Date.now(), kind: c.kind, ref: c.ref, note: "", thumb: th.url, data: full.url, w: full.w, h: full.h });
+            c.items.push({ id: fid, q: 1, note: "", thumb: th.url }); c.cache[fid] = { data: full.url, w: full.w, h: full.h, created: new Date().toISOString() }; draw(); continue;
+          }
           if (r.error) throw r.error;
           c.items.push({ id: r.data, note: "", thumb: th.url }); c.cache[r.data] = { data: full.url, w: full.w, h: full.h, created: new Date().toISOString() }; draw();
         } catch (e) { say(fotoMsg(e), 1); return; }
@@ -4825,8 +4931,8 @@ function openReport(pre) {
       return out;
     };
     c.cached = function () { var out = []; c.items.forEach(function (it) { var k = c.cache[it.id]; if (k) out.push({ note: it.note || "", created: k.created, data: k.data, w: k.w, h: k.h }); }); return out; };
-    c.move = async function (newRef) { var old = c.ref; c.ref = newRef; if (c.items.length && old !== newRef) { try { await sb.rpc("foto_move", { p_kind: c.kind, p_old: old, p_new: newRef }); } catch (e) { } } };
-    c.removeAll = async function () { for (var i = 0; i < c.items.length; i++) { try { await sb.rpc("foto_delete", { p_id: c.items[i].id }); } catch (e) { } } c.items = []; draw(); };
+    c.move = async function (newRef) { var old = c.ref; c.ref = newRef; if (c.items.length && old !== newRef) { try { await sb.rpc("foto_move", { p_kind: c.kind, p_old: old, p_new: newRef }); } catch (e) { } try { if (c.kind === "regie" && window.indexedDB) (await oqAll()).forEach(function (z) { if (z.t === "foto" && z.ref === old && z.kind === c.kind) { z.ref = newRef; oqPut(z); } }); } catch (e) { } } };
+    c.removeAll = async function () { for (var i = 0; i < c.items.length; i++) { try { if (c.items[i].q) await oqDel("f:" + c.items[i].id); else await sb.rpc("foto_delete", { p_id: c.items[i].id }); } catch (e) { } } c.items = []; draw(); };
     draw();
     return c;
   }
@@ -5893,8 +5999,8 @@ function openReport(pre) {
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
     var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Baustellen-Info", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
-    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Wochen-Status", openWstat]); items.push(["Kunden", openKunden]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
-    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Kunden", openKunden], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
+    if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Wochen-Status", openWstat], ["Speicherplatz", openSpeicher]); items.push(["Kunden", openKunden]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
+    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Speicherplatz", openSpeicher], ["Kunden", openKunden], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
       var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
