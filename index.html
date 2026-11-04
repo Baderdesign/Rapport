@@ -3348,7 +3348,7 @@ function openReport(pre) {
   }
   function closeRegie() { var o = $("regie"); if (o) o.remove(); }
   /* ---------- Abnahmeprotokoll (pro Baustelle fortlaufend nummeriert, Unterschrift: Kunde, Maler, Gipser) ---------- */
-  var AB_ART = ["Abnahme", "Weissputz", "Ausgeführte Arbeiten"];
+  var AB_OHNE = "OHNE", AB_ART = ["Abnahme", "Weissputz", "Ausgeführte Arbeiten"];
   var AB_ERG = [["ohne", "Abnahme ohne Mängel"], ["mit", "Abnahme mit Mängeln (Liste unten)"], ["verweigert", "Abnahme verweigert"]];
   var AB_SIG = [["k", "Kunde"], ["m", "Maler"], ["g", "Gipser"]];
   function abBlank() { var t = new Date(); return { sent: "", datum: t.getDate() + "." + (t.getMonth() + 1) + "." + t.getFullYear(), auftraggeber: "", objekt: "", art: "", arbeiten: "", ausgef: "", anwesend: "", gew: { m: true, g: true, k: false }, erg: "ohne", maengel: [], sig: {} }; }
@@ -3373,7 +3373,7 @@ function openReport(pre) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Nr. " + (nr || ""), mx + W, y + 6, { align: "right" });
     y += 14; doc.setLineWidth(0.5); doc.line(mx, y, mx + W, y); y += 6;
     var gw = [d.gew.m ? "Maler" : "", d.gew.g ? "Gipser" : "", d.gew.k ? "Kunde" : ""].filter(Boolean).join(", ");
-    [["Baustelle:", site + (siteName ? "  " + siteName : "")], ["Objekt / Ort:", d.objekt], ["Datum:", d.datum], ["Auftraggeber:", d.auftraggeber], ["Anwesend:", d.anwesend], ["Ausführung:", gw]].forEach(function (r) {
+    [site === AB_OHNE ? null : ["Baustelle:", site + (siteName ? "  " + siteName : "")], ["Objekt / Ort:", d.objekt], ["Datum:", d.datum], ["Auftraggeber:", d.auftraggeber], ["Anwesend:", d.anwesend], ["Ausführung:", gw]].filter(Boolean).forEach(function (r) {
       var ls = para(r[1], 10, W - 34); chk(ls.length * 4.6 + 1.5); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text(r[0], mx, y); doc.setFont("helvetica", "normal");
       ls.forEach(function (l, i) { doc.text(l, mx + 34, y + i * 4.6); }); y += Math.max(1, ls.length) * 4.6 + 1.5;
     });
@@ -3439,7 +3439,7 @@ function openReport(pre) {
   }
   async function abKundeStatus(site) {
     try {
-      if (!isStaff() || !sb) return;
+      if (!isStaff() || !sb || site === AB_OHNE) return;
       var r = await sb.rpc("kunden_list"); if (r.error || !Array.isArray(r.data)) return;
       for (var i = 0; i < r.data.length; i++) {
         var k = kNorm(r.data[i].data), b = null; k.bau.forEach(function (x) { if (x.nr === site) b = x; });
@@ -3457,8 +3457,9 @@ function openReport(pre) {
     var sug = el("div", { "class": "slist pick", role: "list" }); sug.hidden = true;
     var nm = el("div", { "class": "status" }), list = el("div", { "class": "slist", role: "list" }), msg = el("div", { "class": "status", role: "status" });
     var newBtn = el("button", { type: "button", "class": "btn primary", text: "+ Neues Abnahmeprotokoll" }); newBtn.hidden = true;
+    var ohneBtn = el("button", { type: "button", "class": "btn", text: "Ohne Baustelle" });
     var close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
-    var main = el("div", {}, [inp, sug, nm, msg, list, el("div", { "class": "actions" }, [newBtn])]);
+    var main = el("div", {}, [inp, sug, el("div", { "class": "actions" }, [ohneBtn]), nm, msg, list, el("div", { "class": "actions" }, [newBtn])]);
     var ed = el("div", {}); ed.hidden = true;
     var sheet = el("div", { "class": "sheet bil" }, [el("h2", { text: "Abnahmeprotokoll" }), main, ed, el("div", { "class": "actions", id: "abclose" }, [close])]);
     var ov = el("div", { "class": "overlay sites", id: "abnahme", role: "dialog", "aria-modal": "true", "aria-label": "Abnahmeprotokoll" }, [sheet]);
@@ -3471,7 +3472,7 @@ function openReport(pre) {
       items.forEach(function (x) { var t = el("div", { "class": "t" }); t.appendChild(el("b", { text: x.nr })); t.appendChild(document.createTextNode(x.n || "")); sug.appendChild(tapRow(t, function () { inp.value = x.nr; sug.hidden = true; fitBox(inp, sug); pick(x.nr); })); });
       arrows(sug);
     }
-    async function pick(nr) { site = nr; var info = siteByNr(nr); nm.textContent = nr ? (info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : ""; list.textContent = ""; newBtn.hidden = !nr; if (!nr) return; await loadList(); }
+    async function pick(nr) { site = nr; var info = siteByNr(nr); nm.textContent = nr ? (nr === AB_OHNE ? "Protokolle ohne Baustelle" : info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : ""; list.textContent = ""; newBtn.hidden = !nr; if (!nr) return; await loadList(); }
     async function loadList() {
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
       if (!navigator.onLine) { say(""); return; }
@@ -3490,7 +3491,7 @@ function openReport(pre) {
       var d = abNorm(d0 || abBlank()), cur = "m", firstSig = function () { var r = ""; AB_SIG.forEach(function (z) { if (!r && (d.gew[z[0]] || d.sig[z[0]])) r = z[0]; }); return r || "m"; }, locked = function () { return Object.keys(d.sig).length > 0; };
       editing = { nr: nr }; main.hidden = true; $("abclose").hidden = true; ed.hidden = false; ed.textContent = "";
       var fc = fotoCtl("regie", "ABN|" + site + "|" + (nr || "n" + fotoRid())); if (nr) fc.load();
-      var title = el("h3", { text: "Abnahmeprotokoll " + (nr ? "Nr. " + nr : "(neu)") + " · Baustelle " + site }), emsg = el("div", { "class": "status", role: "status" });
+      var title = el("h3", { text: "Abnahmeprotokoll " + (nr ? "Nr. " + nr : "(neu)") + (site === AB_OHNE ? " · ohne Baustelle" : " · Baustelle " + site) }), emsg = el("div", { "class": "status", role: "status" });
       var es = function (t, c) { emsg.textContent = t || ""; emsg.className = "status" + (c ? " " + c : ""); };
       var ctrls = [];
       function fld(lbl, key, ph, area) {
@@ -3567,7 +3568,7 @@ function openReport(pre) {
       async function viaQueue() {
         editing.qid = editing.qid || ("q" + fotoRid());
         await oqPutRec({ qid: editing.qid, rpc: "abnahme_save", kind: "regie", abn: true, site: site, nr: editing.nr || null, data: d, from: fc.ref });
-        if (navigator.onLine) { var mp = await oqSync(); if (mp[editing.qid]) { editing.nr = mp[editing.qid]; fc.ref = "ABN|" + site + "|" + editing.nr; delete editing.qid; title.textContent = "Abnahmeprotokoll Nr. " + editing.nr + " · Baustelle " + site; } }
+        if (navigator.onLine) { var mp = await oqSync(); if (mp[editing.qid]) { editing.nr = mp[editing.qid]; fc.ref = "ABN|" + site + "|" + editing.nr; delete editing.qid; title.textContent = "Abnahmeprotokoll Nr. " + editing.nr + (site === AB_OHNE ? " · ohne Baustelle" : " · Baustelle " + site); } }
         return editing.nr;
       }
       async function ensureSaved() {
@@ -3575,7 +3576,7 @@ function openReport(pre) {
         var r; try { r = await sb.rpc("abnahme_save", { p_site: site, p_nr: editing.nr, p_data: d }); } catch (e0) { r = { error: e0 }; }
         if (r.error && isNetErr(r.error)) return await viaQueue();
         if (r.error) throw r.error;
-        if (!editing.nr) { await fc.move("ABN|" + site + "|" + r.data); editing.nr = r.data; title.textContent = "Abnahmeprotokoll Nr. " + r.data + " · Baustelle " + site; } return editing.nr;
+        if (!editing.nr) { await fc.move("ABN|" + site + "|" + r.data); editing.nr = r.data; title.textContent = "Abnahmeprotokoll Nr. " + r.data + (site === AB_OHNE ? " · ohne Baustelle" : " · Baustelle " + site); } return editing.nr;
       }
       sv.addEventListener("click", async function () {
         if (isDemo()) { es(DEMO_MSG, "bad"); return; }
@@ -3586,9 +3587,9 @@ function openReport(pre) {
       pf.addEventListener("click", async function () {
         es("Einen Moment …");
         try { if (!isDemo() && sb && user) await ensureSaved(); } catch (e) { }
-        var si = siteByNr(site), doc = null; try { doc = buildAbnahmePdf(editing.nr || "", site, si ? si.n : "", d); } catch (e) { }
+        var si = site === AB_OHNE ? null : siteByNr(site), doc = null; try { doc = buildAbnahmePdf(editing.nr || "", site, si ? si.n : "", d); } catch (e) { }
         if (!doc) { es("Das PDF konnte nicht erstellt werden.", "bad"); return; }
-        try { fotoPdf(doc, await fc.all(), "Abnahmeprotokoll " + (editing.nr ? "Nr. " + editing.nr : "") + " · " + site); } catch (e) { }
+        try { fotoPdf(doc, await fc.all(), "Abnahmeprotokoll " + (editing.nr ? "Nr. " + editing.nr : "") + (site === AB_OHNE ? "" : " · " + site)); } catch (e) { }
         if (isDemo()) { demoPdf(doc, "Abnahmeprotokoll"); return; }
         var fn = "Abnahmeprotokoll_" + site + "_Nr" + (editing.nr || "neu") + ".pdf"; es(""); await sharePdf(doc, fn, "Abnahmeprotokoll");
       });
@@ -3599,6 +3600,7 @@ function openReport(pre) {
       back.addEventListener("click", function () { ed.hidden = true; main.hidden = false; $("abclose").hidden = false; editing = null; loadList(); });
     }
     newBtn.addEventListener("click", function () { if (site) edit(null, null); });
+    ohneBtn.addEventListener("click", function () { inp.value = "Ohne Baustelle"; sug.hidden = true; fitBox(inp, sug); pick(AB_OHNE); });
     inp.addEventListener("input", function () { suggest(); var nr = curNr(); if (siteByNr(nr) && nr !== site) pick(nr); else if (!siteByNr(nr)) { site = ""; nm.textContent = ""; list.textContent = ""; newBtn.hidden = true; say(""); } });
     inp.addEventListener("focus", function () { sug._f = 0; suggest(); });
     close.addEventListener("click", closeAbnahme); ov.addEventListener("click", function (ev) { if (ev.target === ov) closeAbnahme(); });
