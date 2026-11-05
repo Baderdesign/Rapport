@@ -3458,11 +3458,13 @@ function openReport(pre) {
   /* ---------- Mängel-Seite: alle Mängel aus den Abnahmeprotokollen ---------- */
   /* ---------- Aufgaben & Mängel ---------- */
   var AB_PERS = null;
-  function pName(e) { e = String(e || ""); var p = e.split("@")[0].replace(/[._-]+/g, " ").trim(); return p ? p.charAt(0).toUpperCase() + p.slice(1) : e; }
+  try { if (!document.getElementById("frocss")) { var fcs = document.createElement("style"); fcs.id = "frocss"; fcs.textContent = ".fro .fx,.fro .actions,.fro input[type=text]{display:none!important}.fro .fotobox{margin:6px 0}"; document.head.appendChild(fcs); } } catch (e) { }
+  var AB_NAMES = {};
+  function pName(e) { e = String(e || ""); if (AB_NAMES[e.toLowerCase()]) return AB_NAMES[e.toLowerCase()]; var p = e.split("@")[0].replace(/[._-]+/g, " ").trim(); return p ? p.charAt(0).toUpperCase() + p.slice(1) : e; }
   function pNames(a) { return (a || []).map(pName).join(", "); }
   async function abPersonen() {
     if (AB_PERS) return AB_PERS;
-    try { if (sb && user) { var r = await sb.rpc("personen_liste"); if (!r.error && Array.isArray(r.data)) { AB_PERS = r.data.map(function (x) { return String(x.email || "").toLowerCase(); }).filter(Boolean); return AB_PERS; } } } catch (e) { }
+    try { if (sb && user) { var r = await sb.rpc("personen_liste"); if (!r.error && Array.isArray(r.data)) { r.data.forEach(function (x) { var em = String(x.email || "").toLowerCase(); if (em && x.name) AB_NAMES[em] = String(x.name); }); AB_PERS = r.data.map(function (x) { return String(x.email || "").toLowerCase(); }).filter(Boolean); return AB_PERS; } } } catch (e) { }
     return [];
   }
   async function abPick(cur, done) {
@@ -3498,6 +3500,13 @@ function openReport(pre) {
   async function pushAus() { var sub = await pushSub(); if (sub) { var ep = sub.endpoint; try { await sb.rpc("push_abo_del", { p_endpoint: ep }); } catch (e) { } await sub.unsubscribe(); } }
   function aufOeffnen(n) { if (user && sb) { openMaengel(); return; } if (n > 0) setTimeout(function () { aufOeffnen(n - 1); }, 800); }
   try { if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", function (ev) { if (ev.data && ev.data.aufgaben) aufOeffnen(10); }); if (/[?&]aufgaben=1/.test(location.search)) setTimeout(function () { aufOeffnen(15); }, 1200); } catch (e) { }
+  async function nameSync() {
+    try {
+      var n = String((state && state.name) || "").trim(); if (!n || !sb || !user || isDemo() || !navigator.onLine) return;
+      var k = "wr2:nameup:" + oqUid(); if (localStorage.getItem(k) === n) return;
+      var r = await sb.rpc("name_save", { p_name: n }); if (!r.error) localStorage.setItem(k, n);
+    } catch (e) { }
+  }
   var AUF_N = 0;
   function aufBadge() {
     try {
@@ -3561,7 +3570,7 @@ function openReport(pre) {
         }
       } else { var d = x.a.data; d.ok = nowOk; d.okts = nowOk ? ts : ""; d.okvon = nowOk ? myMail() : ""; await aufSave(x.a, String(x.a.site_nr || ""), d); }
     }
-    async function aufSave(a, site, d) {
+    async function aufSave(a, site, d, tmp) {
       try {
         if (isDemo()) { toast(DEMO_MSG); return; }
         if (!navigator.onLine) throw { message: "offline" };
@@ -3570,7 +3579,7 @@ function openReport(pre) {
         pushNotify({ typ: "aufgabe", id: a && a.id ? a.id : r.data });
         return true;
       } catch (e) {
-        if (isNetErr(e)) { try { await oqPutRec({ qid: a && a.id ? "a" + a.id : (a && a.qid) || ("a" + Date.now().toString(36)), rpc: "aufgabe_save", kind: "regie", site: site, nr: a && a.id ? a.id : null, data: d }); return true; } catch (e2) { msg.textContent = "Konnte nicht gespeichert werden."; msg.className = "status bad"; } }
+        if (isNetErr(e)) { try { await oqPutRec({ qid: a && a.id ? "a" + a.id : (a && a.qid) || ("a" + Date.now().toString(36)), rpc: "aufgabe_save", kind: "regie", site: site, nr: a && a.id ? a.id : null, data: d, tmp: tmp || "" }); return true; } catch (e2) { msg.textContent = "Konnte nicht gespeichert werden."; msg.className = "status bad"; } }
         else { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
       }
       return false;
@@ -3586,15 +3595,19 @@ function openReport(pre) {
       var fb = el("button", { type: "button", "class": "btn", style: "width:100%;text-align:left" }), pb = el("button", { type: "button", "class": "btn", style: "width:100%;text-align:left" });
       function lab() { fb.textContent = f.frist ? "📅 " + abLang(f.frist) : "📅 Frist wählen"; pb.textContent = f.zu.length ? "👤 " + pNames(f.zu) : (staff ? "👤 Zuständig wählen" : "👤 An Büro / Admin"); }
       lab(); fb.addEventListener("click", function () { abCal(f.frist, function (v) { f.frist = v; lab(); }); }); pb.addEventListener("click", function () { abPick(f.zu, function (v) { f.zu = v; lab(); }); });
+      var tmpId = a && a.id ? "" : fotoRid(), fcV = a && a.id ? fotoGet("regie", "AUF|" + a.id + "|v", { head: "Fotos vom Büro" }) : fotoCtl("regie", "AUF|v|n" + tmpId, { head: "Fotos zur Aufgabe" });
+      if (a && a.id) fcV.load();
       var em = el("div", { "class": "status bad", role: "alert" }), sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), no = el("button", { type: "button", "class": "btn", text: "Abbrechen" }), del = null;
       var canDel = a && (a.mine || staff); if (canDel) { del = el("button", { type: "button", "class": "btn", text: "Löschen" }); }
-      var fov = el("div", { "class": "overlay sites", id: "aufform", role: "dialog", "aria-modal": "true", "aria-label": a ? "Aufgabe bearbeiten" : "Neue Aufgabe" }, [el("div", { "class": "sheet" }, [el("h2", { text: a ? "Aufgabe bearbeiten" : "Neue Aufgabe" }), el("div", { "class": "lbl", text: "Baustelle" }), sSel, el("div", { "class": "lbl", text: "Aufgabe" }), t, el("div", { "class": "lbl", text: "Beschreibung" }), tx, el("div", { "class": "lbl", text: "Frist" }), fb, el("div", { "class": "lbl", text: "Zuständig" }), pb, em, el("div", { "class": "actions" }, del ? [sv, no, del] : [sv, no])])]);
-      no.addEventListener("click", closeAufForm); fov.addEventListener("click", function (ev) { if (ev.target === fov) closeAufForm(); });
+      var fov = el("div", { "class": "overlay sites", id: "aufform", role: "dialog", "aria-modal": "true", "aria-label": a ? "Aufgabe bearbeiten" : "Neue Aufgabe" }, [el("div", { "class": "sheet" }, [el("h2", { text: a ? "Aufgabe bearbeiten" : "Neue Aufgabe" }), el("div", { "class": "lbl", text: "Baustelle" }), sSel, el("div", { "class": "lbl", text: "Aufgabe" }), t, el("div", { "class": "lbl", text: "Beschreibung" }), tx, el("div", { "class": "lbl", text: "Frist" }), fb, el("div", { "class": "lbl", text: "Zuständig" }), pb, fcV.node, em, el("div", { "class": "actions" }, del ? [sv, no, del] : [sv, no])])]);
+      async function abbr() { if (!a && fcV.items.length) { try { await fcV.removeAll(); } catch (e) { } } closeAufForm(); }
+      no.addEventListener("click", abbr); fov.addEventListener("click", function (ev) { if (ev.target === fov) abbr(); });
       sv.addEventListener("click", async function () {
         f.titel = t.value.trim(); if (!f.titel) { em.textContent = "Bitte beschreibe kurz, was zu tun ist."; return; }
         var d = { titel: f.titel, text: f.text.trim(), frist: f.frist, zu: f.zu, ok: a ? !!d0.ok : false, okts: a ? d0.okts || "" : "", okvon: a ? d0.okvon || "" : "", von: a && d0.von ? d0.von : myMail(), pn: a && d0.pn ? d0.pn : [], pnok: a ? !!d0.pnok : false };
         var site = f.site === AB_OHNE ? "" : f.site, row = a || { id: null, qid: "a" + Date.now().toString(36), mine: true, ersteller: myMail() };
-        sv.disabled = true; var good = await aufSave(row, site, d); sv.disabled = false; if (!good) return;
+        sv.disabled = true; var good = await aufSave(row, site, d, tmpId); sv.disabled = false; if (!good) return;
+        if (!a && row.id && fcV.items.length) { try { await fcV.move("AUF|" + row.id + "|v"); } catch (e) { } }
         row.site_nr = site; row.data = d; if (!a) rowsA.unshift(row); closeAufForm(); openKey = ""; draw();
       });
       if (del) del.addEventListener("click", async function () {
@@ -3604,6 +3617,7 @@ function openReport(pre) {
       document.body.appendChild(fov);
     }
     neu.addEventListener("click", function () { form(null); });
+    abPersonen().then(function () { try { draw(); } catch (e) { } });
     var pbox = el("div", { style: "margin:8px 0" });
     ov.firstChild.insertBefore(pbox, chips);
     async function pdraw() {
@@ -3637,6 +3651,10 @@ function openReport(pre) {
         if (open) {
           var info = (x.frist ? "Frist: " + abLang(x.frist) : "Keine Frist") + (x.zu.length ? " · Zuständig: " + pNames(x.zu) : "") + (x.ok && x.okts ? " · erledigt am " + abFristTxt(x.okts) + (x.okvon ? " von " + pName(x.okvon) : "") : "") + (x.typ === "a" && x.a.ersteller ? " · von " + pName(x.a.ersteller) : "");
           card.appendChild(el("div", { style: "padding:0 12px 4px" }, [el("div", { style: "white-space:pre-wrap;font-weight:600", text: x.titel || "" }), x.text ? el("div", { style: "white-space:pre-wrap;margin-top:4px", text: x.text }) : document.createTextNode(""), el("div", { "class": "mut", style: "font-size:.85rem;margin:6px 0 10px", text: info })]));
+          if (x.typ === "a" && x.a.id) {
+            var fv = fotoGet("regie", "AUF|" + x.a.id + "|v", { head: "Fotos vom Büro" }), fe = fotoGet("regie", "AUF|" + x.a.id + "|e", { head: "Fotos nach der Arbeit", btn: "📷 Foto hinzufügen" });
+            fv.load(); fe.load(); card.appendChild(el("div", { "class": "fro", style: "padding:0 12px" }, [fv.node])); card.appendChild(el("div", { style: "padding:0 12px" }, [fe.node]));
+          }
           var go = el("button", { type: "button", "class": "btn" + (x.ok ? "" : " primary"), style: "margin:0 12px 12px", text: x.ok ? "Wieder öffnen" : (staff ? "✓ Erledigt" : "✓ Erledigt melden") });
           go.addEventListener("click", async function () { await toggle(x); openKey = ""; draw(); }); card.appendChild(go);
           if (x.typ === "a" && (x.a.mine || staff)) { var ed = el("button", { type: "button", "class": "btn", style: "margin:0 12px 12px", text: "Bearbeiten" }); ed.addEventListener("click", function () { form(x.a); }); card.appendChild(ed); }
@@ -5064,6 +5082,10 @@ function openReport(pre) {
         var q = recs[i], r = await sb.rpc(q.rpc, { p_site: q.site, p_nr: q.nr, p_data: q.data });
         if (r.error) { if (isNetErr(r.error)) return done; continue; }
         var nr = r.data, nref = q.abn ? "ABN|" + q.site + "|" + nr : q.site + "|" + nr;
+        if (q.rpc === "aufgabe_save") {
+          if (q.tmp && nr) { var sf = ["v", "e"]; for (var si = 0; si < sf.length; si++) { var oref = "AUF|" + sf[si] + "|n" + q.tmp, nrf = "AUF|" + nr + "|" + sf[si]; try { await sb.rpc("foto_move", { p_kind: "regie", p_old: oref, p_new: nrf }); } catch (e) { } for (var sk2 = 0; sk2 < fotos.length; sk2++) { var sf1 = fotos[sk2]; if (!sf1.gone && sf1.ref === oref) await up(sf1, nrf); } } }
+          await oqDel(q.id); done[q.qid] = nr; pushNotify({ typ: "aufgabe", id: nr }); continue;
+        }
         if (q.from && q.from !== nref) { try { await sb.rpc("foto_move", { p_kind: q.kind, p_old: q.from, p_new: nref }); } catch (e) { } }
         for (var k = 0; k < fotos.length; k++) { var f = fotos[k]; if (!f.gone && (f.ref === q.from || f.ref === nref) && f.kind === q.kind) await up(f, nref); }
         await oqDel(q.id); done[q.qid] = nr;
@@ -5081,7 +5103,7 @@ function openReport(pre) {
   }
   window.addEventListener("online", function () { setTimeout(oqSync, 1500); setTimeout(rcPrefetch, 5000); });
   document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(oqSync, 1000); });
-  setInterval(function () { oqSync(); oqDot(); rcPrefetch(); aufCount(); }, 45000); setTimeout(function () { oqSync(); oqDot(); rcPrefetch(); aufCount(); }, 6000);
+  setInterval(function () { oqSync(); oqDot(); rcPrefetch(); aufCount(); nameSync(); }, 45000); setTimeout(function () { oqSync(); oqDot(); rcPrefetch(); aufCount(); nameSync(); }, 6000);
 
   /* ---------- Lese-Cache: Listen und Dateien werden bei Internet gespeichert und ohne Netz aus dem Handy angezeigt ---------- */
   var RC_READ = /^(regie_list|abnahme_list|abnahme_alle|aufgabe_list|personen_liste|kalk_list|ausmass_list|dateien_list|datei_get|kunden_list|konten_list|members_list|firma_wochen|firma_reports|firma_spesen|reports_mine|foto_list|foto_list_site|foto_get|soll_get|firma_start_get|firma_kanton|firma_frei|firma_personen_tag|pending_users|speicher_info|inhaber_firmen|inhaber_abo_liste|my_member|abo_status|firma_code)$/;
