@@ -1169,7 +1169,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     } catch (e) { authMsg(authError(e && e.message), "bad"); }
   });
   $("syncNow").addEventListener("click", function () { authMsg("Abgleich läuft …"); pullAll().then(function () { authMsg(syncErr ? "Sync-Fehler: " + syncErr : "Abgeglichen um " + nowHM(), syncErr ? "bad" : "ok"); }); });
-  $("doLogout").addEventListener("click", async function () { lsSet(LI, "0"); try { await sb.auth.signOut(); } catch (e) { } onSession(null); try { spBuild(); } catch (e) { } authMsg("Abgemeldet. Die Daten bleiben auf diesem Gerät."); });
+  $("doLogout").addEventListener("click", async function () { lsSet(LI, "0"); try { await rcClear(); } catch (e) { } try { await sb.auth.signOut(); } catch (e) { } onSession(null); try { spBuild(); } catch (e) { } authMsg("Abgemeldet. Die Daten bleiben auf diesem Gerät."); });
 
   /* ---------- Darstellung ---------- */
   function esc(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
@@ -2573,7 +2573,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
       if (busy) return; busy = true; list.textContent = ""; info.hidden = true;
       title.textContent = "KW " + isoWeek(mon).w + " · " + mon.getDate() + ".–" + dmy(addDays(mon, 4));
       if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; msg.className = "status bad"; busy = false; return; }
-      if (!navigator.onLine) { msg.textContent = "Keine Verbindung. Der Wochen-Status braucht Internet."; msg.className = "status bad"; busy = false; return; }
+      if (!rcOn()) { msg.textContent = "Keine Verbindung. Der Wochen-Status braucht Internet."; msg.className = "status bad"; busy = false; return; }
       msg.textContent = "Einen Moment …"; msg.className = "status";
       try {
         var wk = key(mon), r = await sb.rpc("firma_wochen", { p_von: key(addDays(mon, -49)), p_bis: wk });
@@ -2639,7 +2639,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     }
     async function load() {
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
-      if (!navigator.onLine) { say("Keine Verbindung. Die Kundenkartei braucht Internet.", "bad"); return; }
+      if (!rcOn()) { say("Keine Verbindung. Die Kundenkartei braucht Internet.", "bad"); return; }
       say("Einen Moment …");
       try {
         var r = await sb.rpc("kunden_list"); if (r.error) { say(kMsg(r.error), "bad"); return; }
@@ -2770,7 +2770,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
       var a = von.value, b = bis.value;
       if (!a || !b || a > b) { say("Bitte einen gültigen Zeitraum wählen (Von vor Bis).", "bad"); return; }
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
-      if (!navigator.onLine) { say("Keine Verbindung. Für die Auswertung brauchst du Internet.", "bad"); return; }
+      if (!rcOn()) { say("Keine Verbindung. Für die Auswertung brauchst du Internet.", "bad"); return; }
       busy = true; say("Einen Moment …");
       try {
         var r = await sb.rpc("firma_wochen", { p_von: key(mondayOf(fromKey(a))), p_bis: b });
@@ -3475,9 +3475,8 @@ function openReport(pre) {
     async function pick(nr) { site = nr; var info = siteByNr(nr); nm.textContent = nr ? (nr === AB_OHNE ? "Protokolle ohne Baustelle" : info ? (info.n || "") : "Diese Nummer steht nicht in der Baustellen-Liste.") : ""; list.textContent = ""; newBtn.hidden = !nr; if (!nr) return; await loadList(); }
     async function loadList() {
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
-      if (!navigator.onLine) { say(""); return; }
       say("Einen Moment …");
-      try { var r = await sb.rpc("abnahme_list", { p_site: site }); if (r.error) { say(abMsg(r.error), "bad"); return; } rows = r.data || []; say(""); drawList(); } catch (e) { say(abMsg(e), "bad"); }
+      try { var r = await sb.rpc("abnahme_list", { p_site: site }); if (r.error && !navigator.onLine) { say(""); return; } if (r.error) { say(abMsg(r.error), "bad"); return; } rows = r.data || []; say(""); drawList(); } catch (e) { say(abMsg(e), "bad"); }
     }
     function drawList() {
       list.textContent = ""; list.hidden = !rows.length; if (!rows.length) { say("Für diese Baustelle gibt es noch kein Abnahmeprotokoll."); return; }
@@ -3643,10 +3642,10 @@ function openReport(pre) {
     }
     async function loadList() {
       if (!sb || !user) { say("Bitte zuerst anmelden.", "bad"); return; }
-      if (!navigator.onLine) { say(""); return; }
       say("Einen Moment …");
       try {
         var r = await sb.rpc("regie_list", { p_site: site });
+        if (r.error && !navigator.onLine) { say(""); return; }
         if (r.error) { say(regieMsg(r.error), "bad"); return; }
         rows = r.data || []; say(""); drawList();
       } catch (e) { say(regieMsg(e), "bad"); }
@@ -4774,7 +4773,7 @@ function openReport(pre) {
   function oqOpen() {
     return new Promise(function (res, rej) {
       if (OQ.db) return res(OQ.db); if (!window.indexedDB) return rej(new Error("kein IndexedDB"));
-      var rq = indexedDB.open("wr2q", 1); rq.onupgradeneeded = function () { rq.result.createObjectStore("q", { keyPath: "id" }); };
+      var rq = indexedDB.open("wr2q", 2); rq.onupgradeneeded = function () { var d = rq.result; if (!d.objectStoreNames.contains("q")) d.createObjectStore("q", { keyPath: "id" }); if (!d.objectStoreNames.contains("c")) d.createObjectStore("c", { keyPath: "id" }); };
       rq.onsuccess = function () { OQ.db = rq.result; res(OQ.db); }; rq.onerror = function () { rej(rq.error); };
     });
   }
@@ -4785,7 +4784,7 @@ function openReport(pre) {
   function oqPut(o) { return oqRun("readwrite", function (st) { return st.put(o); }).then(function (x) { oqDot(); return x; }); }
   function oqDel(id) { return oqRun("readwrite", function (st) { return st.delete(id); }).then(function (x) { oqDot(); return x; }); }
   /* kleiner gelber Punkt am Menü-Knopf, solange noch etwas aufs Netz wartet */
-  var APP_VER = "1.1";
+  var APP_VER = "1.2";
   async function oqDot() {
     try {
       var b = document.getElementById("menuBtn"); if (!b) return;
@@ -4827,9 +4826,62 @@ function openReport(pre) {
     try { Object.keys(FOTOC).forEach(function (k) { var c = FOTOC[k]; if (c && c.items && c.items.some(function (x) { return x.q; })) { c.items = c.items.filter(function (x) { return !x.q; }); c.loaded = false; c.load(); } }); } catch (e) { }
     return done;
   }
-  window.addEventListener("online", function () { setTimeout(oqSync, 1500); });
+  window.addEventListener("online", function () { setTimeout(oqSync, 1500); setTimeout(rcPrefetch, 5000); });
   document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(oqSync, 1000); });
-  setInterval(function () { oqSync(); oqDot(); }, 45000); setTimeout(function () { oqSync(); oqDot(); }, 4000);
+  setInterval(function () { oqSync(); oqDot(); rcPrefetch(); }, 45000); setTimeout(function () { oqSync(); oqDot(); rcPrefetch(); }, 6000);
+
+  /* ---------- Lese-Cache: Listen und Dateien werden bei Internet gespeichert und ohne Netz aus dem Handy angezeigt ---------- */
+  var RC_READ = /^(regie_list|abnahme_list|kalk_list|ausmass_list|dateien_list|datei_get|kunden_list|konten_list|members_list|firma_wochen|firma_reports|firma_spesen|reports_mine|foto_list|foto_list_site|foto_get|soll_get|firma_start_get|firma_kanton|firma_frei|firma_personen_tag|pending_users|speicher_info|inhaber_firmen|inhaber_abo_liste|my_member|abo_status|firma_code)$/;
+  function rcOn() { return navigator.onLine || !!window.indexedDB; }
+  function rcStore(mode, fn) {
+    return oqOpen().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction("c", mode), rq = fn(tx.objectStore("c")); tx.oncomplete = function () { res(rq && rq.result); }; tx.onerror = tx.onabort = function () { rej(tx.error); }; }); });
+  }
+  function rcKey(name, args) { return oqUid() + "|" + name + "|" + JSON.stringify(args || {}); }
+  async function rcSet(name, args, data) {
+    try {
+      if (!user || !window.indexedDB) return; var txt = JSON.stringify(data); if (txt && txt.length > 6000000) return;
+      await rcStore("readwrite", function (st) { return st.put({ id: rcKey(name, args), uid: oqUid(), name: name, ts: Date.now(), data: data }); });
+    } catch (e) { }
+  }
+  async function rcGet(name, args) { try { if (!user || !window.indexedDB) return null; return (await rcStore("readonly", function (st) { return st.get(rcKey(name, args)); })) || null; } catch (e) { return null; } }
+  async function rcClear() { try { await rcStore("readwrite", function (st) { return st.clear(); }); } catch (e) { } try { localStorage.removeItem("wr2:pf"); } catch (e2) { } }
+  async function rcPrune() {
+    try {
+      var all = await rcStore("readonly", function (st) { return st.getAll(); }); if (!all || all.length < 500) return;
+      all.sort(function (a, b) { return a.ts - b.ts; }); var del = all.slice(0, all.length - 400);
+      for (var i = 0; i < del.length; i++) { var id = del[i].id; await rcStore("readwrite", function (st) { return st.delete(id); }); }
+    } catch (e) { }
+  }
+  function rcWrap(client) {
+    var orig = client.rpc.bind(client);
+    client.rpc = async function (name, args, opt) {
+      if (!RC_READ.test(name)) return orig(name, args, opt);
+      var fromCache = async function (err) { var c = await rcGet(name, args); if (c) return { data: c.data, error: null, count: null, status: 200, statusText: "OK" }; return err || { data: null, error: { message: "Failed to fetch (offline)" } }; };
+      if (!navigator.onLine) return fromCache();
+      try {
+        var r = await orig(name, args, opt);
+        if (r && !r.error) rcSet(name, args, r.data);
+        else if (r && r.error && isNetErr(r.error)) return fromCache(r);
+        return r;
+      } catch (e) { var c2 = await fromCache(null); if (c2.error) throw e; return c2; }
+    };
+  }
+  /* Am Morgen mit WLAN: wichtige Listen im Voraus laden, damit sie auf der Baustelle ohne Netz da sind (höchstens alle 6 Stunden) */
+  var RC_PF = false;
+  async function rcPrefetch(force) {
+    if (RC_PF || !sb || !user || !navigator.onLine || isDemo() || !window.indexedDB) return;
+    var k = "wr2:pf:" + oqUid(), last = +(localStorage.getItem(k) || 0); if (!force && Date.now() - last < 6 * 3600 * 1000) return;
+    RC_PF = true;
+    try {
+      var pick = function (n, a) { return sb.rpc(n, a).catch(function () { }); };
+      await pick("my_member"); await pick("kalk_list"); await pick("ausmass_list"); await pick("soll_get");
+      if (isStaff()) { await pick("kunden_list"); }
+      var sl = []; try { sl = sitesList() || []; } catch (e) { }
+      var cnt = 0;
+      for (var i = 0; i < sl.length && cnt < 80; i++) { if (!navigator.onLine) return; var nr = sl[i].nr || sl[i][0]; if (!nr) continue; await pick("dateien_list", { p_site: nr }); cnt++; await new Promise(function (r) { setTimeout(r, 120); }); }
+      localStorage.setItem(k, String(Date.now())); rcPrune();
+    } catch (e) { } finally { RC_PF = false; }
+  }
   function fotoScale(file, maxPx, q) {
     return new Promise(function (ok, no) {
       var u = URL.createObjectURL(file), im = new Image();
@@ -5693,7 +5745,7 @@ function openReport(pre) {
   async function openNC() {
     closeKK(); closeMenu();
     var mb = memberGet(), fm = (mb && mb.firma) || "", init = null, firma = null;
-    try { if (sb && user && navigator.onLine) { var r = await sb.rpc("kalk_list"); if (!r.error && Array.isArray(r.data)) { r.data.forEach(function (k) { if (k.kind !== "einst") return; if (k.nr === "novacolor") init = k.data; if (k.nr === "state" && k.data && k.data.s) { var s = k.data.s; firma = { firma: s.firma, adresse: s.adresse, tel: s.tel, mail: s.mail, uid: s.uid, iban: s.iban, logo: s.logo, mwstpflichtig: s.mwstpflichtig }; } }); } } } catch (e) { }
+    try { if (sb && user && rcOn()) { var r = await sb.rpc("kalk_list"); if (!r.error && Array.isArray(r.data)) { r.data.forEach(function (k) { if (k.kind !== "einst") return; if (k.nr === "novacolor") init = k.data; if (k.nr === "state" && k.data && k.data.s) { var s = k.data.s; firma = { firma: s.firma, adresse: s.adresse, tel: s.tel, mail: s.mail, uid: s.uid, iban: s.iban, logo: s.logo, mwstpflichtig: s.mwstpflichtig }; } }); } } } catch (e) { }
     if (!firma) { try { var l = JSON.parse(lsGet("wr2:kk2:" + fm) || "null"); if (l && l.s) firma = { firma: l.s.firma, adresse: l.s.adresse, tel: l.s.tel, mail: l.s.mail, uid: l.s.uid, iban: l.s.iban, logo: l.s.logo, mwstpflichtig: l.s.mwstpflichtig }; } catch (e) { } }
     var dk = document.documentElement.getAttribute("data-theme"), js = function (v) { return JSON.stringify(v).replace(/<\//g, "<\\/"); };
     var html = NC_HTML.replace("/*NC_INIT*/", function () { return "window.NC_APP=true;window.NC_KEY=" + js("wr2:nc:" + fm) + ";window.NC_INIT=" + js(init) + ";window.NC_FIRMA=" + js(firma) + ";"; });
@@ -5708,7 +5760,7 @@ function openReport(pre) {
   async function openNF() {
     closeKK(); closeMenu();
     var mb = memberGet(), fm = (mb && mb.firma) || "", init = null, firma = null;
-    try { if (sb && user && navigator.onLine) { var r = await sb.rpc("kalk_list"); if (!r.error && Array.isArray(r.data)) { r.data.forEach(function (k) { if (k.kind !== "einst") return; if (k.nr === "naturofloor") init = k.data; if (k.nr === "state" && k.data && k.data.s) { var s = k.data.s; firma = { firma: s.firma, adresse: s.adresse, tel: s.tel, mail: s.mail, uid: s.uid, iban: s.iban, logo: s.logo, mwstpflichtig: s.mwstpflichtig }; } }); } } } catch (e) { }
+    try { if (sb && user && rcOn()) { var r = await sb.rpc("kalk_list"); if (!r.error && Array.isArray(r.data)) { r.data.forEach(function (k) { if (k.kind !== "einst") return; if (k.nr === "naturofloor") init = k.data; if (k.nr === "state" && k.data && k.data.s) { var s = k.data.s; firma = { firma: s.firma, adresse: s.adresse, tel: s.tel, mail: s.mail, uid: s.uid, iban: s.iban, logo: s.logo, mwstpflichtig: s.mwstpflichtig }; } }); } } } catch (e) { }
     if (!firma) { try { var l = JSON.parse(lsGet("wr2:kk2:" + fm) || "null"); if (l && l.s) firma = { firma: l.s.firma, adresse: l.s.adresse, tel: l.s.tel, mail: l.s.mail, uid: l.s.uid, iban: l.s.iban, logo: l.s.logo, mwstpflichtig: l.s.mwstpflichtig }; } catch (e) { } }
     var dk = document.documentElement.getAttribute("data-theme"), js = function (v) { return JSON.stringify(v).replace(/<\//g, "<\\/"); };
     var html = NF_HTML.replace("/*NF_INIT*/", function () { return "window.NC_APP=true;window.NC_KEY=" + js("wr2:nf:" + fm) + ";window.NC_INIT=" + js(init) + ";window.NC_FIRMA=" + js(firma) + ";"; });
@@ -5722,7 +5774,7 @@ function openReport(pre) {
   async function openKK() {
     closeKK(); closeMenu();
     var mb = memberGet(), fm = (mb && mb.firma) || "", init = null;
-    try { if (sb && user && navigator.onLine) { var r = await sb.rpc("kalk_list"); if (!r.error && Array.isArray(r.data)) { var x = r.data.filter(function (k) { return k.kind === "einst" && k.nr === "state"; })[0]; if (x) init = x.data; } } } catch (e) { }
+    try { if (sb && user && rcOn()) { var r = await sb.rpc("kalk_list"); if (!r.error && Array.isArray(r.data)) { var x = r.data.filter(function (k) { return k.kind === "einst" && k.nr === "state"; })[0]; if (x) init = x.data; } } } catch (e) { }
     var dk = document.documentElement.getAttribute("data-theme"), js = function (v) { return JSON.stringify(v).replace(/<\//g, "<\\/"); };
     var html = KK_HTML.replace("/*KK_INIT*/", function () { return "window.KK_KEY=" + js("wr2:kk2:" + fm) + ";window.KK_INIT=" + js(init) + ";"; });
     if (dk === "dark" || dk === "light") html = html.replace("<html>", function () { return '<html data-theme="' + dk + '">'; });
@@ -6153,7 +6205,7 @@ function openReport(pre) {
   else if (!window.supabase) cloudOff = "Die Cloud-Bibliothek konnte nicht geladen werden (keine Verbindung?). Die App speichert vorerst nur auf diesem Gerät.";
   renderAuth(); renderBackupInfo();
   if (!cloudOff) {
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } }); try { rcWrap(sb); } catch (e) { }
     sb.auth.onAuthStateChange(function (ev, session) { setTimeout(function () { onSession(session && session.user); }, 0); });
   }
   /* Dienstags beim ersten Öffnen: Erinnerung, wenn der Rapport der letzten Woche noch nicht als PDF verschickt wurde */
