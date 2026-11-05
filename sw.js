@@ -1,5 +1,5 @@
 /* Service Worker: macht die App installierbar und startet sie auch ohne Netz. Liegt im selben Ordner wie index.html. */
-var CACHE = "wochenrapport-v3-296";
+var CACHE = "wochenrapport-v3-298";
 var CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 var LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
@@ -38,4 +38,16 @@ self.addEventListener("fetch", function (e) {
       return m || tmo(fetch(req), 3000).then(function (r) { if (r && r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); } return r; }).catch(function () { return new Response("", { status: 504 }); });
     }));
   }
+});
+/* Mitteilungen (Push): zeigt eine Nachricht und öffnet beim Antippen die Aufgaben */
+self.addEventListener("push", function (e) {
+  var d = {}; try { d = e.data.json(); } catch (x) { d = { title: "Wochenrapport", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Wochenrapport", { body: d.body || "", tag: d.tag || undefined, icon: "icon-192.png", badge: "icon-192.png", data: { url: d.url || "./?aufgaben=1" } }));
+});
+self.addEventListener("notificationclick", function (e) {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (cl) {
+    for (var i = 0; i < cl.length; i++) { if ("focus" in cl[i]) { cl[i].postMessage({ aufgaben: 1 }); return cl[i].focus(); } }
+    return self.clients.openWindow("./?aufgaben=1");
+  }));
 });
