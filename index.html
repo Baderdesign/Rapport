@@ -3358,11 +3358,18 @@ function openReport(pre) {
     if (b.ausgef) { b.arbeiten = (b.arbeiten ? b.arbeiten + "\n" : "") + b.ausgef; b.ausgef = ""; }
     if (d.gew && typeof d.gew === "object") b.gew = { m: !!d.gew.m, g: !!d.gew.g, k: !!d.gew.k };
     b.erg = AB_ERG.some(function (x) { return x[0] === d.erg; }) ? d.erg : "ohne";
-    if (Array.isArray(d.maengel)) b.maengel = d.maengel.slice(0, 30).map(function (m) { m = m || {}; return { t: String(m.t || "").slice(0, 400), frist: String(m.frist || "").slice(0, 20) }; });
+    if (Array.isArray(d.maengel)) b.maengel = d.maengel.slice(0, 30).map(function (m) { m = m || {}; return { t: String(m.t || "").slice(0, 400), frist: abFrist(m.frist), ok: !!m.ok, okts: String(m.okts || "").slice(0, 20), okvon: String(m.okvon || "").slice(0, 80), zu: Array.isArray(m.zu) ? m.zu.slice(0, 10).map(function (e) { return String(e).toLowerCase().slice(0, 80); }) : [] }; });
     var sg = d.sig && typeof d.sig === "object" ? d.sig : {};
     AB_SIG.forEach(function (z) { var g = sg[z[0]]; if (g && typeof g === "object" && typeof g.img === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(g.img) && g.img.length < 40000) b.sig[z[0]] = { img: g.img, name: String(g.name || "").slice(0, 80), ts: String(g.ts || "").slice(0, 40), w: +g.w || 0, h: +g.h || 0 }; });
     return b;
   }
+  function abFrist(v) {
+    v = String(v || "").trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(v); if (m) return m[3] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[1]).slice(-2);
+    return "";
+  }
+  function abFristTxt(v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ""); return m ? m[3] + "." + m[2] + "." + m[1] : ""; }
+  function abHeute() { var t = new Date(); return t.getFullYear() + "-" + ("0" + (t.getMonth() + 1)).slice(-2) + "-" + ("0" + t.getDate()).slice(-2); }
   function abMsg(er) { var m = String((er && er.message) || er || ""); if (/abnahme_/i.test(m) && /schema cache|does not exist|could not find/i.test(m)) return "Das Abnahmeprotokoll ist in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)."; return sharedMsg(er); }
   function buildAbnahmePdf(nr, site, siteName, d) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) return null;
@@ -3390,7 +3397,7 @@ function openReport(pre) {
       y += 3; chk(16); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("Mängel / Bemerkungen", mx, y); doc.setLineWidth(0.3); doc.line(mx, y + 1.5, mx + W, y + 1.5); y += 6.5;
       d.maengel.forEach(function (m, i) {
         var ls = para(m.t, 9.5, W - 44); chk(ls.length * 4.4 + 2); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
-        doc.text((i + 1) + ".", mx, y); ls.forEach(function (l, k) { doc.text(l, mx + 7, y + k * 4.4); }); if (m.frist) doc.text("Frist: " + m.frist, mx + W, y, { align: "right" });
+        doc.text((i + 1) + ".", mx, y); ls.forEach(function (l, k) { doc.text(l, mx + 7, y + k * 4.4); }); if (m.frist) doc.text("Frist: " + abFristTxt(m.frist), mx + W, y, { align: "right" });
         y += ls.length * 4.4 + 2;
       });
     }
@@ -3406,6 +3413,210 @@ function openReport(pre) {
     });
     var n = doc.getNumberOfPages(); for (var p = 1; p <= n; p++) { doc.setPage(p); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text("Seite " + p + " / " + n, mx + W, 289, { align: "right" }); }
     return doc;
+  }
+  /* ---------- Frist-Kalender: diese Woche, nächste Woche und weitere Wochen ---------- */
+  var AB_WT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+  function abIso(d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function abFromIso(v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function abLang(v) { var d = abFromIso(v); return d ? ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][d.getDay()] + " " + abFristTxt(v) : ""; }
+  function abCal(cur, done) {
+    var heute = new Date(); heute = new Date(heute.getFullYear(), heute.getMonth(), heute.getDate()); var sel = abFromIso(cur) ? cur : "";
+    var mon = new Date(heute); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+    var grid = el("div", {}), info = el("div", { "class": "mut", style: "font-size:.85rem;margin-top:8px" }), hd = el("div", { style: "display:flex;gap:4px;margin:6px 0 0 66px;font-size:.75rem;color:#888" });
+    AB_WT.forEach(function (w) { hd.appendChild(el("div", { style: "flex:1;text-align:center", text: w })); });
+    function wochen(v) { var d = abFromIso(v); return d ? Math.round((d - heute) / 86400000) : null; }
+    function draw() {
+      grid.textContent = "";
+      for (var w = 0; w < 6; w++) {
+        var d0 = new Date(mon); d0.setDate(d0.getDate() + w * 7);
+        var kt = new Date(d0); kt.setDate(kt.getDate() + 3); var y1 = new Date(kt.getFullYear(), 0, 4), kw = 1 + Math.round(((kt - y1) / 86400000 - 3 + ((y1.getDay() + 6) % 7)) / 7);
+        var row = el("div", { style: "display:flex;align-items:center;gap:4px;margin:2px 0" + (w < 2 ? ";background:rgba(106,76,207,.08);border-radius:10px;padding:2px" : "") });
+        row.appendChild(el("div", { style: "width:62px;font-size:.7rem;line-height:1.1;color:#666" }, [document.createTextNode("KW " + kw), el("br"), el("b", { style: "color:#2a1f6b", text: w === 0 ? "Diese Woche" : w === 1 ? "Nächste Woche" : "" })]));
+        for (var i = 0; i < 7; i++) {
+          (function (d) {
+            var iso = abIso(d), past = d < heute, st = "flex:1;min-width:0;text-align:center;padding:9px 0;border-radius:8px;font-size:.95rem;border:0;background:transparent;color:inherit;font-family:inherit;" + (past ? "color:#bbb;" : d.getDay() === 0 || d.getDay() === 6 ? "color:#999;" : "");
+            if (+d === +heute) st += "background:#2a1f6b;color:#f5d27a;font-weight:700;";
+            if (iso === sel) st += "outline:2px solid #1e8e3e;background:#e3f4e8;color:#111;font-weight:700;";
+            var b = el("button", { type: "button", style: st, text: String(d.getDate()), "aria-label": abLang(iso) + (+d === +heute ? " (heute)" : "") }); b.disabled = past;
+            if (+d === +heute) b.setAttribute("aria-current", "date");
+            b.addEventListener("click", function () { sel = iso; draw(); }); row.appendChild(b);
+          })(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + i));
+        }
+        grid.appendChild(row);
+      }
+      var n = wochen(sel); info.textContent = sel ? "Gewählt: " + abLang(sel) + (n === 0 ? " (heute)" : n === 1 ? " (morgen)" : " (in " + n + " Tagen)") : "Keine Frist gewählt. Heute ist " + abLang(abIso(heute)) + ".";
+    }
+    function plus(t) { var d = new Date(heute); d.setDate(d.getDate() + t); sel = abIso(d); draw(); }
+    var b1 = el("button", { type: "button", "class": "btn", text: "+1 Woche" }), b2 = el("button", { type: "button", "class": "btn", text: "+2 Wochen" }), b0 = el("button", { type: "button", "class": "btn", text: "Ohne Frist" });
+    b1.addEventListener("click", function () { plus(7); }); b2.addEventListener("click", function () { plus(14); }); b0.addEventListener("click", function () { sel = ""; draw(); });
+    var ok = el("button", { type: "button", "class": "btn primary", text: "Übernehmen" }), no = el("button", { type: "button", "class": "btn", text: "Abbrechen" });
+    var ov = el("div", { "class": "overlay sites", id: "abcal", role: "dialog", "aria-modal": "true", "aria-label": "Frist wählen" }, [el("div", { "class": "sheet" }, [el("h2", { text: "Frist wählen" }), hd, grid, el("div", { style: "display:flex;gap:6px;margin-top:10px;flex-wrap:wrap" }, [b1, b2, b0]), info, el("div", { "class": "actions" }, [ok, no])])]);
+    function shut() { ov.remove(); }
+    ok.addEventListener("click", function () { shut(); done(sel); }); no.addEventListener("click", shut); ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
+    document.body.appendChild(ov); draw();
+  }
+  /* ---------- Mängel-Seite: alle Mängel aus den Abnahmeprotokollen ---------- */
+  /* ---------- Aufgaben & Mängel ---------- */
+  var AB_PERS = null;
+  function pName(e) { e = String(e || ""); var p = e.split("@")[0].replace(/[._-]+/g, " ").trim(); return p ? p.charAt(0).toUpperCase() + p.slice(1) : e; }
+  function pNames(a) { return (a || []).map(pName).join(", "); }
+  async function abPersonen() {
+    if (AB_PERS) return AB_PERS;
+    try { if (sb && user) { var r = await sb.rpc("personen_liste"); if (!r.error && Array.isArray(r.data)) { AB_PERS = r.data.map(function (x) { return String(x.email || "").toLowerCase(); }).filter(Boolean); return AB_PERS; } } } catch (e) { }
+    return [];
+  }
+  async function abPick(cur, done) {
+    var pers = (await abPersonen()).slice(), sel = (cur || []).slice();
+    sel.forEach(function (e) { if (pers.indexOf(e) < 0) pers.push(e); });
+    var list = el("div", { style: "display:flex;flex-direction:column;gap:6px;margin:8px 0" });
+    if (!pers.length) list.appendChild(el("div", { "class": "mut", text: "Die Personenliste ist gerade nicht verfügbar (kein Netz und noch nie geladen)." }));
+    pers.forEach(function (e) {
+      var cb = el("input", { type: "checkbox" }); cb.checked = sel.indexOf(e) >= 0;
+      cb.addEventListener("change", function () { var i = sel.indexOf(e); if (cb.checked && i < 0) sel.push(e); if (!cb.checked && i >= 0) sel.splice(i, 1); });
+      list.appendChild(el("label", { "class": "chk", style: "padding:8px;border:1px solid var(--line,#ddd);border-radius:10px" }, [cb, el("span", { text: pName(e) })]));
+    });
+    var ok = el("button", { type: "button", "class": "btn primary", text: "Übernehmen" }), no = el("button", { type: "button", "class": "btn", text: "Abbrechen" });
+    var ov = el("div", { "class": "overlay sites", id: "abpick", role: "dialog", "aria-modal": "true", "aria-label": "Zuständig" }, [el("div", { "class": "sheet" }, [el("h2", { text: "Zuständig" }), list, el("div", { "class": "actions" }, [ok, no])])]);
+    function shut() { ov.remove(); }
+    ok.addEventListener("click", function () { shut(); done(sel.slice(0, 10)); }); no.addEventListener("click", shut); ov.addEventListener("click", function (ev) { if (ev.target === ov) shut(); });
+    document.body.appendChild(ov);
+  }
+  var AUF_N = 0;
+  async function aufCount() {
+    try {
+      if (!sb || !user || isDemo()) return; var me = myMail(), n = 0; if (!me) return;
+      var ra = await Promise.all([sb.rpc("aufgabe_list").catch(function () { return {}; }), sb.rpc("abnahme_alle").catch(function () { return {}; })]);
+      (ra[0].data || []).forEach(function (a) { var d = a.data || {}; if (!d.ok && Array.isArray(d.zu) && d.zu.indexOf(me) >= 0) n++; });
+      (ra[1].data || []).forEach(function (r) { abNorm(r.data).maengel.forEach(function (m) { if (!m.ok && m.zu && m.zu.indexOf(me) >= 0) n++; }); });
+      AUF_N = n;
+    } catch (e) { }
+  }
+  function closeAufForm() { var o = $("aufform"); if (o) o.remove(); }
+  function closeMaengel() { var o = $("maengel"); if (o) o.remove(); closeAufForm(); }
+  function myMail() { try { return String((user && user.email) || "").toLowerCase(); } catch (e) { return ""; } }
+  function openMaengel() {
+    closeMaengel(); closeMenu(); closeSites(); closeMembers(); closeBilanz(); closeRegie(); closeAbnahme(); closeReport(); hideSug();
+    var staff = isStaff(), rowsM = [], rowsA = [], filt = "offen", bsel = "", psel = "", sortUp = true, openKey = "";
+    var msg = el("div", { "class": "status", role: "status", text: "Einen Moment …" }), list = el("div", { "class": "slist", role: "list" }), chips = el("div", { style: "display:flex;gap:6px;margin:8px 0" }), sortBox = el("div", {});
+    var neu = el("button", { type: "button", "class": "btn primary", style: "width:100%", text: "+ Neue Aufgabe" }), close = el("button", { type: "button", "class": "btn", text: "Schliessen" });
+    var title = staff ? "Aufgaben" : "Meine Aufgaben";
+    var ov = el("div", { "class": "overlay sites", id: "maengel", role: "dialog", "aria-modal": "true", "aria-label": title }, [el("div", { "class": "sheet bil" }, [el("h2", { text: title }), el("div", { "class": "mut", style: "font-size:.85rem;margin-bottom:8px", text: staff ? "Freie Aufgaben und Mängel aus Abnahmeprotokollen. Erledigtes wird abgehakt." : "Deine Aufgaben und Mängel. Neue Aufgaben gehen direkt an Büro oder Admin." }), neu, chips, sortBox, msg, list, el("div", { "class": "actions" }, [close])])]);
+    close.addEventListener("click", closeMaengel); ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMaengel(); }); document.body.appendChild(ov);
+    function sk(s) { s = String(s || ""); return s === "" ? AB_OHNE : s; }
+    function items() {
+      var out = [], heute = abIso(new Date());
+      rowsM.forEach(function (r) { var d = abNorm(r.data); d.maengel.forEach(function (m, i) { if (m.t || m.frist) out.push({ typ: "m", r: r, d: d, m: m, i: i, site: sk(r.site_nr), titel: m.t, text: "", frist: m.frist, ok: !!m.ok, okts: m.okts, okvon: m.okvon, zu: m.zu || [], key: "m|" + r.site_nr + "|" + r.nr + "|" + i, sub: "Protokoll Nr. " + r.nr }); }); });
+      rowsA.forEach(function (a) { var d = a.data || {}; out.push({ typ: "a", a: a, site: sk(a.site_nr), titel: String(d.titel || ""), text: String(d.text || ""), frist: abFrist(d.frist), ok: !!d.ok, okts: d.okts, okvon: d.okvon, zu: Array.isArray(d.zu) ? d.zu : [], key: "a|" + (a.id || a.qid), sub: "" }); });
+      out.forEach(function (x) { x.ue = !x.ok && x.frist && x.frist < heute; });
+      return out;
+    }
+    function siteTxt(k) { if (k === AB_OHNE) return "ohne Baustelle"; var si = siteByNr(k); return k + (si && si.n ? " " + si.n : ""); }
+    var sortSel = el("select", { "aria-label": "Sortierung", style: "width:100%" }, [el("option", { value: "up", text: "Fälligkeit (früheste zuerst)" }), el("option", { value: "down", text: "Fälligkeit (späteste zuerst)" })]);
+    sortSel.addEventListener("change", function () { sortUp = sortSel.value === "up"; draw(); });
+    var bSel = el("select", { "aria-label": "Baustelle", style: "width:100%;margin-bottom:8px" }), pSel = el("select", { "aria-label": "Person", style: "width:100%;margin-bottom:8px" });
+    bSel.addEventListener("change", function () { bsel = bSel.value; draw(); }); pSel.addEventListener("change", function () { psel = pSel.value; draw(); });
+    sortBox.appendChild(el("div", { "class": "lbl", text: "Baustelle" })); sortBox.appendChild(bSel);
+    if (staff) { sortBox.appendChild(el("div", { "class": "lbl", text: "Person" })); sortBox.appendChild(pSel); }
+    sortBox.appendChild(el("div", { "class": "lbl", text: "Sortierung" })); sortBox.appendChild(sortSel);
+    function fill() {
+      var seen = {}, seenP = {}, o = [el("option", { value: "", text: "Alle Baustellen" })], op = [el("option", { value: "", text: "Alle Personen" }), el("option", { value: "-", text: "Ohne Zuständige" })];
+      items().forEach(function (x) { if (!seen[x.site]) { seen[x.site] = 1; o.push(el("option", { value: x.site, text: x.site === AB_OHNE ? "Ohne Baustelle" : siteTxt(x.site) })); } x.zu.forEach(function (e) { if (!seenP[e]) { seenP[e] = 1; op.push(el("option", { value: e, text: pName(e) })); } }); });
+      bSel.textContent = ""; o.forEach(function (x) { bSel.appendChild(x); }); bSel.value = bsel; pSel.textContent = ""; op.forEach(function (x) { pSel.appendChild(x); }); pSel.value = psel;
+    }
+    async function toggle(x) {
+      var nowOk = !x.ok, ts = abIso(new Date());
+      if (x.typ === "m") {
+        x.m.ok = nowOk; x.m.okts = nowOk ? ts : ""; x.m.okvon = nowOk ? myMail() : "";
+        try {
+          if (!navigator.onLine) throw { message: "offline" };
+          var r = await sb.rpc("abnahme_mangel_ok", { p_site: String(x.r.site_nr), p_nr: x.r.nr, p_data: { idx: x.i, ok: nowOk, ts: ts } }); if (r.error) throw r.error;
+        } catch (e) {
+          if (isNetErr(e)) { try { await oqPutRec({ qid: "mk" + x.r.site_nr + "_" + x.r.nr + "_" + x.i, rpc: "abnahme_mangel_ok", kind: "regie", abn: true, site: String(x.r.site_nr), nr: x.r.nr, data: { idx: x.i, ok: nowOk, ts: ts }, from: "ABN|" + x.r.site_nr + "|" + x.r.nr }); } catch (e2) { msg.textContent = "Konnte nicht gespeichert werden."; msg.className = "status bad"; } }
+          else { x.m.ok = !nowOk; msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+        }
+      } else { var d = x.a.data; d.ok = nowOk; d.okts = nowOk ? ts : ""; d.okvon = nowOk ? myMail() : ""; await aufSave(x.a, String(x.a.site_nr || ""), d); }
+    }
+    async function aufSave(a, site, d) {
+      try {
+        if (isDemo()) { toast(DEMO_MSG); return; }
+        if (!navigator.onLine) throw { message: "offline" };
+        var r = await sb.rpc("aufgabe_save", { p_site: site, p_nr: a && a.id ? a.id : null, p_data: d }); if (r.error) throw r.error;
+        if (a && !a.id) a.id = r.data;
+        return true;
+      } catch (e) {
+        if (isNetErr(e)) { try { await oqPutRec({ qid: a && a.id ? "a" + a.id : (a && a.qid) || ("a" + Date.now().toString(36)), rpc: "aufgabe_save", kind: "regie", site: site, nr: a && a.id ? a.id : null, data: d }); return true; } catch (e2) { msg.textContent = "Konnte nicht gespeichert werden."; msg.className = "status bad"; } }
+        else { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+      }
+      return false;
+    }
+    function form(a) {
+      closeAufForm(); var d0 = a ? a.data : { titel: "", text: "", frist: "", zu: [], ok: false }, f = { site: a ? sk(a.site_nr) : AB_OHNE, titel: d0.titel || "", text: d0.text || "", frist: abFrist(d0.frist), zu: (d0.zu || []).slice() };
+      var sSel = el("select", { "aria-label": "Baustelle", style: "width:100%" }, [el("option", { value: AB_OHNE, text: "Ohne Baustelle" })]);
+      try { (sitesList() || []).forEach(function (s) { var nr = String(s.nr || s[0] || ""); if (nr) sSel.appendChild(el("option", { value: nr, text: siteTxt(nr) })); }); } catch (e) { }
+      if (f.site !== AB_OHNE && !Array.prototype.some.call(sSel.options, function (o) { return o.value === f.site; })) sSel.appendChild(el("option", { value: f.site, text: siteTxt(f.site) }));
+      sSel.value = f.site; sSel.addEventListener("change", function () { f.site = sSel.value; });
+      var t = el("input", { type: "text", maxlength: "200", placeholder: "Was ist zu tun? z. B. Whg 3. OG streichen", "aria-label": "Aufgabe" }), tx = el("textarea", { rows: "4", maxlength: "3000", placeholder: "Wie und wo? (freiwillig)", "aria-label": "Beschreibung" });
+      t.value = f.titel; tx.value = f.text; t.addEventListener("input", function () { f.titel = t.value; }); tx.addEventListener("input", function () { f.text = tx.value; });
+      var fb = el("button", { type: "button", "class": "btn", style: "width:100%;text-align:left" }), pb = el("button", { type: "button", "class": "btn", style: "width:100%;text-align:left" });
+      function lab() { fb.textContent = f.frist ? "📅 " + abLang(f.frist) : "📅 Frist wählen"; pb.textContent = f.zu.length ? "👤 " + pNames(f.zu) : (staff ? "👤 Zuständig wählen" : "👤 An Büro / Admin"); }
+      lab(); fb.addEventListener("click", function () { abCal(f.frist, function (v) { f.frist = v; lab(); }); }); pb.addEventListener("click", function () { abPick(f.zu, function (v) { f.zu = v; lab(); }); });
+      var em = el("div", { "class": "status bad", role: "alert" }), sv = el("button", { type: "button", "class": "btn primary", text: "Speichern" }), no = el("button", { type: "button", "class": "btn", text: "Abbrechen" }), del = null;
+      var canDel = a && (a.mine || staff); if (canDel) { del = el("button", { type: "button", "class": "btn", text: "Löschen" }); }
+      var fov = el("div", { "class": "overlay sites", id: "aufform", role: "dialog", "aria-modal": "true", "aria-label": a ? "Aufgabe bearbeiten" : "Neue Aufgabe" }, [el("div", { "class": "sheet" }, [el("h2", { text: a ? "Aufgabe bearbeiten" : "Neue Aufgabe" }), el("div", { "class": "lbl", text: "Baustelle" }), sSel, el("div", { "class": "lbl", text: "Aufgabe" }), t, el("div", { "class": "lbl", text: "Beschreibung" }), tx, el("div", { "class": "lbl", text: "Frist" }), fb, el("div", { "class": "lbl", text: "Zuständig" }), pb, em, el("div", { "class": "actions" }, del ? [sv, no, del] : [sv, no])])]);
+      no.addEventListener("click", closeAufForm); fov.addEventListener("click", function (ev) { if (ev.target === fov) closeAufForm(); });
+      sv.addEventListener("click", async function () {
+        f.titel = t.value.trim(); if (!f.titel) { em.textContent = "Bitte beschreibe kurz, was zu tun ist."; return; }
+        var d = { titel: f.titel, text: f.text.trim(), frist: f.frist, zu: f.zu, ok: a ? !!d0.ok : false, okts: a ? d0.okts || "" : "", okvon: a ? d0.okvon || "" : "", von: a && d0.von ? d0.von : myMail() };
+        var site = f.site === AB_OHNE ? "" : f.site, row = a || { id: null, qid: "a" + Date.now().toString(36), mine: true, ersteller: myMail() };
+        sv.disabled = true; var good = await aufSave(row, site, d); sv.disabled = false; if (!good) return;
+        row.site_nr = site; row.data = d; if (!a) rowsA.unshift(row); closeAufForm(); openKey = ""; draw();
+      });
+      if (del) del.addEventListener("click", async function () {
+        if (!confirm("Diese Aufgabe löschen?")) return;
+        try { if (isDemo()) { toast(DEMO_MSG); return; } if (a.id) { var r = await sb.rpc("aufgabe_delete", { p_id: a.id }); if (r.error) throw r.error; } rowsA = rowsA.filter(function (z) { return z !== a; }); closeAufForm(); draw(); } catch (e) { em.textContent = isNetErr(e) ? "Zum Löschen braucht es Internet." : sharedMsg(e); }
+      });
+      document.body.appendChild(fov);
+    }
+    neu.addEventListener("click", function () { form(null); });
+    function draw() {
+      fill();
+      var all = items().filter(function (x) { return (!bsel || x.site === bsel) && (!psel || (psel === "-" ? !x.zu.length : x.zu.indexOf(psel) >= 0)); });
+      var offen = all.filter(function (x) { return !x.ok; }), erl = all.filter(function (x) { return x.ok; }), ue = offen.filter(function (x) { return x.ue; }).length;
+      chips.textContent = "";
+      [["offen", "Offen (" + offen.length + ")"], ["ue", "Überfällig (" + ue + ")"], ["behoben", "Erledigt (" + erl.length + ")"], ["alle", "Alle (" + all.length + ")"]].forEach(function (c) { var b = el("button", { type: "button", "class": "btn" + (filt === c[0] ? " primary" : ""), style: "flex:1;padding:10px 2px;font-size:.82rem", text: c[1] }); b.setAttribute("aria-pressed", filt === c[0] ? "true" : "false"); b.addEventListener("click", function () { filt = c[0]; draw(); }); chips.appendChild(b); });
+      var vis = (filt === "offen" ? offen : filt === "ue" ? offen.filter(function (x) { return x.ue; }) : filt === "behoben" ? erl : all).slice();
+      vis.sort(function (a, b) { var fa = a.frist || "9999-99", fb = b.frist || "9999-99"; return (sortUp ? 1 : -1) * fa.localeCompare(fb); });
+      list.textContent = ""; list.hidden = !vis.length;
+      msg.textContent = vis.length ? (ue && filt !== "behoben" ? ue + " überfällig" : "") : (filt === "ue" ? "Nichts überfällig." : filt === "offen" ? "Keine offenen Aufgaben." : filt === "behoben" ? "Noch nichts erledigt." : "Noch keine Aufgaben."); msg.className = "status" + (ue && filt !== "behoben" ? " bad" : "");
+      vis.forEach(function (x) {
+        var col = x.ok ? "#1e8e3e" : x.ue ? "#b3261e" : "#e0c200", bar = x.ue ? "#f3b8b8" : "transparent", open = openKey === x.key;
+        var dot = el("div", { style: "width:26px;height:26px;border-radius:50%;background:" + col + (x.ok || x.ue ? "" : ";opacity:.55"), role: "img", "aria-label": x.ok ? "erledigt" : x.ue ? "überfällig" : "offen" });
+        var sub = siteTxt(x.site) + (x.sub ? " · " + x.sub : "") + (x.zu.length ? " · " + pNames(x.zu) : "");
+        var head = el("button", { type: "button", style: "display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;padding:12px 10px 12px 12px;border-left:6px solid " + bar + ";text-decoration:none;font:inherit;color:inherit;cursor:pointer", "aria-expanded": String(open) }, [
+          el("div", { style: "flex:1;min-width:0" }, [el("div", { style: "font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", text: x.titel || "(ohne Text)" }), el("div", { "class": "mut", style: "font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", text: sub }), el("span", { style: "font-size:.72rem;background:#e8e3f6;color:#2a1a5e;border-radius:10px;padding:1px 7px", text: x.typ === "m" ? "Mangel" : "Aufgabe" })]),
+          el("div", { style: "text-align:center;min-width:76px" }, [dot, el("div", { "class": "mut", style: "font-size:.8rem;margin-top:2px", text: x.frist ? abFristTxt(x.frist) : "ohne Frist" })]),
+          el("span", { "aria-hidden": "true", text: open ? "⌃" : "›", style: "font-size:1.3rem;opacity:.5" })]);
+        var card = el("div", { "class": "srow", style: "padding:0;display:block;border-bottom:1px solid var(--line,#ddd)" }, [head]);
+        head.addEventListener("click", function () { openKey = open ? "" : x.key; draw(); });
+        if (open) {
+          var info = (x.frist ? "Frist: " + abLang(x.frist) : "Keine Frist") + (x.zu.length ? " · Zuständig: " + pNames(x.zu) : "") + (x.ok && x.okts ? " · erledigt am " + abFristTxt(x.okts) + (x.okvon ? " von " + pName(x.okvon) : "") : "") + (x.typ === "a" && x.a.ersteller ? " · von " + pName(x.a.ersteller) : "");
+          card.appendChild(el("div", { style: "padding:0 12px 4px" }, [el("div", { style: "white-space:pre-wrap;font-weight:600", text: x.titel || "" }), x.text ? el("div", { style: "white-space:pre-wrap;margin-top:4px", text: x.text }) : document.createTextNode(""), el("div", { "class": "mut", style: "font-size:.85rem;margin:6px 0 10px", text: info })]));
+          var go = el("button", { type: "button", "class": "btn" + (x.ok ? "" : " primary"), style: "margin:0 12px 12px", text: x.ok ? "Wieder öffnen" : (staff ? "✓ Erledigt" : "✓ Erledigt melden") });
+          go.addEventListener("click", async function () { await toggle(x); openKey = ""; draw(); }); card.appendChild(go);
+          if (x.typ === "a" && (x.a.mine || staff)) { var ed = el("button", { type: "button", "class": "btn", style: "margin:0 12px 12px", text: "Bearbeiten" }); ed.addEventListener("click", function () { form(x.a); }); card.appendChild(ed); }
+        }
+        list.appendChild(card);
+      });
+    }
+    (async function () {
+      try {
+        if (!sb || !user) { msg.textContent = "Bitte zuerst anmelden."; return; }
+        var ra = await Promise.all([sb.rpc("abnahme_alle").catch(function (e) { return { error: e }; }), sb.rpc("aufgabe_list").catch(function (e) { return { error: e }; })]), rm = ra[0], rl = ra[1], bad = rm.error || rl.error;
+        if (bad) { var m0 = String(bad.message || ""); if (/schema cache|does not exist|could not find/i.test(m0)) { msg.textContent = "Aufgaben sind in Supabase noch nicht eingerichtet (Zusatz-SQL fehlt)."; msg.className = "status bad"; return; } if (!navigator.onLine) { msg.textContent = "Keine Verbindung und noch nichts gespeichert."; msg.className = "status bad"; return; } msg.textContent = sharedMsg(bad); msg.className = "status bad"; return; }
+        rowsM = rm.data || []; rowsA = rl.data || []; draw();
+        try { var qq = (await oqAll()).filter(function (z) { return z.t === "rec" && z.rpc === "aufgabe_save" && z.uid === oqUid(); }); qq.forEach(function (z) { if (z.nr) { var ex = rowsA.filter(function (a) { return a.id === z.nr; })[0]; if (ex) { ex.data = z.data; ex.site_nr = z.site; } } else rowsA.unshift({ id: null, qid: z.qid, site_nr: z.site, data: z.data, mine: true, ersteller: myMail() }); }); if (qq.length) draw(); } catch (e) { }
+      } catch (e) { msg.textContent = sharedMsg(e); msg.className = "status bad"; }
+    })();
   }
   function closeAbnahme() { var o = $("abnahme"); if (o) o.remove(); }
   /* ---------- Speicherplatz (Büro/Admin): Belegung der 500 MB Gratis-Datenbank ---------- */
@@ -3528,11 +3739,15 @@ function openReport(pre) {
       function drawM() {
         mbox.textContent = "";
         d.maengel.forEach(function (m, i) {
-          var t = el("input", { type: "text", placeholder: "Mangel " + (i + 1), "aria-label": "Mangel " + (i + 1), maxlength: "400" }), f = el("input", { type: "text", placeholder: "Frist", "aria-label": "Frist " + (i + 1), maxlength: "20", style: "max-width:110px" }), x = el("button", { type: "button", "class": "btn", text: "×", "aria-label": "Mangel entfernen" });
-          t.value = m.t; f.value = m.frist; t.addEventListener("input", function () { m.t = t.value; }); f.addEventListener("input", function () { m.frist = f.value; });
+          var t = el("input", { type: "text", placeholder: "Mangel " + (i + 1), "aria-label": "Mangel " + (i + 1), maxlength: "400" }), f = el("button", { type: "button", "class": "btn", style: "flex:1;min-width:0;text-align:left", "aria-label": "Frist " + (i + 1) }), x = el("button", { type: "button", "class": "btn", text: "×", "aria-label": "Mangel entfernen" }), zb = el("button", { type: "button", "class": "btn", style: "width:100%;text-align:left", "aria-label": "Zuständig " + (i + 1) });
+          zb.textContent = (m.zu && m.zu.length) ? "👤 Zuständig: " + pNames(m.zu) : "👤 Zuständig wählen"; zb.addEventListener("click", function () { abPick(m.zu || [], function (v) { m.zu = v; drawM(); }); });
+          var ok = el("input", { type: "checkbox", id: "abok" + i }), okl = el("label", { "for": "abok" + i, "class": "chk", style: "font-size:.85rem" }, [ok, el("span", { text: "behoben" })]); ok.checked = !!m.ok;
+          t.value = m.t; f.textContent = m.frist ? "📅 " + abLang(m.frist) : "📅 Frist wählen"; t.addEventListener("input", function () { m.t = t.value; });
+          f.addEventListener("click", function () { abCal(m.frist, function (v) { m.frist = v; drawM(); }); });
+          ok.addEventListener("change", function () { m.ok = ok.checked; m.okts = ok.checked ? abIso(new Date()) : ""; });
           x.addEventListener("click", function () { d.maengel.splice(i, 1); drawM(); });
-          [t, f, x].forEach(function (c) { c.disabled = locked(); });
-          mbox.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center" }, [t, f, x]));
+          [t, f, x, zb].forEach(function (c) { c.disabled = locked(); });
+          mbox.appendChild(el("div", { style: "display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--line,#ddd);border-radius:10px" }, [t, el("div", { style: "display:flex;gap:6px;align-items:center" }, [el("span", { "class": "mut", style: "font-size:.85rem;white-space:nowrap", text: "Frist bis" }), f, x]), zb, okl]));
         });
         addM.disabled = locked();
       }
@@ -4784,7 +4999,7 @@ function openReport(pre) {
   function oqPut(o) { return oqRun("readwrite", function (st) { return st.put(o); }).then(function (x) { oqDot(); return x; }); }
   function oqDel(id) { return oqRun("readwrite", function (st) { return st.delete(id); }).then(function (x) { oqDot(); return x; }); }
   /* kleiner gelber Punkt am Menü-Knopf, solange noch etwas aufs Netz wartet */
-  var APP_VER = "1.2";
+  var APP_VER = "1.3";
   async function oqDot() {
     try {
       var b = document.getElementById("menuBtn"); if (!b) return;
@@ -4828,10 +5043,10 @@ function openReport(pre) {
   }
   window.addEventListener("online", function () { setTimeout(oqSync, 1500); setTimeout(rcPrefetch, 5000); });
   document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(oqSync, 1000); });
-  setInterval(function () { oqSync(); oqDot(); rcPrefetch(); }, 45000); setTimeout(function () { oqSync(); oqDot(); rcPrefetch(); }, 6000);
+  setInterval(function () { oqSync(); oqDot(); rcPrefetch(); aufCount(); }, 45000); setTimeout(function () { oqSync(); oqDot(); rcPrefetch(); aufCount(); }, 6000);
 
   /* ---------- Lese-Cache: Listen und Dateien werden bei Internet gespeichert und ohne Netz aus dem Handy angezeigt ---------- */
-  var RC_READ = /^(regie_list|abnahme_list|kalk_list|ausmass_list|dateien_list|datei_get|kunden_list|konten_list|members_list|firma_wochen|firma_reports|firma_spesen|reports_mine|foto_list|foto_list_site|foto_get|soll_get|firma_start_get|firma_kanton|firma_frei|firma_personen_tag|pending_users|speicher_info|inhaber_firmen|inhaber_abo_liste|my_member|abo_status|firma_code)$/;
+  var RC_READ = /^(regie_list|abnahme_list|abnahme_alle|aufgabe_list|personen_liste|kalk_list|ausmass_list|dateien_list|datei_get|kunden_list|konten_list|members_list|firma_wochen|firma_reports|firma_spesen|reports_mine|foto_list|foto_list_site|foto_get|soll_get|firma_start_get|firma_kanton|firma_frei|firma_personen_tag|pending_users|speicher_info|inhaber_firmen|inhaber_abo_liste|my_member|abo_status|firma_code)$/;
   function rcOn() { return navigator.onLine || !!window.indexedDB; }
   function rcStore(mode, fn) {
     return oqOpen().then(function (db) { return new Promise(function (res, rej) { var tx = db.transaction("c", mode), rq = fn(tx.objectStore("c")); tx.oncomplete = function () { res(rq && rq.result); }; tx.onerror = tx.onabort = function () { rej(tx.error); }; }); });
@@ -4875,7 +5090,7 @@ function openReport(pre) {
     try {
       var pick = function (n, a) { return sb.rpc(n, a).catch(function () { }); };
       await pick("my_member"); await pick("kalk_list"); await pick("ausmass_list"); await pick("soll_get");
-      if (isStaff()) { await pick("kunden_list"); }
+      await pick("abnahme_alle"); await pick("aufgabe_list"); await pick("personen_liste"); if (isStaff()) { await pick("kunden_list"); }
       var sl = []; try { sl = sitesList() || []; } catch (e) { }
       var cnt = 0;
       for (var i = 0; i < sl.length && cnt < 80; i++) { if (!navigator.onLine) return; var nr = sl[i].nr || sl[i][0]; if (!nr) continue; await pick("dateien_list", { p_site: nr }); cnt++; await new Promise(function (r) { setTimeout(r, 120); }); }
@@ -6065,9 +6280,9 @@ function openReport(pre) {
   }
   function openMenu() {
     if ($("menu")) { closeMenu(); return; }
-    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Baustellen-Info", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
+    var items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustellenrapport", function () { openReport(); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Aufgaben", openMaengel], ["Baustellen-Info", function () { openColors(); }], ["Stundenübersicht", function () { openGleit(); }], ["Feiertage", function () { openFeiertage(); }], ["Farbverbrauch-Rechner", openFV]];
     if (isAdmin()) { items.push(["Spesen", openSpesen]); items.push(["Kalkulator", null, [["Maler-Kalkulator", openKK], ["Novacolor", openNC], ["Naturofloor", openNF]]]); items.push(["Ausmass", openM2]); items.push(["Dateien ablegen", openDateien]); items.push(["Auswertung pro Baustelle", openBilanz]); items.push(["Wochen-Status", openWstat], ["Speicherplatz", openSpeicher]); items.push(["Kunden", openKunden]); items.push(["Neue Registrierungen & Mitarbeiter", openMembers]); items.push(["Temporäre Personen", openTemp]); items.push(["Jahresabschluss", openAbschluss]); }
-    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Speicherplatz", openSpeicher], ["Kunden", openKunden], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
+    if (isBuero()) { items = [["Baustellen-Liste", function () { openSites("search"); }], ["Baustelle hinzufügen", function () { openSites("add"); }], ["Regie-Rapport", function () { openRegie(); }], ["Abnahmeprotokoll", function () { openAbnahme(); }], ["Aufgaben", openMaengel], ["Baustellen-Info", function () { openColors(); }], ["Dateien ablegen", openDateien], ["Auswertung pro Baustelle", openBilanz], ["Wochen-Status", openWstat], ["Speicherplatz", openSpeicher], ["Kunden", openKunden], ["Mitarbeiter hinzufügen", openMembers], ["Temporäre Personen", openTemp]]; }
     if (isOwner()) { items.push(["Monats- / Jahresübersicht", openUebersicht]); items.push(["Inhaber: Abos", openAbos]); items.push(["Inhaber: Firma wechseln", openOwner]); }
     (function () { /* Stundenübersicht und Monats-/Jahresübersicht zusammen in einem aufklappbaren Eintrag */
       var iS = -1, iU = -1; items.forEach(function (it, i) { if (it[0] === "Stundenübersicht") iS = i; if (it[0] === "Monats- / Jahresübersicht") iU = i; });
@@ -6082,7 +6297,7 @@ function openReport(pre) {
     if (memberGet() && memberGet().rolle === "temporaer") items = items.filter(function (it) { return it[0] !== "Farbverbrauch-Rechner"; }); /* Temporäre brauchen den Farbverbrauch-Rechner nicht */
     items.push(["Nutzung & Datenschutz", openLegal]);
     if (isAdmin() || isBuero()) { /* Aufgeräumtes Menü: Alltag oben, Rest in vier Gruppen */
-      var G = { "Baustellen": ["Baustellen-Liste", "Baustelle hinzufügen", "Baustellen-Info", "Kunden", "Dateien ablegen"], "Auswertung": ["Stunden pro Mitarbeiter", "Stundenübersicht", "Monats- / Jahresübersicht", "Auswertung pro Baustelle", "Wochen-Status", "Spesen"], "Rechner": ["Maler-Kalkulator", "Novacolor", "Naturofloor", "Ausmass", "Farbverbrauch-Rechner"] }, D = ["Baustellenrapport", "Regie-Rapport", "Abnahmeprotokoll"];
+      var G = { "Baustellen": ["Baustellen-Liste", "Baustelle hinzufügen", "Baustellen-Info", "Kunden", "Dateien ablegen"], "Auswertung": ["Stunden pro Mitarbeiter", "Stundenübersicht", "Monats- / Jahresübersicht", "Auswertung pro Baustelle", "Wochen-Status", "Spesen"], "Rechner": ["Maler-Kalkulator", "Novacolor", "Naturofloor", "Ausmass", "Farbverbrauch-Rechner"] }, D = ["Baustellenrapport", "Regie-Rapport", "Abnahmeprotokoll", "Aufgaben"];
       var flat = []; items.forEach(function (it) { if (it[2]) it[2].forEach(function (c) { flat.push(c); }); else flat.push(it); });
       var top = [], grp = { "Baustellen": [], "Auswertung": [], "Rechner": [], "Verwaltung": [] };
       D.forEach(function (n) { flat.forEach(function (it) { if (it[0] === n) top.push(it); }); });
@@ -6097,7 +6312,7 @@ function openReport(pre) {
         b2.addEventListener("click", function () { var open = sub.hidden; sub.hidden = !open; b2.setAttribute("aria-expanded", String(open)); b2.textContent = it[0] + (open ? "  ▴" : "  ▾"); if (open) setTimeout(function () { try { sub.lastChild.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) { } }, 30); });
         box.appendChild(b2); box.appendChild(sub); return;
       }
-      var b = el("button", { type: "button", "class": "btn", text: it[0] }); b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b);
+      var b = el("button", { type: "button", "class": "btn", text: it[0] }); if (it[0] === "Aufgaben" && AUF_N) { b.setAttribute("aria-label", "Aufgaben, " + AUF_N + " offen für dich"); b.appendChild(el("span", { "aria-hidden": "true", text: String(AUF_N), style: "display:inline-block;min-width:22px;height:22px;line-height:22px;margin-left:8px;padding:0 6px;border-radius:11px;background:#d32f2f;color:#fff;font-size:.8rem;font-weight:700;text-align:center;vertical-align:middle" })); } b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b);
     });
     box.appendChild(el("div", { style: "text-align:center;color:var(--muted);font-size:.8rem;padding:10px 0 4px", text: "Version " + APP_VER }));
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
