@@ -609,7 +609,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
         <div class="actions"><button type="submit" class="btn primary" id="doLogin">Anmelden</button><button type="button" class="btn" id="doSignup">Registrieren</button><button type="button" class="btn" id="regBack" hidden>Zurück zur Anmeldung</button></div>
       </div>
       <p id="legalNote" style="margin:10px 0 0;font-size:12px;opacity:.8">Privater Test. Mit dem Anmelden gelten die <a href="#" id="legalLink">Nutzung &amp; Datenschutz</a>.</p>
-      <div id="tempWrap" style="margin-top:12px"><button type="button" class="btn" id="tempToggle" aria-expanded="false">Temporärer Zugang (Code &amp; PIN)</button><div id="tempBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden><label for="tCode"><span class="lbl">Code</span><input type="text" id="tCode" inputmode="numeric" autocomplete="off" placeholder="TEMP-1234"></label><label for="tPin"><span class="lbl">PIN</span><input type="password" id="tPin" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 Ziffern"></label><div class="actions"><button type="button" class="btn primary" id="tGo">Mit Code anmelden</button></div><div class="status">Code und PIN bekommst du vom Chef.</div></div></div>
+      <div id="tempWrap" style="margin-top:12px"><button type="button" class="btn" id="tempToggle" aria-expanded="false">Temporärer Zugang (Code &amp; PIN)</button><div id="tempBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden><label for="tCode"><span class="lbl">Code</span><div style="display:flex;align-items:center;gap:0"><span aria-hidden="true" style="padding:0 10px;font-weight:700;white-space:nowrap;align-self:stretch;display:flex;align-items:center;border:1px solid var(--line,#ccc);border-right:0;border-radius:8px 0 0 8px;background:rgba(128,128,128,.12)">TEMP-</span><input type="text" id="tCode" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="1234" aria-label="Code, 4 Ziffern nach TEMP-" style="flex:1;min-width:0;border-radius:0 8px 8px 0"></div></label><label for="tPin"><span class="lbl">PIN</span><input type="password" id="tPin" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 Ziffern"></label><div class="actions"><button type="button" class="btn primary" id="tGo">Mit Code anmelden</button></div><div class="status">Code und PIN bekommst du vom Chef.</div></div></div>
       <div id="authIn" class="actions" hidden><button type="button" class="btn" id="syncNow">Jetzt synchronisieren</button><button type="button" class="btn" id="pwBtn">Passwort ändern</button><button type="button" class="btn" id="doLogout">Abmelden</button></div>
       <div id="pwBox" style="display:flex;flex-direction:column;gap:10px;margin-top:10px" hidden>
         <label for="pwNeu"><span class="lbl">Neues Passwort</span><input type="password" id="pwNeu" autocomplete="new-password" minlength="6" placeholder="mindestens 6 Zeichen"></label>
@@ -1114,7 +1114,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   async function doTempLogin() {
     if (!sb) { authMsg(cloudOff || "Cloud nicht verfügbar.", "bad"); return; }
     var c = $("tCode").value.replace(/\D/g, ""), p = $("tPin").value.replace(/\D/g, "");
-    if (c.length !== 4 || p.length !== 4) { authMsg("Bitte Code (4 Ziffern, z. B. TEMP-1234) und PIN (4 Ziffern) eingeben.", "bad"); return; }
+    if (c.length !== 4 || p.length !== 4) { authMsg("Bitte die 4 Ziffern nach «TEMP-» und die PIN (4 Ziffern) eingeben.", "bad"); return; }
     if (!navigator.onLine) { authMsg("Keine Verbindung. Zum Anmelden brauchst du Internet.", "bad"); return; }
     authMsg("Einen Moment …");
     try {
@@ -4785,7 +4785,7 @@ function openReport(pre) {
   function oqPut(o) { return oqRun("readwrite", function (st) { return st.put(o); }).then(function (x) { oqDot(); return x; }); }
   function oqDel(id) { return oqRun("readwrite", function (st) { return st.delete(id); }).then(function (x) { oqDot(); return x; }); }
   /* kleiner gelber Punkt am Menü-Knopf, solange noch etwas aufs Netz wartet */
-  var APP_VER = "1.0";
+  var APP_VER = "1.1";
   async function oqDot() {
     try {
       var b = document.getElementById("menuBtn"); if (!b) return;
