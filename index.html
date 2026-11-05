@@ -3482,13 +3482,21 @@ function openReport(pre) {
     document.body.appendChild(ov);
   }
   var AUF_N = 0;
+  function aufBadge() {
+    try {
+      var bs = document.querySelectorAll("#menu .drawer > button"); Array.prototype.forEach.call(bs, function (b) {
+        if (!/^Aufgaben/.test(b.textContent)) return; var o = b.querySelector(".aufn"); if (o) o.remove();
+        if (AUF_N) { b.appendChild(el("span", { "class": "aufn", "aria-hidden": "true", text: String(AUF_N), style: "display:inline-block;min-width:22px;height:22px;line-height:22px;margin-left:8px;padding:0 6px;border-radius:11px;background:#d32f2f;color:#fff;font-size:.8rem;font-weight:700;text-align:center;vertical-align:middle" })); b.setAttribute("aria-label", "Aufgaben, " + AUF_N + " offen für dich"); }
+      });
+    } catch (e) { }
+  }
   async function aufCount() {
     try {
       if (!sb || !user || isDemo()) return; var me = myMail(), n = 0; if (!me) return;
       var ra = await Promise.all([sb.rpc("aufgabe_list").catch(function () { return {}; }), sb.rpc("abnahme_alle").catch(function () { return {}; })]);
       (ra[0].data || []).forEach(function (a) { var d = a.data || {}; if (!d.ok && Array.isArray(d.zu) && d.zu.indexOf(me) >= 0) n++; });
       (ra[1].data || []).forEach(function (r) { abNorm(r.data).maengel.forEach(function (m) { if (!m.ok && m.zu && m.zu.indexOf(me) >= 0) n++; }); });
-      AUF_N = n;
+      AUF_N = n; aufBadge();
     } catch (e) { }
   }
   function closeAufForm() { var o = $("aufform"); if (o) o.remove(); }
@@ -3579,7 +3587,7 @@ function openReport(pre) {
     }
     neu.addEventListener("click", function () { form(null); });
     function draw() {
-      fill();
+      fill(); try { var me0 = myMail(), n0 = 0; items().forEach(function (x) { if (!x.ok && x.zu.indexOf(me0) >= 0) n0++; }); AUF_N = n0; } catch (e) { }
       var all = items().filter(function (x) { return (!bsel || x.site === bsel) && (!psel || (psel === "-" ? !x.zu.length : x.zu.indexOf(psel) >= 0)); });
       var offen = all.filter(function (x) { return !x.ok; }), erl = all.filter(function (x) { return x.ok; }), ue = offen.filter(function (x) { return x.ue; }).length;
       chips.textContent = "";
@@ -6314,7 +6322,7 @@ function openReport(pre) {
       }
       var b = el("button", { type: "button", "class": "btn", text: it[0] }); if (it[0] === "Aufgaben" && AUF_N) { b.setAttribute("aria-label", "Aufgaben, " + AUF_N + " offen für dich"); b.appendChild(el("span", { "aria-hidden": "true", text: String(AUF_N), style: "display:inline-block;min-width:22px;height:22px;line-height:22px;margin-left:8px;padding:0 6px;border-radius:11px;background:#d32f2f;color:#fff;font-size:.8rem;font-weight:700;text-align:center;vertical-align:middle" })); } b.addEventListener("click", function () { closeMenu(); it[1](); }); box.appendChild(b);
     });
-    box.appendChild(el("div", { style: "text-align:center;color:var(--muted);font-size:.8rem;padding:10px 0 4px", text: "Version " + APP_VER }));
+    box.appendChild(el("div", { style: "text-align:center;color:var(--muted);font-size:.8rem;padding:10px 0 4px", text: "Version " + APP_VER })); setTimeout(function () { aufCount(); }, 150);
     var ov = el("div", { "class": "overlay menu", id: "menu", role: "dialog", "aria-modal": "true", "aria-label": "Menü" }, [box]);
     ov.addEventListener("click", function (ev) { if (ev.target === ov) closeMenu(); });
     document.body.appendChild(ov); $("menuBtn").setAttribute("aria-expanded", "true");
