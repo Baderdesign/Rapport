@@ -1,5 +1,5 @@
 /* Service Worker: macht die App installierbar und startet sie auch ohne Netz. Liegt im selben Ordner wie index.html. */
-var CACHE = "wochenrapport-v3-301";
+var CACHE = "wochenrapport-v3-303";
 var CORE = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 var LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
@@ -42,7 +42,7 @@ self.addEventListener("fetch", function (e) {
 /* Mitteilungen (Push): zeigt eine Nachricht und öffnet beim Antippen die Aufgaben */
 self.addEventListener("push", function (e) {
   var d = {}; try { d = e.data.json(); } catch (x) { d = { title: "Wochenrapport", body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(d.title || "Wochenrapport", { body: d.body || "", tag: d.tag || undefined, icon: "icon-192.png", badge: "icon-192.png", data: { url: d.url || "./?aufgaben=1" } }));
+  e.waitUntil(self.registration.showNotification(d.title || "Wochenrapport", { body: d.body || "", tag: d.tag || undefined, icon: "icon-192.png", badge: "icon-192.png", vibrate: [250, 120, 250], renotify: !!d.tag, data: { url: d.url || "./?aufgaben=1" } }));
 });
 self.addEventListener("notificationclick", function (e) {
   e.notification.close();
