@@ -328,17 +328,23 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .foot p { margin: 0; color: var(--muted); font-size: .9rem; max-width: 52ch; }
 .status { color: var(--muted); font-size: .85rem; min-height: 1.2em; }
 .sigrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
-.sigt { border: 2px dashed var(--line); border-radius: 10px; min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; background: var(--surface-2); color: var(--muted); font-size: .9rem; padding: 8px; text-align: center; }
+.sigt { border: 2px dashed var(--line); border-radius: 10px; min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; background: var(--surface-2); color: var(--muted); font-size: .9rem; padding: 8px; text-align: center; }
 .sigt.done { border: 2px solid var(--ok); background: #fff; color: #5a6776; cursor: default; }
 .sigt img { max-width: 100%; max-height: 56px; }
 .sigt small { font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
-.bkstate { display: flex; gap: 10px; align-items: center; background: #eaf5ee; color: var(--ok); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
-.bkstate b { display: block; font-size: .95rem; } .bkstate small { display: block; color: #4b6b58; font-size: .82rem; }
+.foot.c { flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: center; gap: 8px; padding: 12px 14px; }
+.foot.c .btn { width: 100%; }
+.ft { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.bkbtns { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.bkstate { display: flex; gap: 8px; justify-content: center; align-items: center; background: #eaf5ee; color: var(--ok); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+.bkstate b { font-size: .95rem; } .bkstate small { color: #4b6b58; font-size: .85rem; }
 .bkstate.warnbox { background: #fff6e0; color: #8a5a00; } .bkstate.warnbox small { color: #6b5a30; }
-.bkchk { width: 24px; height: 24px; border-radius: 50%; background: currentColor; flex: none; display: flex; align-items: center; justify-content: center; }
+.bkchk { width: 20px; height: 20px; font-size: .8rem; border-radius: 50%; background: currentColor; flex: none; display: flex; align-items: center; justify-content: center; }
 .bkchk { color: inherit; } .bkstate .bkchk { color: #fff; background: var(--ok); } .bkstate.warnbox .bkchk { background: #c98a00; }
-.bkmore summary { cursor: pointer; color: var(--muted); padding: 8px 2px; font-size: .95rem; }
-.bkmore p { margin: 4px 0 8px; }
+.bkmore summary { cursor: pointer; color: var(--muted); padding: 6px 2px; font-size: .95rem; list-style: none; }
+.bkmore summary::-webkit-details-marker { display: none; }
+.bkmore summary::after { content: " ▾"; }
+.bkmore[open] summary::after { content: " ▴"; }
 .status.ok { color: var(--ok); }
 .status.bad { color: var(--bad); }
 
@@ -634,39 +640,28 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   <div class="summary" id="summary"></div>
   <div class="days" id="days"></div>
 
-  <div class="foot">
-    <div style="width:100%">
-      <p><b>Unterschrift (freiwillig):</b> Mit dem Finger unterschreiben, sie erscheint im PDF auf der Visum-Linie. Ohne Unterschrift bleiben die Linien leer, zum Unterschreiben von Hand.</p>
-      <div class="sigrow" id="sigBox"></div>
-    </div>
+  <div class="foot c">
+    <div class="ft">Unterschrift (freiwillig)</div>
+    <div class="sigrow" id="sigBox"></div>
   </div>
 
-  <div class="foot">
-    <div>
-      <p>Die Woche wird laufend auf diesem Gerät gespeichert und, wenn du angemeldet bist, in die Cloud synchronisiert. Am Ende der Woche erzeugt der Knopf das PDF im Layout deines Wochenrapports, mit den Visum-Linien, leer oder mit Unterschrift.</p>
-      <div class="status" id="status" role="status"></div>
-    </div>
+  <div class="foot c">
     <button class="btn primary" id="pdf" type="button">Woche speichern und PDF erstellen</button>
     <button class="btn" id="pdf2" type="button">PDF für E-Mail (Gmail) öffnen</button>
+    <div class="status" id="status" role="status"></div>
   </div>
 
-  <div class="foot">
-    <div style="width:100%">
-      <p><b>Sicherung</b></p>
-      <div class="bkstate" id="bkState"></div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;width:100%">
-      <button class="btn primary" id="bkPdf" type="button">Alle Wochen als PDF</button>
-      <details class="bkmore"><summary>Weitere Optionen</summary>
-        <p>Zusätzlich eine Kopie als Datei auf dein Gerät speichern. «Sicherung laden» spielt sie wieder ein.</p>
-        <div class="status" id="backupInfo"></div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <button class="btn" id="bkExport" type="button">Zusätzlich als Datei sichern</button>
-          <button class="btn" id="bkImport" type="button">Sicherung laden</button>
-          <input type="file" id="bkFile" accept="application/json,.json" hidden>
-        </div>
-      </details>
-    </div>
+  <div class="foot c">
+    <div class="bkstate" id="bkState"></div>
+    <button class="btn primary" id="bkPdf" type="button">Alle Wochen als PDF</button>
+    <details class="bkmore"><summary>Weitere Optionen</summary>
+      <div class="status" id="backupInfo"></div>
+      <div class="bkbtns">
+        <button class="btn" id="bkExport" type="button">Zusätzlich als Datei sichern</button>
+        <button class="btn" id="bkImport" type="button">Sicherung laden</button>
+        <input type="file" id="bkFile" accept="application/json,.json" hidden>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -3318,7 +3313,7 @@ function openReport(pre) {
     var sg = state.sig = sigNorm(state.sig);
     [["m", "Mitarbeiter"], ["v", "Vorgesetzter"]].forEach(function (p) {
       var k = p[0], g = sg[k], t = el("div", { "class": "sigt" + (g ? " done" : "") });
-      t.appendChild(el("small", { text: "Visum " + p[1] }));
+      t.appendChild(el("small", { text: p[1] }));
       if (g) {
         t.appendChild(el("img", { src: g.img, alt: "Unterschrift" }));
         t.appendChild(el("small", { text: (g.name ? g.name + " · " : "") + g.ts }));
@@ -3326,7 +3321,7 @@ function openReport(pre) {
         x.addEventListener("click", function (e) { e.stopPropagation(); state.sig[k] = null; persist(); renderSig(); });
         t.appendChild(x);
       } else {
-        t.appendChild(el("span", { text: "Tippen zum Unterschreiben" }));
+        t.appendChild(el("span", { text: "Tippen" }));
         t.addEventListener("click", function () {
           sigPad(function (out) { var d = new Date(); state.sig[k] = { img: out.img, w: out.w, h: out.h, name: k === "m" ? (state.name || "").trim() : "", ts: dmy(d) + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " Uhr" }; persist(); renderSig(); });
         });
@@ -6451,7 +6446,7 @@ function openReport(pre) {
     var ok = !!(user || isDemo()) && !cloudOff;
     b.className = "bkstate" + (ok ? "" : " warnbox"); b.textContent = "";
     b.appendChild(el("span", { "class": "bkchk", text: ok ? "✓" : "!" }));
-    var tx = el("span"); tx.appendChild(el("b", { text: ok ? "Automatisch gesichert" : "Nur auf diesem Gerät" })); tx.appendChild(el("small", { text: ok ? "In der Cloud in Zürich." : "Melde dich an, dann wird alles automatisch gesichert." }));
+    var tx = el("span"); tx.appendChild(el("b", { text: ok ? "Automatisch gesichert" : "Nur auf diesem Gerät" })); tx.appendChild(el("small", { text: ok ? " · Cloud Zürich" : " · bitte anmelden" }));
     b.appendChild(tx);
   }
   function exportBackup() {
