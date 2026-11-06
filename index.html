@@ -327,6 +327,18 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .foot { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
 .foot p { margin: 0; color: var(--muted); font-size: .9rem; max-width: 52ch; }
 .status { color: var(--muted); font-size: .85rem; min-height: 1.2em; }
+.sigrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.sigt { border: 2px dashed var(--line); border-radius: 10px; min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; background: var(--surface-2); color: var(--muted); font-size: .9rem; padding: 8px; text-align: center; }
+.sigt.done { border: 2px solid var(--ok); background: #fff; color: #5a6776; cursor: default; }
+.sigt img { max-width: 100%; max-height: 56px; }
+.sigt small { font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+.bkstate { display: flex; gap: 10px; align-items: center; background: #eaf5ee; color: var(--ok); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+.bkstate b { display: block; font-size: .95rem; } .bkstate small { display: block; color: #4b6b58; font-size: .82rem; }
+.bkstate.warnbox { background: #fff6e0; color: #8a5a00; } .bkstate.warnbox small { color: #6b5a30; }
+.bkchk { width: 24px; height: 24px; border-radius: 50%; background: currentColor; flex: none; display: flex; align-items: center; justify-content: center; }
+.bkchk { color: inherit; } .bkstate .bkchk { color: #fff; background: var(--ok); } .bkstate.warnbox .bkchk { background: #c98a00; }
+.bkmore summary { cursor: pointer; color: var(--muted); padding: 8px 2px; font-size: .95rem; }
+.bkmore p { margin: 4px 0 8px; }
 .status.ok { color: var(--ok); }
 .status.bad { color: var(--bad); }
 
@@ -623,8 +635,15 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   <div class="days" id="days"></div>
 
   <div class="foot">
+    <div style="width:100%">
+      <p><b>Unterschrift (freiwillig):</b> Mit dem Finger unterschreiben, sie erscheint im PDF auf der Visum-Linie. Ohne Unterschrift bleiben die Linien leer, zum Unterschreiben von Hand.</p>
+      <div class="sigrow" id="sigBox"></div>
+    </div>
+  </div>
+
+  <div class="foot">
     <div>
-      <p>Die Woche wird laufend auf diesem Gerät gespeichert und, wenn du angemeldet bist, in die Cloud synchronisiert. Am Ende der Woche erzeugt der Knopf das PDF im Layout deines Wochenrapports, mit leeren Feldern für beide Visa.</p>
+      <p>Die Woche wird laufend auf diesem Gerät gespeichert und, wenn du angemeldet bist, in die Cloud synchronisiert. Am Ende der Woche erzeugt der Knopf das PDF im Layout deines Wochenrapports, mit den Visum-Linien, leer oder mit Unterschrift.</p>
       <div class="status" id="status" role="status"></div>
     </div>
     <button class="btn primary" id="pdf" type="button">Woche speichern und PDF erstellen</button>
@@ -632,15 +651,21 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   </div>
 
   <div class="foot">
-    <div>
-      <p><b>Sicherung:</b> Speichere alle Wochen zusätzlich als Datei. So bleiben sie erhalten, auch wenn die Webseite einmal nicht erreichbar ist oder sich die Adresse ändert. «Sicherung laden» spielt sie wieder ein. Das PDF dient zum Ablegen und Drucken.</p>
-      <div class="status" id="backupInfo"></div>
+    <div style="width:100%">
+      <p><b>Sicherung</b></p>
+      <div class="bkstate" id="bkState"></div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">
-      <button class="btn primary" id="bkExport" type="button">Alle Wochen sichern</button>
+    <div style="display:flex;flex-direction:column;gap:8px;width:100%">
       <button class="btn primary" id="bkPdf" type="button">Alle Wochen als PDF</button>
-      <button class="btn primary" id="bkImport" type="button">Sicherung laden</button>
-      <input type="file" id="bkFile" accept="application/json,.json" hidden>
+      <details class="bkmore"><summary>Weitere Optionen</summary>
+        <p>Zusätzlich eine Kopie als Datei auf dein Gerät speichern. «Sicherung laden» spielt sie wieder ein.</p>
+        <div class="status" id="backupInfo"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn" id="bkExport" type="button">Zusätzlich als Datei sichern</button>
+          <button class="btn" id="bkImport" type="button">Sicherung laden</button>
+          <input type="file" id="bkFile" accept="application/json,.json" hidden>
+        </div>
+      </details>
     </div>
   </div>
 </div>
@@ -737,7 +762,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   function isEmptyEntry(e) { return !(e.nr || e.obj || e.von || e.bis || e.pause || e.hin || e.zur || e.abs); }
 
   /* ---------- Zustand ---------- */
-  var state = { week: key(mondayOf(new Date())), name: "", days: emptyWeek(), sp: {} };
+  var state = { week: key(mondayOf(new Date())), name: "", days: emptyWeek(), sp: {}, sig: { m: null, v: null } };
   var index = {}; /* weekKey -> Gesamtminuten */
   var dirty = false, saveTimer = null, sb = null, user = null, flushing = Promise.resolve(), syncBusy = false, syncErr = "", cloudOff = "";
 
@@ -968,7 +993,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     dirty = true;
     clearTimeout(saveTimer);
     var run = function () {
-      var wk = state.week, body = { days: serialize(), sp: state.sp || {}, name: state.name, sent: state.sent || "", updated: new Date().toISOString() };
+      var wk = state.week, body = { days: serialize(), sp: state.sp || {}, sig: sigNorm(state.sig), name: state.name, sent: state.sent || "", updated: new Date().toISOString() };
       lsSet(WK + wk, JSON.stringify(body)); lsSet("wr2:name", state.name);
       index[wk] = totals(state.days).tot; fillPicker();
       setStatus("Gespeichert um " + nowHM() + (user ? (navigator.onLine ? "" : " · offline, wird später synchronisiert") : " · nur auf diesem Gerät"), "ok");
@@ -984,7 +1009,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   function loadWeek(wk) {
     state.week = wk; dirty = false;
     var o = localWeek(wk);
-    state.days = deserialize(o && o.days); state.sp = (o && o.sp && typeof o.sp === "object") ? o.sp : {}; state.sent = (o && o.sent) || "";
+    state.days = deserialize(o && o.days); state.sp = (o && o.sp && typeof o.sp === "object") ? o.sp : {}; state.sent = (o && o.sent) || ""; state.sig = sigNorm(o && o.sig);
     state.name = (o && o.name) || lsGet("wr2:name") || "";
     renderAll();
   }
@@ -1217,7 +1242,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var mon = fromKey(state.week), fri = addDays(mon, 4), iso = isoWeek(mon);
     $("kw").textContent = "KW " + iso.w + " / " + iso.y;
     $("dates").textContent = dm(mon) + " – " + dmy(fri);
-    $("name").value = state.name;
+    $("name").value = state.name; renderSig();
     var html = "", od = openDayIdx(mon);
     state.days.forEach(function (rows, di) {
       html += '<section class="day' + (di === od ? '' : ' coll') + '" data-day="' + di + '"><button type="button" class="dsum" data-ds="' + di + '" aria-label="' + DAYS[di] + ' öffnen"></button><div class="dayhead"><h2>' + DAYS[di] + '<span>' + dm(addDays(mon, di)) + '</span></h2>' + typButtons(di, rows) + '<div class="daytotal" data-dt></div></div>' +
@@ -1424,6 +1449,11 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text("Visum Mitarbeiter:", cx[3], vy); doc.line(cx[3] + 28, vy + 0.5, cx[6] - 4, vy + 0.5);
     doc.text("Visum Vorgesetzter", cx[6], vy); doc.line(cx[6] + 29, vy + 0.5, mx + W, vy + 0.5);
+    var sgn = sigNorm(st.sig);
+    [[sgn.m, cx[3] + 28, cx[6] - 4], [sgn.v, cx[6] + 29, mx + W]].forEach(function (z) {
+      var g = z[0]; if (!g) return;
+      try { var mw = z[2] - z[1] - 2, sh = 8, sw = g.w && g.h ? sh * g.w / g.h : 30; if (sw > mw) { sw = mw; sh = g.w ? sw * g.h / g.w : 8; } doc.addImage(g.img, "PNG", z[1] + 1, vy + 0.5 - sh, sw, sh); } catch (e) { }
+    });
     return doc;
   }
   window.__buildPdf = buildPdf; window.__state = state; window.__jahrCalc = jahrCalc; window.__buildMonatPdf = function () { return buildMonatPdf.apply(null, arguments); }; window.__buildJahrPdf = function () { return buildJahrPdf.apply(null, arguments); }; window.__rpBuild = rpBuild; window.__buildRapportPdf = buildRapportPdf;
@@ -3278,6 +3308,32 @@ function openReport(pre) {
     window.addEventListener("resize", fit); window.addEventListener("orientationchange", function () { setTimeout(fit, 250); });
     document.body.appendChild(wrap); fit(); setTimeout(fit, 300);
   }
+  function sigNorm(o) {
+    var r = { m: null, v: null }; o = o || {};
+    ["m", "v"].forEach(function (k) { var g = o[k]; if (g && typeof g === "object" && typeof g.img === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(g.img) && g.img.length < 40000) r[k] = { img: g.img, name: String(g.name || "").slice(0, 80), ts: String(g.ts || "").slice(0, 40), w: +g.w || 0, h: +g.h || 0 }; });
+    return r;
+  }
+  function renderSig() {
+    var box = $("sigBox"); if (!box) return; box.textContent = "";
+    var sg = state.sig = sigNorm(state.sig);
+    [["m", "Mitarbeiter"], ["v", "Vorgesetzter"]].forEach(function (p) {
+      var k = p[0], g = sg[k], t = el("div", { "class": "sigt" + (g ? " done" : "") });
+      t.appendChild(el("small", { text: "Visum " + p[1] }));
+      if (g) {
+        t.appendChild(el("img", { src: g.img, alt: "Unterschrift" }));
+        t.appendChild(el("small", { text: (g.name ? g.name + " · " : "") + g.ts }));
+        var x = el("button", { type: "button", "class": "btn", text: "Löschen", style: "height:30px;padding:0 10px;font-size:.8rem" });
+        x.addEventListener("click", function (e) { e.stopPropagation(); state.sig[k] = null; persist(); renderSig(); });
+        t.appendChild(x);
+      } else {
+        t.appendChild(el("span", { text: "Tippen zum Unterschreiben" }));
+        t.addEventListener("click", function () {
+          sigPad(function (out) { var d = new Date(); state.sig[k] = { img: out.img, w: out.w, h: out.h, name: k === "m" ? (state.name || "").trim() : "", ts: dmy(d) + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " Uhr" }; persist(); renderSig(); });
+        });
+      }
+      box.appendChild(t);
+    });
+  }
   function rgNorm(d) {
     var b = rgBlank(); d = d || {};
     ["sent", "rnr", "datum", "auftraggeber", "baustelle", "montag", "arbeiten", "transporte", "total"].forEach(function (k) { if (typeof d[k] === "string") b[k] = d[k]; });
@@ -3633,7 +3689,7 @@ function openReport(pre) {
       var all = items().filter(function (x) { return (!bsel || x.site === bsel) && (!psel || (psel === "-" ? !x.zu.length : x.zu.indexOf(psel) >= 0)); });
       var offen = all.filter(function (x) { return !x.ok; }), erl = all.filter(function (x) { return x.ok; }), ue = offen.filter(function (x) { return x.ue; }).length;
       chips.textContent = "";
-      [["offen", "Offen (" + offen.length + ")"], ["ue", "Überfällig (" + ue + ")"], ["behoben", "Erledigt (" + erl.length + ")"], ["alle", "Alle (" + all.length + ")"]].forEach(function (c) { var b = el("button", { type: "button", "class": "btn" + (filt === c[0] ? " primary" : ""), style: "flex:1;padding:10px 2px;font-size:.82rem", text: c[1] }); b.setAttribute("aria-pressed", filt === c[0] ? "true" : "false"); b.addEventListener("click", function () { filt = c[0]; draw(); }); chips.appendChild(b); });
+      [["offen", "Offen", offen.length], ["ue", "Überfällig", ue], ["behoben", "Erledigt", erl.length], ["alle", "Alle", all.length]].forEach(function (c) { var b = el("button", { type: "button", "class": "btn" + (filt === c[0] ? " primary" : ""), style: "flex:1;min-width:0;padding:8px 2px;font-size:.78rem;line-height:1.25;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px" }, [el("span", { text: c[1], style: "white-space:nowrap" }), el("b", { text: String(c[2]), style: "font-size:1rem" })]); b.setAttribute("aria-label", c[1] + " " + c[2]); b.setAttribute("aria-pressed", filt === c[0] ? "true" : "false"); b.addEventListener("click", function () { filt = c[0]; draw(); }); chips.appendChild(b); });
       var vis = (filt === "offen" ? offen : filt === "ue" ? offen.filter(function (x) { return x.ue; }) : filt === "behoben" ? erl : all).slice();
       vis.sort(function (a, b) { var fa = a.frist || "9999-99", fb = b.frist || "9999-99"; return (sortUp ? 1 : -1) * fa.localeCompare(fb); });
       list.textContent = ""; list.hidden = !vis.length;
@@ -6390,7 +6446,13 @@ function openReport(pre) {
   /* ---------- Sicherung als Datei ---------- */
   function renderBackupInfo() {
     var t = lsGet("wr2:backup"), d = t ? new Date(t) : null;
-    $("backupInfo").textContent = (d ? "Letzte Sicherung: " + dmy(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + "." : "Noch keine Sicherung erstellt.") + (user ? "" : " Ohne Anmeldung liegen die Wochen nur auf diesem Gerät.");
+    $("backupInfo").textContent = d ? "Letzte Datei-Sicherung: " + dmy(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + "." : "";
+    var b = $("bkState"); if (!b) return;
+    var ok = !!(user || isDemo()) && !cloudOff;
+    b.className = "bkstate" + (ok ? "" : " warnbox"); b.textContent = "";
+    b.appendChild(el("span", { "class": "bkchk", text: ok ? "✓" : "!" }));
+    var tx = el("span"); tx.appendChild(el("b", { text: ok ? "Automatisch gesichert" : "Nur auf diesem Gerät" })); tx.appendChild(el("small", { text: ok ? "In der Cloud in Zürich." : "Melde dich an, dann wird alles automatisch gesichert." }));
+    b.appendChild(tx);
   }
   function exportBackup() {
     persist(true);
@@ -6418,7 +6480,7 @@ function openReport(pre) {
       keys.forEach(function (wk) {
         var o = localWeek(wk); if (!o) return;
         var days = deserialize(o.days); if (!hasData(days)) return;
-        doc = buildPdf({ week: wk, name: o.name || state.name || "", days: days }, doc); n++;
+        doc = buildPdf({ week: wk, name: o.name || state.name || "", days: days, sig: o.sig }, doc); n++;
       });
     } catch (e) { doc = null; }
     if (!J || !doc) { setStatus(n || !J ? "Das PDF konnte nicht erstellt werden. Seite neu laden und nochmals versuchen." : "Es gibt noch keine Wochen mit Einträgen.", n || !J ? "bad" : ""); return; }
