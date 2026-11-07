@@ -707,6 +707,9 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
   function fmtT(min) { return Math.floor(min / 60) + "." + pad(min % 60); }
   function num(s) { var v = parseFloat(String(s == null ? "" : s).replace(",", ".")); return isFinite(v) && v > 0 ? v : 0; }
   function hm(min) { min = Math.round(min); return Math.floor(min / 60) + "." + pad(min % 60); }
+  function hdn(min) { return Math.round(Math.round(min) / 60 * 100) / 100; }
+  function hd(min) { return hdn(min).toFixed(2); }
+  function hdS(min) { var v = hdn(min); return (v < 0 ? "-" : "") + Math.abs(v).toFixed(2); }
   function fmtAbs(v) { return v ? String(Math.round(v * 100) / 100).replace(".", ",") : ""; }
   function wins(e) { /* bis zu 3 Zeitfenster pro Eintrag: von/bis, von2/bis2, von3/bis3 */
     var out = [];
@@ -4514,7 +4517,7 @@ function openReport(pre) {
       if (over > 0 && fri.getFullYear() === y && fri <= end) { var k = key(fri); (p.D[k] || (p.D[k] = blankDay())).z1 = Math.round(over * rate(zs.r1) / 100); }
     });
     return Object.keys(P).map(function (em) {
-      var p = P[em], o = { em: em, name: p.name, work: 0, abs: 0, zus: 0, soll: 0, kum: 0, fth: 0, fer: 0, frj: 0, has: !!p.fd };
+      var p = P[em], o = { em: em, name: p.name, work: 0, abs: 0, zus: 0, soll: 0, kum: 0, fth: 0, fer: 0, frj: 0, has: !!p.fd, D: p.D };
       if (!p.fd) return o;
       var dd = new Date(Math.max(p.fd.getTime(), new Date(y, 0, 1).getTime())), ksoll = 0, kist = 0, now0 = new Date(), t0 = new Date(now0.getFullYear(), now0.getMonth(), now0.getDate()), tdy = addDays(t0, -(((t0.getDay() + 2) % 7) || 7)); /* Überstunden nur wochenweise: gezählt wird bis und mit dem letzten Freitag einer abgeschlossenen Woche (ab Samstag) */
       o.lim = tdy;
@@ -4769,7 +4772,7 @@ function openReport(pre) {
     var doc = new J({ orientation: "portrait", unit: "mm", format: "a4" });
     var mx = 16, W = 178, top = 26, bottom = 280, LH = 5.2, y = top, y0 = L.y, mo = L.mo;
     function head() {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Stundenübersicht " + MNAME[mo] + " " + y0, mx, 16);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Stundenübersicht " + MNAME[mo] + " " + y0 + "  (Std. dezimal)", mx, 16);
       doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text((firma ? firma + "  ·  " : "") + "Stand " + dmy(new Date()), mx + W, 16, { align: "right" });
       doc.setLineWidth(0.3); doc.line(mx, 19.5, mx + W, 19.5);
     }
@@ -4789,18 +4792,18 @@ function openReport(pre) {
       title(o);
       if (o.has && o.lim) { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.text("Gerechnet bis und mit KW " + isoWeek(o.lim).w + " (nur ganze Wochen, die laufende Woche zählt ab Samstag).", mx + 3, y + 3.3); y += 5; }
       if (!o.has) { doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Noch keine Daten.", mx + 3, y + 3.8); y += LH; }
-      else [["Gearbeitet", hm(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hm(o.abs)], ["Zuschläge", hm(o.zus)], ["Feiertage bezahlt", hm(o.fth)], ["Ist-Konto", hm(o.ist), 1], ["Soll-Konto", hm(o.soll), 1], ["Saldo Monat +/−", hmS(o.saldo), 1], ["Saldo Jahr kumuliert", hmS(o.kum), 1]].forEach(function (x) { row(x[0], x[1], x[2]); });
+      else [["Gearbeitet", hd(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hd(o.abs)], ["Zuschläge", hd(o.zus)], ["Feiertage bezahlt", hd(o.fth)], ["Ist-Konto", hd(o.ist), 1], ["Soll-Konto", hd(o.soll), 1], ["Saldo Monat +/−", hdS(o.saldo), 1], ["Saldo Jahr kumuliert", hdS(o.kum), 1]].forEach(function (x) { row(x[0], x[1], x[2]); });
       if (kto) {
         var frj = o.frj || 0, vjAb = Math.min(frj, Math.max(ue0, 0));
-        sec("Überstunden-Konto"); row("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1); row("Überstunden aktuelles Jahr", hmS(us0 + (o.kum || 0) - frj + vjAb), 1);
-        if (frj) row("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hmS(frj));
-        sec("Ferien-Konto"); row("Anspruch " + y0, hmS(fa) + tg(fa)); row("Übertrag letztes Jahr", hmS(fv0) + tg(fv0)); row("Bezogen", hmS(fer) + tg(fer)); row("Rest Ferien", hmS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1);
+        sec("Überstunden-Konto"); row("Überstunden letztes Jahr", hdS(ue0 - vjAb), 1); row("Überstunden aktuelles Jahr", hdS(us0 + (o.kum || 0) - frj + vjAb), 1);
+        if (frj) row("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hdS(frj));
+        sec("Ferien-Konto"); row("Anspruch " + y0, hdS(fa) + tg(fa)); row("Übertrag letztes Jahr", hdS(fv0) + tg(fv0)); row("Bezogen", hdS(fer) + tg(fer)); row("Rest Ferien", hdS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1);
       }
       sep();
     });
     if (L.tmps.length) {
       any = true; room(30); sec("Temporäre · nur Gesamtzeit im Monat"); y += 1;
-      L.tmps.forEach(function (o) { room(8); row(o.name || o.em, o.has ? hm(o.work) : "Noch keine Daten", 1); });
+      L.tmps.forEach(function (o) { room(8); row(o.name || o.em, o.has ? hd(o.work) : "Noch keine Daten", 1); });
     }
     if (!any) return { empty: true };
     var n = doc.getNumberOfPages();
@@ -4814,7 +4817,7 @@ function openReport(pre) {
     var mx = 16, W = 178, top = 26, bottom = 280, LH = 5.4, y = top, yr = Y.y;
     var COLS = [["Monat", 34], ["Gearbeitet", 18], ["Absenzen", 18], ["Zuschläge", 18], ["Feiertage", 18], ["Ist", 18], ["Soll", 18], ["Saldo", 18], ["Kumuliert", 18]];
     function head() {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Stundenübersicht " + yr, mx, 16);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Stundenübersicht " + yr + "  (Std. dezimal)", mx, 16);
       doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.text((firma ? firma + "  ·  " : "") + "Stand " + dmy(new Date()), mx + W, 16, { align: "right" });
       doc.setLineWidth(0.3); doc.line(mx, 19.5, mx + W, 19.5);
     }
@@ -4842,17 +4845,17 @@ function openReport(pre) {
         var o = find(mo, e.em);
         if (!o || !o.has || !(o.work || o.abs || o.zus || o.fth || o.soll)) { trow([MNAME[mo], "–"], false, 0.1); continue; }
         lastO = o; sw += o.work; sa += o.abs; sz += o.zus; sf += o.fth; si += o.ist; ss += o.soll; sm += o.saldo; kum = o.kum;
-        trow([MNAME[mo], hm(o.work), hm(o.abs), hm(o.zus), hm(o.fth), hm(o.ist), hm(o.soll), hmS(o.saldo), hmS(o.kum)], false, 0.1);
+        trow([MNAME[mo], hd(o.work), hd(o.abs), hd(o.zus), hd(o.fth), hd(o.ist), hd(o.soll), hdS(o.saldo), hdS(o.kum)], false, 0.1);
       }
-      trow(["Total " + yr, hm(sw), hm(sa), hm(sz), hm(sf), hm(si), hm(ss), hmS(sm), hmS(kum)], true, 0.3);
+      trow(["Total " + yr, hd(sw), hd(sa), hd(sz), hd(sf), hd(si), hd(ss), hdS(sm), hdS(kum)], true, 0.3);
       var K = Y.kx[e.em] || {}, ue0 = pmin(K.ue_vorjahr), us0 = pmin(K.ue_start), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480);
       if (lastO || ue0 || us0 || fa || fv0) {
         var o2 = lastO || {}, fer = o2.fer || 0, frj = o2.frj || 0;
         var vjAb = Math.min(frj, Math.max(ue0, 0));
         room(60); sec("Überstunden-Konto (Stand Ende des letzten Monats mit Daten)");
-        row("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1); row("Überstunden aktuelles Jahr", hmS(us0 + (o2.kum || 0) - frj + vjAb), 1);
-        if (frj) row("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hmS(frj));
-        sec("Ferien-Konto"); row("Anspruch " + yr, hmS(fa) + tg(fa)); row("Übertrag letztes Jahr", hmS(fv0) + tg(fv0)); row("Bezogen", hmS(fer) + tg(fer)); row("Rest Ferien", hmS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1);
+        row("Überstunden letztes Jahr", hdS(ue0 - vjAb), 1); row("Überstunden aktuelles Jahr", hdS(us0 + (o2.kum || 0) - frj + vjAb), 1);
+        if (frj) row("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hdS(frj));
+        sec("Ferien-Konto"); row("Anspruch " + yr, hdS(fa) + tg(fa)); row("Übertrag letztes Jahr", hdS(fv0) + tg(fv0)); row("Bezogen", hdS(fer) + tg(fer)); row("Rest Ferien", hdS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1);
       }
     });
     if (!only && Y.tmps.length) {
@@ -4861,8 +4864,8 @@ function openReport(pre) {
       Y.tmps.forEach(function (e) {
         room(12 * LH + 14);
         doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(e.name || e.em, mx, y + 4); y += 6.5; var tot = 0;
-        for (var mo = 0; mo < 12; mo++) { var o = find(mo, e.em); if (o && o.has && o.work) { tot += o.work; row(MNAME[mo], hm(o.work)); } }
-        row("Total " + yr, hm(tot), 1); y += 3;
+        for (var mo = 0; mo < 12; mo++) { var o = find(mo, e.em); if (o && o.has && o.work) { tot += o.work; row(MNAME[mo], hd(o.work)); } }
+        row("Total " + yr, hd(tot), 1); y += 3;
       });
     }
     if (!any) return { empty: true };
@@ -4870,10 +4873,69 @@ function openReport(pre) {
     for (var p = 1; p <= n; p++) { doc.setPage(p); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text("Bader Design  ·  Stundenübersicht " + yr + "  ·  unverbindliche Hilfsrechnung, es gelten die offiziellen Unterlagen des Arbeitgebers", mx, 289); doc.text("Seite " + p + " / " + n, mx + W, 289, { align: "right" }); }
     return doc;
   }
+  function xmlEsc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function xlsxSheet(rows, widths) {
+    var x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>';
+    widths.forEach(function (w, i) { x += '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; });
+    x += '</cols><sheetData>';
+    rows.forEach(function (r, ri) {
+      x += '<row r="' + (ri + 1) + '">';
+      r.cells.forEach(function (v, ci) {
+        var ref = String.fromCharCode(65 + ci) + (ri + 1);
+        if (v === "" || v == null) return;
+        if (typeof v === "number") x += '<c r="' + ref + '" s="' + (r.b ? 3 : 1) + '"><v>' + v + '</v></c>';
+        else x += '<c r="' + ref + '" t="inlineStr" s="' + (r.h || r.b ? 2 : 0) + '"><is><t xml:space="preserve">' + xmlEsc(v) + '</t></is></c>';
+      });
+      x += '</row>';
+    });
+    return x + '</sheetData></worksheet>';
+  }
+  async function buildLohnXlsx(L) {
+    var Z = new window.JSZip(), mo = L.mo, T = { h: 1 };
+    var H1 = ["Mitarbeiter", "Gearbeitet (inkl. Reisezeit)", "Reisezeit gesamt", "Reisezeitabzug", "Absenzen", "Zuschläge", "Feiertage", "Ist", "Soll", "Saldo Monat", "Saldo Jahr kumuliert"];
+    var r1 = [{ cells: H1, h: 1 }], tot = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], n = 0;
+    var r2 = [{ cells: ["Mitarbeiter", "Datum", "Arbeitszeit (inkl. Reisezeit)", "Reisezeit gesamt", "Reisezeitabzug", "Ferien", "Krank", "Unfall", "Frei / Üstd", "Zuschläge"], h: 1 }];
+    L.res.forEach(function (o) {
+      if (!o.has) return;
+      var rz = 0, tz = 0, D = o.D || {}, nm = o.name || o.em;
+      Object.keys(D).sort().forEach(function (k) {
+        if (+k.slice(5, 7) - 1 !== mo) return;
+        var c = D[k], zz = (c.z1 || 0) + (c.z2 || 0);
+        if (!(c.net || c.reise || c.ferien || c.krank || c.unfall || c.frei || zz)) return;
+        rz += c.reise || 0; tz += c.tara || 0;
+        r2.push({ cells: [nm, k.slice(8, 10) + "." + k.slice(5, 7) + "." + k.slice(0, 4), hdn(c.net || 0), hdn(c.reise || 0), hdn(c.tara || 0), hdn(c.ferien || 0), hdn(c.krank || 0), hdn(c.unfall || 0), hdn(c.frei || 0), hdn(zz)] });
+      });
+      var v = [o.work, rz, tz, o.abs, o.zus, o.fth, o.ist, o.soll, o.saldo, o.kum].map(hdn);
+      v.forEach(function (q, i) { tot[i] += q; });
+      r1.push({ cells: [nm].concat(v) }); n++;
+    });
+    if (n > 1) r1.push({ cells: ["Total"].concat(tot.map(function (q) { return Math.round(q * 100) / 100; })), b: 1 });
+    if (L.tmps.length) {
+      r1.push({ cells: [""] }); r1.push({ cells: ["Temporäre (nur Gesamtzeit im Monat)", "Gesamtzeit"], h: 1 });
+      L.tmps.forEach(function (o) { if (o.has) r1.push({ cells: [o.name || o.em, hdn(o.work)] }); });
+    }
+    r1.push({ cells: [""] }); r1.push({ cells: ["Stunden dezimal (8 Std. 15 Min. = 8.25). Monat: " + MNAME[mo] + " " + L.y + "."] });
+    Z.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+    Z.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+    Z.file("xl/workbook.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Übersicht" sheetId="1" r:id="rId1"/><sheet name="Tage" sheetId="2" r:id="rId2"/></sheets></workbook>');
+    Z.file("xl/_rels/workbook.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+    Z.file("xl/styles.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="2" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs></styleSheet>');
+    Z.file("xl/worksheets/sheet1.xml", xlsxSheet(r1, [34, 16, 14, 14, 12, 12, 12, 10, 10, 12, 16]));
+    Z.file("xl/worksheets/sheet2.xml", xlsxSheet(r2, [30, 12, 16, 14, 14, 10, 10, 10, 12, 12]));
+    return Z.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+  async function shareXlsx(blob, fn) {
+    var file = null; try { file = new File([blob], fn, { type: blob.type }); } catch (e) { }
+    if (isMobile() && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      try { await navigator.share({ files: [file], title: fn.replace(/\.xlsx$/, "") }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fn; document.body.appendChild(a); a.click();
+    setTimeout(function () { a.remove(); URL.revokeObjectURL(a.href); }, 4000);
+  }
   function openGleit() {
     closeGleit(); var now = new Date(), busy = false, adm = isAdmin(), mine = memberGet(), meMail = String((user && user.email) || "").toLowerCase(), meTemp = !!(mine && mine.rolle === "temporaer");
     var mi = el("input", { type: "month", "aria-label": "Monat" }); mi.value = now.getFullYear() + "-" + pad(now.getMonth() + 1);
-    var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" }), pdfB = el("button", { type: "button", "class": "btn", text: "Monat als PDF" }), yB = el("button", { type: "button", "class": "btn", text: "Ganzes Jahr als PDF" }), selE = el("select", { "aria-label": "Mitarbeiter für das Jahres-PDF" }), last = null; selE.hidden = true;
+    var go = el("button", { type: "button", "class": "btn primary", text: "Anzeigen" }), cl = el("button", { type: "button", "class": "btn", text: "Schliessen" }), pdfB = el("button", { type: "button", "class": "btn", text: "Monat als PDF" }), yB = el("button", { type: "button", "class": "btn", text: "Ganzes Jahr als PDF" }), xB = el("button", { type: "button", "class": "btn", text: "Export Lohnbuchhaltung (Excel)" }), selE = el("select", { "aria-label": "Mitarbeiter für das Jahres-PDF" }), last = null; selE.hidden = true;
     var msg = el("div", { "class": "status", role: "status" }), list = el("div", { "class": "slist", role: "list" }); list.style.maxHeight = "58vh";
     yB.addEventListener("click", async function () {
       if (!last) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; return; }
@@ -4904,6 +4966,15 @@ function openReport(pre) {
         msg.textContent = ""; await sharePdf(d, "Stundenuebersicht_" + yy + (selE.hidden || !selE.value ? "" : "_" + selE.value.split("@")[0]) + ".pdf", "Stundenübersicht " + yy);
       } catch (e) { msg.textContent = sharedMsg(e); } finally { yB.disabled = false; }
     });
+    xB.addEventListener("click", async function () {
+      if (!last) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; return; }
+      try {
+        msg.textContent = "Excel wird erstellt …";
+        await expLoad(AB_JSZIP, function () { return window.JSZip; });
+        var xb = await buildLohnXlsx(last); msg.textContent = "";
+        await shareXlsx(xb, "Lohn_" + last.y + "-" + pad(last.mo + 1) + ".xlsx");
+      } catch (e) { msg.textContent = sharedMsg(e); }
+    });
     pdfB.addEventListener("click", async function () {
       if (!last) { msg.textContent = "Bitte zuerst «Anzeigen» tippen."; return; }
       var d = buildGleitPdf(last, (memberGet() || {}).firma || "");
@@ -4911,7 +4982,7 @@ function openReport(pre) {
       if (d.empty) { msg.textContent = "Keine Daten für dieses PDF."; return; }
       msg.textContent = ""; await sharePdf(d, "Stundenuebersicht_" + last.y + "-" + pad(last.mo + 1) + ".pdf", "Stundenübersicht");
     });
-    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Stundenübersicht" }), el("p", { text: adm ? "Alle Mitarbeiter: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat." : (meTemp ? "Deine Gesamtzeit pro Monat." : "Deine Stunden: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten.") }), mi, el("div", { "class": "actions" }, [go, pdfB, yB, cl]), selE, msg, list]);
+    var sheet = el("div", { "class": "sheet" }, [el("h2", { text: "Stundenübersicht" }), el("p", { text: adm ? "Alle Mitarbeiter: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Bei Temporären nur die Gesamtzeit pro Monat. Alle Zahlen in Stunden (dezimal)." : (meTemp ? "Deine Gesamtzeit pro Monat (Stunden dezimal)." : "Deine Stunden: Soll (8 Std./Tag) gegen Ist, Feiertage bezahlt, ab dem ersten Tag mit Daten. Alle Zahlen in Stunden (dezimal).") }), mi, el("div", { "class": "actions" }, (adm ? [go, pdfB, yB, xB, cl] : [go, pdfB, yB, cl])), selE, msg, list]);
     var ov = el("div", { "class": "overlay sites", id: "gleit", role: "dialog", "aria-modal": "true", "aria-label": "Stundenübersicht" }, [sheet]);
     function line(l, v, b) { return el("div", { style: "display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums" + (b ? ";font-weight:700" : "") }, [el("span", { text: l }), el("span", { text: v })]); }
     async function load() {
@@ -4941,17 +5012,17 @@ function openReport(pre) {
           var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
           if (o.has && o.lim) c.appendChild(el("div", { "class": "status", text: "Gerechnet bis und mit KW " + isoWeek(o.lim).w + " (nur ganze Wochen, die laufende Woche zählt ab Samstag)." }));
           if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." }));
-          else [["Gearbeitet", hm(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hm(o.abs)], ["Zuschläge", hm(o.zus)], ["Feiertage bezahlt", hm(o.fth)], ["Ist-Konto", hm(o.ist), 1], ["Soll-Konto", hm(o.soll), 1], ["Saldo Monat +/−", hmS(o.saldo), 1], ["Saldo Jahr kumuliert", hmS(o.kum), 1]].forEach(function (x) { c.appendChild(line(x[0], x[1], x[2])); });
+          else [["Gearbeitet", hd(o.work)], ["Absenzen (Ferien/Krank/Unfall/Frei)", hd(o.abs)], ["Zuschläge", hd(o.zus)], ["Feiertage bezahlt", hd(o.fth)], ["Ist-Konto", hd(o.ist), 1], ["Soll-Konto", hd(o.soll), 1], ["Saldo Monat +/−", hdS(o.saldo), 1], ["Saldo Jahr kumuliert", hdS(o.kum), 1]].forEach(function (x) { c.appendChild(line(x[0], x[1], x[2])); });
           var K = kx[o.em] || {}, ue0 = pmin(K.ue_vorjahr), us0 = pmin(K.ue_start), fa = Math.round(rate(K.f_anspruch) * 480), fv0 = Math.round(rate(K.f_vortrag) * 480), fer = o.fer || 0;
           function tg(m) { return " (" + String(Math.round(m / 480 * 10) / 10).replace(".", ",") + " Tage)"; }
           if (o.has || ue0 || us0 || fa || fv0) {
             c.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Überstunden-Konto" }));
             var frj = o.frj || 0, vjAb = Math.min(frj, Math.max(ue0, 0)); /* Frei / Üstd wird zuerst von den Überstunden des letzten Jahres abgezogen, der Rest von denen dieses Jahres */
-            c.appendChild(line("Überstunden letztes Jahr", hmS(ue0 - vjAb), 1)); c.appendChild(line("Überstunden aktuelles Jahr", hmS(us0 + (o.kum || 0) - frj + vjAb), 1));
-            if (frj) c.appendChild(line("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hmS(frj)));
+            c.appendChild(line("Überstunden letztes Jahr", hdS(ue0 - vjAb), 1)); c.appendChild(line("Überstunden aktuelles Jahr", hdS(us0 + (o.kum || 0) - frj + vjAb), 1));
+            if (frj) c.appendChild(line("Frei bezogen (zuerst vom letzten Jahr abgezogen)", hdS(frj)));
             c.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Ferien-Konto" }));
-            c.appendChild(line("Anspruch " + y, hmS(fa) + tg(fa))); c.appendChild(line("Übertrag letztes Jahr", hmS(fv0) + tg(fv0))); c.appendChild(line("Bezogen", hmS(fer) + tg(fer)));
-            c.appendChild(line("Rest Ferien", hmS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1));
+            c.appendChild(line("Anspruch " + y, hdS(fa) + tg(fa))); c.appendChild(line("Übertrag letztes Jahr", hdS(fv0) + tg(fv0))); c.appendChild(line("Bezogen", hdS(fer) + tg(fer)));
+            c.appendChild(line("Rest Ferien", hdS(fa + fv0 - fer) + tg(fa + fv0 - fer), 1));
           }
           if (adm) {
             var kb = el("button", { type: "button", "class": "btn", style: "margin-top:10px", text: "Konten bearbeiten" });
@@ -4964,7 +5035,7 @@ function openReport(pre) {
           list.appendChild(el("div", { "class": "lbl", style: "margin-top:10px", text: "Temporäre · nur Gesamtzeit im Monat" }));
           tmps.forEach(function (o) {
             var c = el("div", { "class": "srow stack", role: "listitem" }, [el("b", { text: o.name || o.em }), el("div", { "class": "status", text: o.name ? o.em : "" })]);
-            if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." })); else c.appendChild(line("Gesamtzeit im Monat", hm(o.work), 1));
+            if (!o.has) c.appendChild(el("div", { "class": "status", text: "Noch keine Daten." })); else c.appendChild(line("Gesamtzeit im Monat", hd(o.work), 1));
             list.appendChild(c);
           });
         }
