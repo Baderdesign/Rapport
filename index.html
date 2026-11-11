@@ -1500,7 +1500,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var viaSheet = !!window.__pdfSheet; window.__pdfSheet = false;
     if (!viaSheet && mobile && file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       try {
-        await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, ""), text: fn.replace(/\.pdf$/, "").replace(/_/g, " ") });
+        await navigator.share({ files: [file], title: fn.replace(/\.pdf$/, "") }); /* ohne Text: Mail-Apps machen daraus sonst einen zweiten Anhang */
         markSent(wkSent); await saved; setStatus("Woche gespeichert. PDF geteilt: " + fn, "ok"); return;
       } catch (e) {
         if (e && e.name === "AbortError") { await saved; setStatus("Teilen abgebrochen. Die Woche ist gespeichert. Tippe nochmals auf den Knopf, um das PDF zu teilen.", ""); return; }
@@ -1554,7 +1554,7 @@ body:not(.buero) .sitesbar .btn:not([hidden]){flex:1 1 0;min-width:0;min-height:
     var doc = null; try { doc = buildPdf(); if (doc) spBelegePdf(doc, state); } catch (e) { }
     if (!doc) { saved.then(function () { setStatus("Das PDF konnte nicht erstellt werden. Seite neu laden und nochmals versuchen. Die Woche ist gespeichert.", "bad"); btn.disabled = false; }); return; }
     var iso = isoWeek(fromKey(state.week)), nm = (state.name || "").trim().replace(/[^\wäöüÄÖÜéèàÉ\- ]+/g, "").replace(/\s+/g, "_");
-    var fn = "Wochenrapport_" + iso.y + "-KW" + pad(iso.w) + (nm ? "_" + nm : "") + ".pdf";
+    var nw = new Date(), fn = "Wochenrapport_" + iso.y + "-KW" + pad(iso.w) + (nm ? "_" + nm : "") + "_" + key(nw) + "_" + pad(nw.getHours()) + pad(nw.getMinutes()) + ".pdf"; /* eigener Name pro Erstellung: Mail-Apps hängen sonst eine ältere Datei mit gleichem Namen an */
     deliver(doc.output("blob"), doc, fn, saved, state.week).catch(function (e) {
       setStatus("Das PDF konnte nicht abgelegt werden. Die Woche ist trotzdem gespeichert.", "bad");
     }).then(function () { btn.disabled = false; });
